@@ -31,7 +31,8 @@ class TelemetrySalesSyncCoordinatorTest {
                 outboxStore = outboxStore,
                 wsManager = wsManager,
             )
-        coEvery { wsManager.sendEnvelope(any(), any()) } returns Result.success(Unit)
+        coEvery { wsManager.sendEnvelope(any(), any()) } returns Result.success("msg-id")
+        coEvery { wsManager.sendEnvelope(any(), any(), any()) } returns Result.success("msg-id")
     }
 
     @Test
@@ -65,7 +66,7 @@ class TelemetrySalesSyncCoordinatorTest {
     fun `flushPending sends sale report envelope`() = runTest {
         // given
         val payloadSlot = slot<JsonObject>()
-        coEvery { wsManager.sendEnvelope("sale.report", capture(payloadSlot)) } returns Result.success(Unit)
+        coEvery { wsManager.sendEnvelope("sale.report", capture(payloadSlot)) } returns Result.success("test-message-id")
         outboxStore.enqueue(sampleSale())
 
         // when

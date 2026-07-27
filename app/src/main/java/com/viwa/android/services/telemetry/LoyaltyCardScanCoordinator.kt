@@ -2,7 +2,7 @@ package com.viwa.android.services.telemetry
 
 import com.viwa.android.di.AppIoScope
 import com.viwa.android.hardware.scanner.ViwaScannerTrafficLogger
-import com.viwa.android.hardware.scanner.SubscriptionClientIdParser
+import com.viwa.android.data.telemetry.loyalty.LoyaltyWsCodec
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -12,9 +12,8 @@ import timber.log.Timber
 private const val TAG = "LoyaltyCardScan"
 
 /**
- * Глобальная подписка на строки сканера для карт `CLIENT_<uuid>`
- * [subscriptionModule] + [scannerEvents.onLoyaltyCardArrived]: без привязки к экрану
- * (меню напитков, экран «попробуй воду» / FreeDrinkOffer, и т.д.).
+ * Глобальная подписка на строки сканера для карт `CLIENT_<uuid>`.
+ * После валидного скана → [ViwaTelemetryService.sendStatusGet] + levels.list.
  */
 @Singleton
 class LoyaltyCardScanCoordinator
@@ -31,9 +30,18 @@ class LoyaltyCardScanCoordinator
                     val last = entries.lastOrNull() ?: return@collect
                     if (lastSeenId == last.id) return@collect
                     lastSeenId = last.id
-                    val clientUuid = SubscriptionClientIdParser.fromScannerRawLine(last.rawLine) ?: return@collect
-                    Timber.tag(TAG).d("loyalty scan → telemetry (uuid=%s)", clientUuid)
-                    telemetryService.onLoyaltyCardScanned(clientUuid)
+                    val parsed = LoyaltyWsCodec.parseClientIdFromScan(last.rawLine)
+                    when {
+                        parsed.isSuccess -> {
+                            val clientUuid = parsed.getOrThrow()
+                            Timber.tag(TAG).d("loyalty scan → status.get (uuid=%s)", clientUuid)
+                            telemetryService.onLoyaltyCardScanned(clientUuid)
+                        }
+                        last.rawLine.trim().startsWith("CLIENT_") -> {
+                            Timber.tag(TAG).w("invalid loyalty scan: %s", last.rawLine)
+                            telemetryService.onInvalidLoyaltyCardScan()
+                        }
+                    }
                 }
             }
         }

@@ -10,8 +10,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Базовый URL для QR регистрации подписки. */
-private const val DEFAULT_SUBSCRIPTION_QR_BASE_URL = "http://dev.ishaker.ru:3005/main"
+/** Базовый URL client web для QR регистрации подписки (без orgId). */
+private const val DEFAULT_SUBSCRIPTION_QR_BASE_URL = "http://dev.ishaker.ru:3005"
 
 @HiltViewModel
 class FreeDrinkOfferViewModel
@@ -25,10 +25,9 @@ class FreeDrinkOfferViewModel
         init {
             viewModelScope.launch {
                 val reg = telemetryService.loadMachineRegistration()
-                val orgId = reg.organizationId.toIntOrNull()
-                val machineId = reg.machineId.toIntOrNull()
-                if (orgId != null && machineId != null && orgId > 0 && machineId > 0) {
-                    _qrUrl.value = "$DEFAULT_SUBSCRIPTION_QR_BASE_URL/$orgId/5/$machineId"
+                val serial = reg.serialNumber.trim()
+                if (serial.isNotEmpty()) {
+                    _qrUrl.value = "$DEFAULT_SUBSCRIPTION_QR_BASE_URL/m/$serial/auth"
                 }
             }
         }

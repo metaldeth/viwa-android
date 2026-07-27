@@ -144,6 +144,7 @@ class DrinkListViewModelMvpInventoryTest {
             MutableStateFlow(com.viwa.android.services.preparing.CustomerPreparingPhase.Idle).asStateFlow()
         val getSbp = mockk<GetSBPLinkUseCase>(relaxUnitFun = true)
         val checkSbp = mockk<CheckSBPStatusUseCase>(relaxUnitFun = true)
+        val subscriptionUseCases = relaxedSubscriptionPaymentUseCases()
         val sbp = mockk<SBPRepository>(relaxUnitFun = true)
         val nano = mockk<NanoKassaRepository>(relaxUnitFun = true)
         val networkTraffic = mockk<NetworkTrafficLogger>(relaxUnitFun = true)
@@ -162,6 +163,10 @@ class DrinkListViewModelMvpInventoryTest {
             telemetry,
             getSbp,
             checkSbp,
+            subscriptionUseCases.init,
+            subscriptionUseCases.complete,
+            subscriptionUseCases.apply,
+            subscriptionUseCases.cancel,
             sbp,
             nano,
             networkTraffic,

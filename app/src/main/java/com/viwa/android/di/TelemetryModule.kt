@@ -6,7 +6,9 @@ import com.viwa.android.data.network.NetworkTrafficLogger
 import com.viwa.android.data.remote.telemetry.mvp.EpochMillisClock
 import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryApiClient
 import com.viwa.android.data.remote.telemetry.mvp.SystemEpochMillisClock
+import com.viwa.android.data.telemetry.MachineSubscriptionPaymentRepositoryImpl
 import com.viwa.android.domain.model.TelemetryConfig
+import com.viwa.android.domain.repository.MachineSubscriptionPaymentRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -56,6 +58,12 @@ object TelemetryModule {
     @Provides
     @Singleton
     fun provideEpochMillisClock(): EpochMillisClock = SystemEpochMillisClock()
+
+    @Provides
+    @Singleton
+    fun provideMachineSubscriptionPaymentRepository(
+        impl: MachineSubscriptionPaymentRepositoryImpl,
+    ): MachineSubscriptionPaymentRepository = impl
 
     @Provides
     @Singleton

@@ -163,7 +163,7 @@ constructor(
         payloadJson: String,
     ): Result<Unit> {
         val payloadObject = json.parseToJsonElement(payloadJson).jsonObject
-        return wsManager.sendEnvelope(type = type, payload = payloadObject)
+        return wsManager.sendEnvelope(type = type, payload = payloadObject).map { }
     }
 
     private suspend fun applyRemoteMachineCalibration(snapshot: TelemetryCellsSnapshot): TelemetryCellsSnapshot {

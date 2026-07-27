@@ -6,6 +6,7 @@ import com.viwa.android.data.network.NetworkTrafficDirection
 import com.viwa.android.data.network.NetworkTrafficLogger
 import com.viwa.android.data.network.redactNetworkPayload
 import com.viwa.android.data.remote.telemetry.ConnectionState
+import com.viwa.android.data.telemetry.loyalty.LoyaltyWsCodec
 import com.viwa.android.di.AppIoScope
 import java.net.URI
 import java.nio.ByteBuffer
@@ -73,6 +74,9 @@ constructor(
 
     /** Делегат cells sync; wiring из [SimpleTelemetryCoordinator]. */
     var cellsSyncHandler: MvpTelemetryCellsSyncHandler? = null
+
+    /** Делегат loyalty WS; wiring из [ViwaTelemetryService]. */
+    var loyaltySyncHandler: MvpTelemetryLoyaltySyncHandler? = null
 
     private companion object {
         val RECONNECT_DELAYS_MS = longArrayOf(1_000, 2_000, 5_000, 10_000, 30_000)
@@ -203,15 +207,20 @@ constructor(
         _connectionState.value = ConnectionState.Disconnected()
     }
 
-    suspend fun sendEnvelope(type: String, payload: JsonObject): Result<Unit> =
+    suspend fun sendEnvelope(
+        type: String,
+        payload: JsonObject,
+        messageId: String = java.util.UUID.randomUUID().toString(),
+    ): Result<String> =
         runCatching {
             val client = activeClient ?: error("WebSocket not connected")
             if (!helloReceived) error("WebSocket not online (hello pending)")
             if (client.readyState != ReadyState.OPEN) error("WebSocket not open")
-            val envelope = MvpWsEnvelopeFactory.create(type = type, payload = payload)
+            val envelope = MvpWsEnvelopeFactory.create(type = type, payload = payload, messageId = messageId)
             val raw = json.encodeToString(MvpWsEnvelopeDto.serializer(), envelope)
             client.send(raw)
             logOut(raw, wsType = type)
+            messageId
         }
 
     private fun handleIncoming(text: String) {
@@ -222,7 +231,9 @@ constructor(
             when (envelope.type) {
                 "hello" -> onHello(envelope)
                 "ack" -> onAck(envelope)
+                "error" -> onError(envelope)
                 "cells.snapshot" -> onCellsSnapshot(envelope)
+                LoyaltyWsCodec.TYPE_STATUS_CHANGED -> onLoyaltyStatusChanged(envelope)
                 else -> Timber.d("MvpTelemetry WS: ignored type=${envelope.type}")
             }
         }.onFailure { Timber.w(it, "MvpTelemetry WS parse failed") }
@@ -248,10 +259,36 @@ constructor(
                 ?: envelope.payload?.jsonObject?.get("correlationId")?.jsonPrimitive?.content
         Timber.d("MvpTelemetry WS: ack correlationId=$correlation")
         val payload = envelope.payload?.jsonObject ?: return
-        if (!payload.containsKey("schemaHash")) return
+        if (payload.containsKey("schemaHash")) {
+            appScope.launch {
+                runCatching { cellsSyncHandler?.onSchemaAck(payload) }
+                    .onFailure { Timber.w(it, "MvpTelemetry WS: cells sync schema ack failed") }
+            }
+            return
+        }
+        if (correlation.isNullOrBlank()) return
         appScope.launch {
-            runCatching { cellsSyncHandler?.onSchemaAck(payload) }
-                .onFailure { Timber.w(it, "MvpTelemetry WS: cells sync schema ack failed") }
+            runCatching { loyaltySyncHandler?.onLoyaltyAck(correlation, payload) }
+                .onFailure { Timber.w(it, "MvpTelemetry WS: loyalty ack handler failed") }
+        }
+    }
+
+    private fun onError(envelope: MvpWsEnvelopeDto) {
+        val correlation = envelope.correlationId
+        val payload = envelope.payload?.jsonObject ?: return
+        val code = payload["code"]?.jsonPrimitive?.content ?: "UNKNOWN"
+        val message = payload["message"]?.jsonPrimitive?.content ?: code
+        appScope.launch {
+            runCatching { loyaltySyncHandler?.onLoyaltyError(correlation, code, message) }
+                .onFailure { Timber.w(it, "MvpTelemetry WS: loyalty error handler failed") }
+        }
+    }
+
+    private fun onLoyaltyStatusChanged(envelope: MvpWsEnvelopeDto) {
+        val payload = envelope.payload?.jsonObject ?: return
+        appScope.launch {
+            runCatching { loyaltySyncHandler?.onStatusChanged(payload) }
+                .onFailure { Timber.w(it, "MvpTelemetry WS: loyalty.status.changed failed") }
         }
     }
 

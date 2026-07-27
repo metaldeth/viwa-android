@@ -74,7 +74,7 @@ class TelemetryCellsSyncCoordinatorTest {
                 conversionFactorMigration = conversionFactorMigration,
                 syrupCalibrationInventory = syrupCalibrationInventory,
             )
-        coEvery { wsManager.sendEnvelope(any(), any()) } returns Result.success(Unit)
+        coEvery { wsManager.sendEnvelope(any(), any()) } returns Result.success("test-message-id")
     }
 
     @Test
@@ -97,8 +97,8 @@ class TelemetryCellsSyncCoordinatorTest {
             ),
         )
         val payloadSlot = slot<kotlinx.serialization.json.JsonObject>()
-        coEvery { wsManager.sendEnvelope("cells.schema.report", capture(payloadSlot)) } returns Result.success(Unit)
-        coEvery { wsManager.sendEnvelope("cells.content.report", any()) } returns Result.success(Unit)
+        coEvery { wsManager.sendEnvelope("cells.schema.report", capture(payloadSlot)) } returns Result.success("test-message-id")
+        coEvery { wsManager.sendEnvelope("cells.content.report", any()) } returns Result.success("test-message-id")
 
         // when
         coordinator.onWebSocketHello()
@@ -132,7 +132,7 @@ class TelemetryCellsSyncCoordinatorTest {
         )
         val typeSlot = slot<String>()
         val payloadSlot = slot<kotlinx.serialization.json.JsonObject>()
-        coEvery { wsManager.sendEnvelope(capture(typeSlot), capture(payloadSlot)) } returns Result.success(Unit)
+        coEvery { wsManager.sendEnvelope(capture(typeSlot), capture(payloadSlot)) } returns Result.success("test-message-id")
 
         // when
         coordinator.onLocalVolumeChange(
@@ -162,7 +162,7 @@ class TelemetryCellsSyncCoordinatorTest {
         )
         val typeSlot = slot<String>()
         val payloadSlot = slot<kotlinx.serialization.json.JsonObject>()
-        coEvery { wsManager.sendEnvelope(capture(typeSlot), capture(payloadSlot)) } returns Result.success(Unit)
+        coEvery { wsManager.sendEnvelope(capture(typeSlot), capture(payloadSlot)) } returns Result.success("test-message-id")
         val edited =
             sampleCell(
                 uuid = "u1",
@@ -242,8 +242,8 @@ class TelemetryCellsSyncCoordinatorTest {
             ),
         )
         val payloadSlot = slot<kotlinx.serialization.json.JsonObject>()
-        coEvery { wsManager.sendEnvelope("cells.schema.report", capture(payloadSlot)) } returns Result.success(Unit)
-        coEvery { wsManager.sendEnvelope("machine.calibration.report", any()) } returns Result.success(Unit)
+        coEvery { wsManager.sendEnvelope("cells.schema.report", capture(payloadSlot)) } returns Result.success("test-message-id")
+        coEvery { wsManager.sendEnvelope("machine.calibration.report", any()) } returns Result.success("test-message-id")
 
         // when — first reconnect
         coordinator.onWebSocketHello()
@@ -358,7 +358,7 @@ class TelemetryCellsSyncCoordinatorTest {
         val calibrationPayloadSlot = slot<kotlinx.serialization.json.JsonObject>()
         coEvery {
             wsManager.sendEnvelope("machine.calibration.report", capture(calibrationPayloadSlot))
-        } returns Result.success(Unit)
+        } returns Result.success("test-message-id")
 
         // when
         coordinator.onWebSocketHello()

@@ -30,6 +30,11 @@ import com.viwa.android.domain.repository.CardPaymentMethodRepository
 import com.viwa.android.domain.repository.CardPaymentMockModeRepository
 import com.viwa.android.domain.usecase.CheckSBPStatusUseCase
 import com.viwa.android.domain.usecase.GetSBPLinkUseCase
+import com.viwa.android.domain.subscription.SubscriptionPaymentInit
+import com.viwa.android.domain.subscription.SubscriptionPaymentStatus
+import com.viwa.android.domain.subscription.SubscriptionPaymentStatusResult
+import com.viwa.android.domain.subscription.SubscriptionPayMethod
+import com.viwa.android.domain.subscription.SubscriptionSaleParams
 import com.viwa.android.hardware.controller.ControllerGateway
 import com.viwa.android.hardware.controller.ControllerResponseEvent
 import com.viwa.android.hardware.controller.ControllerTrafficEntry
@@ -44,7 +49,6 @@ import com.viwa.android.services.preparing.CustomerPreparingPhase
 import com.viwa.android.services.preparing.PrepareDrinkResult
 import com.viwa.android.services.preparing.PreparingManager
 import com.viwa.android.services.telemetry.ViwaTelemetryService
-import com.viwa.android.services.telemetry.SaleSubscribeTopicBody
 import com.viwa.android.data.payment.aqsi.AqsiDiagnosticOutcome
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -191,13 +195,22 @@ class DrinkListViewModelTask05IntegrationTest {
         telemetryService: ViwaTelemetryService,
         getSBPLinkUseCase: GetSBPLinkUseCase,
         sbpRepository: SBPRepository = defaultSbpRepo(),
-    ): DrinkListViewModel {
+    ): Pair<DrinkListViewModel, SubscriptionPaymentUseCaseMocks> {
         val (gw, sbpNotify) = createGatewayAndPaymentMocks()
         val aqsi = mockAqsiManager()
         val cellsRepo = mockk<TelemetryCellsRepository>(relaxUnitFun = true)
         every { cellsRepo.snapshotFlow } returns MutableStateFlow(null).asStateFlow()
         val checkSbp = mockk<CheckSBPStatusUseCase>(relaxUnitFun = true)
         coEvery { checkSbp(any()) } returns Result.success(SBPStatus.Pending)
+        val subscriptionUseCases = relaxedSubscriptionPaymentUseCases()
+        coEvery { subscriptionUseCases.init(any()) } returns
+            Result.success(
+                SubscriptionPaymentInit(
+                    paymentId = "990e8400-e29b-41d4-a716-446655440040",
+                    amountKopecks = 5000,
+                    status = SubscriptionPaymentStatus.PENDING,
+                ),
+            )
         val nano = mockk<NanoKassaRepository>(relaxUnitFun = true)
         val networkTraffic = mockk<NetworkTrafficLogger>(relaxUnitFun = true)
         every { networkTraffic.entries } returns MutableStateFlow<List<NetworkTrafficEntry>>(emptyList()).asStateFlow()
@@ -215,12 +228,16 @@ class DrinkListViewModelTask05IntegrationTest {
             telemetryService,
             getSBPLinkUseCase,
             checkSbp,
+            subscriptionUseCases.init,
+            subscriptionUseCases.complete,
+            subscriptionUseCases.apply,
+            subscriptionUseCases.cancel,
             sbpRepository,
             nano,
             networkTraffic,
             controllerTraffic,
             cardPaymentOrchestrator,
-        )
+        ) to subscriptionUseCases
     }
 
     private fun sampleContainer(): DrinkContainer {
@@ -328,7 +345,7 @@ class DrinkListViewModelTask05IntegrationTest {
         payResult: Result<AqsiPaymentResult>,
         telemetryService: ViwaTelemetryService = createTestTelemetry(),
         preparingOverride: PreparingManager? = null,
-    ): DrinkListViewModel {
+    ): Pair<DrinkListViewModel, SubscriptionPaymentUseCaseMocks> {
         val usb = mockAqsiManager()
         coEvery { usb.pay(any()) } answers {
             val amount = arg<Int>(0)
@@ -368,6 +385,23 @@ class DrinkListViewModelTask05IntegrationTest {
         every { cellsRepo.snapshotFlow } returns MutableStateFlow(null).asStateFlow()
         val checkSbp = mockk<CheckSBPStatusUseCase>(relaxUnitFun = true)
         coEvery { checkSbp(any()) } returns Result.success(SBPStatus.Pending)
+        val subscriptionUseCases = relaxedSubscriptionPaymentUseCases()
+        coEvery { subscriptionUseCases.init(any()) } returns
+            Result.success(
+                SubscriptionPaymentInit(
+                    paymentId = "990e8400-e29b-41d4-a716-446655440040",
+                    amountKopecks = 5000,
+                    status = SubscriptionPaymentStatus.PENDING,
+                ),
+            )
+        coEvery { subscriptionUseCases.complete(any(), any(), any()) } returns
+            Result.success(
+                SubscriptionPaymentStatusResult(
+                    paymentId = "990e8400-e29b-41d4-a716-446655440040",
+                    status = SubscriptionPaymentStatus.PAID,
+                ),
+            )
+        coEvery { subscriptionUseCases.apply(any(), any()) } returns Result.success(Unit)
         val nano = mockk<NanoKassaRepository>(relaxUnitFun = true)
         val networkTraffic = mockk<NetworkTrafficLogger>(relaxUnitFun = true)
         every { networkTraffic.entries } returns
@@ -386,12 +420,16 @@ class DrinkListViewModelTask05IntegrationTest {
             telemetryService,
             getSbp,
             checkSbp,
+            subscriptionUseCases.init,
+            subscriptionUseCases.complete,
+            subscriptionUseCases.apply,
+            subscriptionUseCases.cancel,
             defaultSbpRepo(),
             nano,
             networkTraffic,
             controllerTraffic,
             orch,
-        )
+        ) to subscriptionUseCases
     }
 
     @Test
@@ -399,12 +437,14 @@ class DrinkListViewModelTask05IntegrationTest {
         runBlocking {
             val orch = mockk<CardPaymentOrchestrator>(relaxUnitFun = true)
             val getSbp = mockk<GetSBPLinkUseCase>(relaxUnitFun = true)
-            coEvery { getSbp(any()) } returns Result.success(SBPLink("order-t05", "https://pay/", "qr-data"))
+            coEvery {
+                getSbp.forSubscription(any(), any(), any())
+            } returns Result.success(SBPLink("pay-id-t05", "https://pay/", "qr-data"))
             val tel = createTestTelemetry()
             val preparing = mockk<PreparingManager>(relaxUnitFun = true)
             every { preparing.customerPhase } returns
                 MutableStateFlow(CustomerPreparingPhase.Idle).asStateFlow()
-            val vm = createViewModel(orch, preparing, tel, getSbp)
+            val vm = createViewModel(orch, preparing, tel, getSbp).first
             vm.setUiStateForUnitTests(
                 DrinkListUiState(
                     scannedSubscriptionClientId = "client-uuid",
@@ -424,7 +464,7 @@ class DrinkListViewModelTask05IntegrationTest {
         }
 
     @Test
-    fun task05_13_subscriptionCardDecline_doesNotSendSaleSubscribeTopic() =
+    fun task05_13_subscriptionCardDecline_doesNotApplySubscribeSale() =
         runBlocking {
             val orch = mockk<CardPaymentOrchestrator>(relaxUnitFun = true)
             coEvery { orch.pay(any(), any(), any(), any()) } returns CardPaymentResult.Failed("declined")
@@ -433,7 +473,7 @@ class DrinkListViewModelTask05IntegrationTest {
             every { preparing.customerPhase } returns
                 MutableStateFlow(CustomerPreparingPhase.Idle).asStateFlow()
             val getSbp = mockk<GetSBPLinkUseCase>(relaxUnitFun = true)
-            val vm = createViewModel(orch, preparing, tel, getSbp)
+            val (vm, subscriptionUseCases) = createViewModel(orch, preparing, tel, getSbp)
             vm.setUiStateForUnitTests(
                 DrinkListUiState(
                     scannedSubscriptionClientId = "client-uuid",
@@ -450,7 +490,7 @@ class DrinkListViewModelTask05IntegrationTest {
                 },
             )
             flushMain()
-            coVerify(exactly = 0) { tel.sendSaleSubscribeTopic(any()) }
+            coVerify(exactly = 0) { subscriptionUseCases.apply(any(), any()) }
         }
 
     @Test
@@ -463,7 +503,7 @@ class DrinkListViewModelTask05IntegrationTest {
             every { preparing.customerPhase } returns
                 MutableStateFlow(CustomerPreparingPhase.Idle).asStateFlow()
             val getSbp = mockk<GetSBPLinkUseCase>(relaxUnitFun = true)
-            val vm = createViewModel(orch, preparing, tel, getSbp)
+            val vm = createViewModel(orch, preparing, tel, getSbp).first
             vm.setUiStateForUnitTests(
                 DrinkListUiState(
                     activeContainer = sampleContainer(),
@@ -488,7 +528,7 @@ class DrinkListViewModelTask05IntegrationTest {
     fun task05_14_aqsiApprovedFromOrder_updatesDiagnosticHolder() =
         runBlocking {
             val holder = AqsiLastOperationSnapshotHolder()
-            val vm =
+            val (vm, _) =
                 createSubscriptionVmWithAqsiOrchestrator(
                     holder,
                     payResult = Result.success(AqsiPaymentResult.Approved),
@@ -511,7 +551,7 @@ class DrinkListViewModelTask05IntegrationTest {
     fun task05_14_aqsiDeclineFromOrder_updatesDiagnosticHolder() =
         runBlocking {
             val holder = AqsiLastOperationSnapshotHolder()
-            val vm =
+            val (vm, _) =
                 createSubscriptionVmWithAqsiOrchestrator(
                     holder,
                     payResult = Result.success(AqsiPaymentResult.Declined(publicCode = "051")),
@@ -534,7 +574,7 @@ class DrinkListViewModelTask05IntegrationTest {
     fun task05_14_aqsiErrorFromOrder_updatesDiagnosticHolder() =
         runBlocking {
             val holder = AqsiLastOperationSnapshotHolder()
-            val vm =
+            val (vm, _) =
                 createSubscriptionVmWithAqsiOrchestrator(
                     holder,
                     payResult = Result.success(AqsiPaymentResult.Error(safeMessage = "timeout")),
@@ -557,7 +597,7 @@ class DrinkListViewModelTask05IntegrationTest {
     fun task05_14_aqsiCancelledFromOrder_updatesDiagnosticHolder() =
         runBlocking {
             val holder = AqsiLastOperationSnapshotHolder()
-            val vm =
+            val (vm, _) =
                 createSubscriptionVmWithAqsiOrchestrator(
                     holder,
                     payResult = Result.success(AqsiPaymentResult.Cancelled),
@@ -577,16 +617,15 @@ class DrinkListViewModelTask05IntegrationTest {
         }
 
     @Test
-    fun task07_aqsiApprovedSubscription_sendsSaleSubscribeWithCardPayMethod() =
+    fun task07_aqsiApprovedSubscription_appliesSubscribeSaleWithCardPayMethod() =
         runBlocking {
             val tel = createTestTelemetry()
             coEvery { tel.loadMachineRegistration() } returns
                 MachineRegistration(serialNumber = "E-01", machineId = "1")
-            coEvery { tel.sendSaleSubscribeTopic(any()) } returns Result.success(Unit)
             every { tel.startSubscriptionSaleTimer(any(), any(), any(), any()) } returns Unit
 
             val holder = AqsiLastOperationSnapshotHolder()
-            val vm =
+            val (vm, subscriptionUseCases) =
                 createSubscriptionVmWithAqsiOrchestrator(
                     holder,
                     payResult = Result.success(AqsiPaymentResult.Approved),
@@ -617,18 +656,20 @@ class DrinkListViewModelTask05IntegrationTest {
                 vm.state.value.paymentError,
             )
             assertEquals(PaymentSheetStep.SubscriptionReceipt, vm.state.value.paymentSheetStep)
-            val bodySlot = slot<SaleSubscribeTopicBody>()
-            coVerify(exactly = 1) { tel.sendSaleSubscribeTopic(capture(bodySlot)) }
-            assertEquals("CARD", bodySlot.captured.payMethod)
+            val saleSlot = slot<SubscriptionSaleParams>()
+            coVerify(exactly = 1) {
+                subscriptionUseCases.apply(capture(saleSlot), SubscriptionPaymentStatus.PAID)
+            }
+            assertEquals("990e8400-e29b-41d4-a716-446655440040", saleSlot.captured.paymentId)
+            assertEquals(SubscriptionPayMethod.CARD, saleSlot.captured.payMethod)
         }
 
     @Test
-    fun task07_aqsiCancelledSubscription_doesNotSendSaleSubscribeTopic() =
+    fun task07_aqsiCancelledSubscription_doesNotApplySubscribeSale() =
         runBlocking {
             val tel = createTestTelemetry()
-            coEvery { tel.sendSaleSubscribeTopic(any()) } returns Result.success(Unit)
             val holder = AqsiLastOperationSnapshotHolder()
-            val vm =
+            val (vm, subscriptionUseCases) =
                 createSubscriptionVmWithAqsiOrchestrator(
                     holder,
                     payResult = Result.success(AqsiPaymentResult.Cancelled),
@@ -650,7 +691,7 @@ class DrinkListViewModelTask05IntegrationTest {
                 },
             )
             flushMain()
-            coVerify(exactly = 0) { tel.sendSaleSubscribeTopic(any()) }
+            coVerify(exactly = 0) { subscriptionUseCases.apply(any(), any()) }
         }
 
     @Test
@@ -664,7 +705,7 @@ class DrinkListViewModelTask05IntegrationTest {
                 PrepareDrinkResult.Ok(estSeconds = 30)
 
             val holder = AqsiLastOperationSnapshotHolder()
-            val vm =
+            val (vm, _) =
                 createSubscriptionVmWithAqsiOrchestrator(
                     holder,
                     payResult = Result.success(AqsiPaymentResult.Approved),
