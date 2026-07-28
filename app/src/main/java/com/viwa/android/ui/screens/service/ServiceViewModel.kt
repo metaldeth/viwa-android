@@ -129,8 +129,14 @@ data class ServiceUiState(
  /** Как freeMode в wiva: при false — оплата через терминал (0x48 + PAX). */
     val devFreeMode: Boolean = true,
     val currentVersion: String = "",
+    val currentVersionCode: Int = 0,
     val updateHost: String = "",
     val availableUpdate: AppUpdate? = null,
+    val otaPhase: String? = null,
+    val otaChannel: String? = null,
+    val otaServerFeatureEnabled: Boolean? = null,
+    val otaLegacyFallbackEnabled: Boolean = false,
+    val otaMandatoryEnforcementEnabled: Boolean = false,
     val isCheckingUpdate: Boolean = false,
     val isInstalling: Boolean = false,
     val updateCheckError: String? = null,
@@ -287,6 +293,7 @@ constructor(
     private val preparingTimeHistoryStore: PreparingTimeHistoryStore,
     private val flowStripRgbCoordinator: FlowStripRgbCoordinator,
     private val telemetryRegistrationScannerCoordinator: TelemetryRegistrationScannerCoordinator,
+    private val technicianServiceMenuAccess: com.viwa.android.domain.technician.TechnicianServiceMenuAccess,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ServiceUiState())
     val state: StateFlow<ServiceUiState> = _state.asStateFlow()
@@ -327,6 +334,11 @@ constructor(
 
     val rfidTrafficFlow = rfidTrafficLogger.entries
 
+    /** Active technician session (role/scopes) for service-menu access layer — no UI binding required. */
+    val technicianSession = technicianServiceMenuAccess.session
+
+    fun isServiceMenuAuthorized(): Boolean = technicianServiceMenuAccess.isAuthorized()
+
     private val _usbSerialDevices =
         MutableStateFlow<List<Pair<String, String>>>(emptyList())
     val usbSerialDevices: StateFlow<List<Pair<String, String>>> = _usbSerialDevices.asStateFlow()
@@ -344,6 +356,7 @@ constructor(
 
     init {
         observeUpdateProgress()
+        observeOtaCoordinator()
         loadServiceState()
         loadIntegrationSettings()
         observeTerminalVendStatus()
@@ -1765,6 +1778,30 @@ constructor(
         }
     }
 
+    private fun observeOtaCoordinator() {
+        viewModelScope.launch {
+            updateRepository.coordinatorSnapshot.collect { snapshot ->
+                _state.update {
+                    it.copy(
+                        otaPhase = snapshot.phase.name,
+                        otaChannel = snapshot.offer?.channel?.name,
+                        otaServerFeatureEnabled = snapshot.serverFeatureEnabled,
+                        otaLegacyFallbackEnabled = snapshot.legacyFallbackEnabled,
+                        otaMandatoryEnforcementEnabled = snapshot.mandatoryEnforcementEnabled,
+                        availableUpdate = snapshot.offer?.toLegacyAppUpdate() ?: it.availableUpdate,
+                        updateCheckError = snapshot.errorMessage,
+                        isCheckingUpdate = snapshot.phase == com.viwa.android.domain.ota.AppUpdatePhase.Checking,
+                        isInstalling =
+                            snapshot.phase == com.viwa.android.domain.ota.AppUpdatePhase.Downloading ||
+                                snapshot.phase == com.viwa.android.domain.ota.AppUpdatePhase.Verifying ||
+                                snapshot.phase == com.viwa.android.domain.ota.AppUpdatePhase.Installing,
+                        isUpToDate = snapshot.phase == com.viwa.android.domain.ota.AppUpdatePhase.Idle && snapshot.offer == null,
+                    )
+                }
+            }
+        }
+    }
+
     private fun observeUpdateProgress() {
         viewModelScope.launch {
             try {
@@ -1792,7 +1829,9 @@ constructor(
                         useMockController = mock,
                         devFreeMode = free,
                         currentVersion = updateRepository.getCurrentVersion(),
+                        currentVersionCode = updateRepository.getCurrentVersionCode(),
                         updateHost = updateRepository.getUpdateServerHost(),
+                        otaLegacyFallbackEnabled = updateRepository.isLegacyFallbackEnabled(),
                         primaryButtonPulseStyle = pulse,
                         subscriptionDebugEnabled = subDebug,
                         flowStripRgbArgb = flowStripRgbCoordinator.getSavedArgb(),
@@ -1956,7 +1995,13 @@ constructor(
                     isUpToDate = false,
                 )
             }
-            updateRepository.checkUpdate().fold(
+            val result =
+                if (_state.value.otaLegacyFallbackEnabled) {
+                    updateRepository.checkUpdate()
+                } else {
+                    updateRepository.checkTelemetryUpdate()
+                }
+            result.fold(
                 onSuccess = { update ->
                     _state.update {
                         it.copy(
@@ -1982,7 +2027,20 @@ constructor(
         viewModelScope.launch {
             _updateInstallProgress.value = null
             _state.update { it.copy(isInstalling = true, updateCheckError = null) }
-            updateRepository.downloadAndInstall(update).fold(
+            val hasFirmwareScope =
+                technicianServiceMenuAccess.hasScope(
+                    com.viwa.android.domain.technician.TechnicianKeyConstants.SCOPE_FIRMWARE_UPDATE,
+                )
+            val result =
+                if (update.telemetryOffer) {
+                    updateRepository.installTelemetryUpdate(
+                        requireFirmwareScope = true,
+                        hasFirmwareScope = hasFirmwareScope,
+                    )
+                } else {
+                    updateRepository.downloadAndInstall(update)
+                }
+            result.fold(
                 onSuccess = {
                     _updateInstallProgress.value = null
                     _state.update { it.copy(isInstalling = false) }
@@ -1996,6 +2054,13 @@ constructor(
                     }
                 },
             )
+        }
+    }
+
+    fun setLegacyOtaFallbackEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            updateRepository.setLegacyFallbackEnabled(enabled)
+            _state.update { it.copy(otaLegacyFallbackEnabled = enabled) }
         }
     }
 

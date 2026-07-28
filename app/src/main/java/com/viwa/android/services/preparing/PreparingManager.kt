@@ -18,6 +18,11 @@ import com.viwa.android.hardware.FlowStripRgbCoordinator
 import com.viwa.android.data.local.sales.PendingSale
 import com.viwa.android.data.remote.telemetry.mvp.TelemetryIsoTimestamps
 import com.viwa.android.data.remote.telemetry.mvp.TelemetrySalesSyncCoordinator
+import com.viwa.android.data.remote.telemetry.mvp.MachineOutboxDrainCoordinator
+import com.viwa.android.data.local.outbox.LoyaltyWaterOutboxStore
+import com.viwa.android.domain.offline.OfflineAuthorizationReason
+import com.viwa.android.domain.offline.OfflinePourTransactionCoordinator
+import com.viwa.android.domain.offline.SubscriptionPourContext
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -49,6 +54,9 @@ constructor(
     private val waterCounter: ViwaWaterCounterService,
     private val flowStripRgbCoordinator: FlowStripRgbCoordinator,
     private val salesSyncCoordinator: TelemetrySalesSyncCoordinator,
+    private val offlinePourCoordinator: OfflinePourTransactionCoordinator,
+    private val waterOutboxStore: LoyaltyWaterOutboxStore,
+    private val outboxDrainCoordinator: MachineOutboxDrainCoordinator,
     @AppIoScope private val scope: CoroutineScope,
 ) {
     private val mutex = Mutex()
@@ -81,6 +89,7 @@ constructor(
         concentrationRatio: Double = 1.0,
         saleTotalPriceRub: Double = 0.0,
         salePayMethod: String? = null,
+        subscriptionPourContext: SubscriptionPourContext? = null,
     ): PrepareDrinkResult =
         mutex.withLock {
             successWatchJob?.cancel()
@@ -152,12 +161,38 @@ constructor(
                     saleTotalPriceRub = saleTotalPriceRub,
                     salePayMethod = salePayMethod,
                     concentrationRatio = concentrationRatio,
+                    subscriptionPourContext = subscriptionPourContext,
                 )
+
+            if (subscriptionPourContext != null) {
+                val reserve =
+                    offlinePourCoordinator.reservePour(
+                        clientId = subscriptionPourContext.clientId,
+                        machineId = subscriptionPourContext.machineId,
+                        volumeMl = volumeMl,
+                        drinkId = container.product.taste.id,
+                        saleId = subscriptionPourContext.saleId,
+                        requestUuid = subscriptionPourContext.requestUuid,
+                    )
+                when (reserve) {
+                    is OfflinePourTransactionCoordinator.ReservePourResult.Denied -> {
+                        val msg = offlineDenyMessage(reserve.reason)
+                        emit(PreparingState.Fail(PreparingErrorCodes.OFFLINE_ENTITLEMENT_DENIED, msg))
+                        return@withLock PrepareDrinkResult.Error(PreparingErrorCodes.OFFLINE_ENTITLEMENT_DENIED, msg)
+                    }
+                    is OfflinePourTransactionCoordinator.ReservePourResult.AlreadyReserved -> Unit
+                    is OfflinePourTransactionCoordinator.ReservePourResult.Reserved -> Unit
+                }
+            }
 
             emit(PreparingState.Begin(preparingTime))
             delay(200)
 
             _customerPhase.value = CustomerPreparingPhase.AwaitingDrinkReady(preparingTime)
+
+            subscriptionPourContext?.let { ctx ->
+                offlinePourCoordinator.markPouring(ctx.requestUuid)
+            }
 
             successWatchJob =
                 scope.launch {
@@ -170,8 +205,12 @@ constructor(
                         emit(PreparingState.Success)
                         _customerPhase.value = CustomerPreparingPhase.DrinkReady
                         flowStripRgbCoordinator.scheduleGreenForTenSecondsThenRestoreSaved()
+                        val pourContext = currentPreparingContext
                         persistPreparingTimeRecord()
                         enqueueSuccessfulSaleReport()
+                        pourContext?.let {
+                            finalizeSubscriptionPourIfNeeded(it.actualWaterMl.toInt().coerceAtLeast(1))
+                        }
                     } catch (e: Exception) {
                         Timber.tag(TAG).e(e, "await DrinkPreparingSuccess")
                     } finally {
@@ -190,9 +229,10 @@ constructor(
 
     private suspend fun enqueueSuccessfulSaleReport() {
         val context = currentPreparingContext ?: return
+        val saleId = context.subscriptionPourContext?.saleId ?: UUID.randomUUID().toString()
         val pendingSale =
             PendingSale(
-                saleId = UUID.randomUUID().toString(),
+                saleId = saleId,
                 soldAt = TelemetryIsoTimestamps.nowUtc(),
                 drinkId = context.tasteId,
                 volumeMl = context.volumeMl,
@@ -204,6 +244,37 @@ constructor(
             salesSyncCoordinator.enqueueAndTrySend(pendingSale)
         }.onFailure { Timber.tag(TAG).e(it, "enqueue sale.report failed") }
     }
+
+    private suspend fun finalizeSubscriptionPourIfNeeded(dispensedVolumeMl: Int) {
+        val ctx = currentPreparingContext?.subscriptionPourContext ?: return
+        offlinePourCoordinator.finalizePour(ctx.requestUuid, dispensedVolumeMl)
+        waterOutboxStore.enqueueWaterUse(
+            clientId = ctx.clientId,
+            requestUuid = ctx.requestUuid,
+            volumeMl = dispensedVolumeMl,
+            drinkId = currentPreparingContext?.tasteId,
+            saleId = ctx.saleId,
+            isFree = true,
+        )
+        offlinePourCoordinator.enqueueForSync(ctx.requestUuid, ctx.clientId, isFree = true)
+        outboxDrainCoordinator.onEnqueue()
+    }
+
+    private fun offlineDenyMessage(reason: OfflineAuthorizationReason): String =
+        when (reason) {
+            OfflineAuthorizationReason.OFFLINE_NO_GRANT -> "Нет offline-разрешения. Подключите сеть."
+            OfflineAuthorizationReason.OFFLINE_GRANT_EXPIRED -> "Offline-разрешение истекло."
+            OfflineAuthorizationReason.OFFLINE_GRANT_REVOKED -> "Offline-разрешение отозвано."
+            OfflineAuthorizationReason.OFFLINE_GRANT_TAMPERED -> "Offline-разрешение недействительно."
+            OfflineAuthorizationReason.OFFLINE_CLOCK_UNSAFE -> "Ненадёжные часы. Подключите сеть."
+            OfflineAuthorizationReason.OFFLINE_POUR_LIMIT -> "Лимит offline-наливов исчерпан."
+            OfflineAuthorizationReason.OFFLINE_VOLUME_LIMIT -> "Превышен offline-объём."
+            OfflineAuthorizationReason.OFFLINE_DAILY_EXCEEDED -> "Превышен дневной лимит."
+            OfflineAuthorizationReason.OFFLINE_DISABLED -> "Offline-налив недоступен для тарифа."
+            OfflineAuthorizationReason.OFFLINE_FEATURE_DISABLED -> "Offline-налив отключён."
+            OfflineAuthorizationReason.GRANTED -> "OK"
+            OfflineAuthorizationReason.OFFLINE_GRANT_MACHINE_MISMATCH -> "Grant не для этой машины."
+        }
 
     private fun resolveSalePayMethod(salePayMethod: String?): String =
         salePayMethod?.takeIf { it.isNotBlank() } ?: "FREE"
@@ -250,6 +321,7 @@ constructor(
         val saleTotalPriceRub: Double,
         val salePayMethod: String?,
         val concentrationRatio: Double,
+        val subscriptionPourContext: SubscriptionPourContext? = null,
     )
 
     companion object {

@@ -43,7 +43,7 @@ class TelemetrySalesMessageCodecTest {
     }
 
     @Test
-    fun `encodeSaleReportPayload defaults concentrationRatio to one when missing in pending sale`() {
+    fun `encodeSaleReportPayload omits concentrationRatio when null`() {
         // given
         val sale =
             PendingSale(
@@ -59,6 +59,6 @@ class TelemetrySalesMessageCodecTest {
         val payload = TelemetrySalesMessageCodec.encodeSaleReportPayload(sale)
 
         // then
-        assertEquals(1.0, payload["concentrationRatio"]!!.jsonPrimitive.content.toDouble(), 0.0)
+        org.junit.Assert.assertNull(payload["concentrationRatio"])
     }
 }

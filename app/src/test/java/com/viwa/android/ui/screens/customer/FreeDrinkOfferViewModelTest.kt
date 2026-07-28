@@ -7,10 +7,13 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -21,7 +24,7 @@ import org.junit.Test
 class FreeDrinkOfferViewModelTest {
     @Before
     fun setup() {
-        Dispatchers.setMain(Dispatchers.Unconfined)
+        Dispatchers.setMain(StandardTestDispatcher())
     }
 
     @After
@@ -31,6 +34,7 @@ class FreeDrinkOfferViewModelTest {
 
     @Test
     fun T11_9_qrUrlContainsMachineSerialPathWithoutOrganizationId() = runTest {
+        
         // given
         val telemetry = mockk<ViwaTelemetryService>()
         coEvery { telemetry.loadMachineRegistration() } returns
@@ -41,12 +45,13 @@ class FreeDrinkOfferViewModelTest {
 
         // when
         val viewModel = FreeDrinkOfferViewModel(telemetry)
+        advanceUntilIdle()
 
         // then
         val url = viewModel.qrUrl.value
         assertNotNull(url)
-        assertTrue(url!!.contains("/m/VIWA-000004/"))
-        assertFalse(url.contains("organizationId"))
-        assertFalse(url.contains("/99/"))
+        assertEquals("https://cabinet.vitamin-water.ru/m/VIWA-000004/auth", url)
+        assertFalse(url!!.contains("organizationId"))
+        assertFalse(url!!.contains("/99/"))
     }
 }

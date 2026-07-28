@@ -259,7 +259,7 @@ class MvpTelemetryApiClientTest {
                       "installationId":"inst-1",
                       "machineSecret":"sec_value",
                       "tokenEndpoint":"/api/v1/machines/token",
-                      "wsUrl":"wss://194.67.74.147/api/v1/machines/ws",
+                      "wsUrl":"wss://tl.vitamin-water.ru/api/v1/machines/ws",
                       "protocolVersion":1,
                       "heartbeatIntervalSeconds":30
                     }

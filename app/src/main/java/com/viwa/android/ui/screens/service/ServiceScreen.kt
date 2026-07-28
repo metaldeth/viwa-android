@@ -50,6 +50,13 @@ fun ServiceScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val authorized = viewModel.isServiceMenuAuthorized()
+
+    LaunchedEffect(authorized) {
+        if (!authorized) onBack()
+    }
+
+    if (!authorized) return
 
     LaunchedEffect(Unit) {
         if (ServiceScreenLaunch.selectDashboardOnOpen) {

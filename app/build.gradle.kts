@@ -51,8 +51,8 @@ android {
         applicationId = "com.viwa.android"
         minSdk = 25
         targetSdk = 35
-        versionCode = 189
-        versionName = "26.07.27.01"
+        versionCode = 190
+        versionName = "26.07.28.01"
 
         testInstrumentationRunner = "com.viwa.android.ViwaHiltTestRunner"
 
@@ -66,6 +66,20 @@ android {
                 ?: System.getenv("VIWA_TELEMETRY_ENROLLMENT_KEY")
                 ?: ""
         buildConfigField("String", "TELEMETRY_ENROLLMENT_KEY", "\"${enrollmentKey.replace("\"", "\\\"")}\"")
+        val otaKeyId =
+            localProps.getProperty("ota.signingKeyId")
+                ?: System.getenv("VIWA_OTA_SIGNING_KEY_ID")
+                ?: ""
+        val otaPublicKeyPem =
+            localProps.getProperty("ota.signingPublicKeyPem")
+                ?: System.getenv("VIWA_OTA_SIGNING_PUBLIC_KEY_PEM")
+                ?: ""
+        buildConfigField("String", "OTA_SIGNING_KEY_ID", "\"${otaKeyId.replace("\"", "\\\"")}\"")
+        buildConfigField(
+            "String",
+            "OTA_SIGNING_PUBLIC_KEY_PEM",
+            "\"${otaPublicKeyPem.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\"",
+        )
     }
 
     buildTypes {
@@ -123,12 +137,18 @@ android {
     }
 
     testOptions {
-        unitTests.isReturnDefaultValues = true
+        unitTests {
+            isReturnDefaultValues = true
+            all {
+                it.maxHeapSize = "1024m"
+            }
+        }
     }
 
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
     }
 }
@@ -174,12 +194,14 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.qrcode.kotlin)
     implementation(libs.security.crypto)
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation(libs.mockk)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.turbine)
     testImplementation(libs.mockwebserver)
+    testImplementation(libs.room.testing)
 
     androidTestImplementation(libs.hilt.android.testing)
     androidTestImplementation(libs.androidx.test.junit)

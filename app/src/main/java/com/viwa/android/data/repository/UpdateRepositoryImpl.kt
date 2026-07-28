@@ -9,14 +9,16 @@ import com.viwa.android.data.local.db.JsonStoreKeys
 import com.viwa.android.di.AppIoScope
 import com.viwa.android.domain.model.AppUpdate
 import com.viwa.android.domain.model.UpdateProgress
+import com.viwa.android.domain.ota.AppUpdateCoordinator
+import com.viwa.android.domain.ota.OtaApkVerifier
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -24,8 +26,11 @@ import okhttp3.Request
 
 interface UpdateRepository {
     val progressFlow: SharedFlow<UpdateProgress>
+    val coordinatorSnapshot: StateFlow<com.viwa.android.domain.ota.AppUpdateCoordinatorSnapshot>
 
     suspend fun getCurrentVersion(): String
+
+    suspend fun getCurrentVersionCode(): Int
 
     suspend fun getUpdateServerHost(): String
 
@@ -34,6 +39,14 @@ interface UpdateRepository {
     suspend fun checkUpdate(): Result<AppUpdate?>
 
     suspend fun downloadAndInstall(update: AppUpdate): Result<Unit>
+
+    suspend fun checkTelemetryUpdate(): Result<AppUpdate?>
+
+    suspend fun installTelemetryUpdate(requireFirmwareScope: Boolean, hasFirmwareScope: Boolean): Result<Unit>
+
+    suspend fun isLegacyFallbackEnabled(): Boolean
+
+    suspend fun setLegacyFallbackEnabled(enabled: Boolean)
 }
 
 @Suppress("UNUSED_PARAMETER")
@@ -43,6 +56,8 @@ constructor(
     private val okHttpClient: OkHttpClient,
     private val configRepository: ConfigRepository,
     @ApplicationContext private val context: Context,
+    private val appUpdateCoordinator: AppUpdateCoordinator,
+    private val apkVerifier: OtaApkVerifier,
     @AppIoScope appIoScope: CoroutineScope,
 ) : UpdateRepository {
     private val json =
@@ -50,22 +65,16 @@ constructor(
             ignoreUnknownKeys = true
         }
 
-    private val _progressFlow = MutableSharedFlow<UpdateProgress>(replay = 1)
-    override val progressFlow: SharedFlow<UpdateProgress> = _progressFlow.asSharedFlow()
+    override val progressFlow: SharedFlow<UpdateProgress> = appUpdateCoordinator.progressFlow
+    override val coordinatorSnapshot = appUpdateCoordinator.snapshot
 
     override suspend fun getCurrentVersion(): String =
         withContext(Dispatchers.IO) {
-            val pm = context.packageManager
-            val pkg = context.packageName
-            val info =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
-                } else {
-                    @Suppress("DEPRECATION")
-                    pm.getPackageInfo(pkg, 0)
-                }
+            val info = installedPackageInfo()
             info.versionName ?: "unknown"
         }
+
+    override suspend fun getCurrentVersionCode(): Int = withContext(Dispatchers.IO) { apkVerifier.readInstalledVersionCode() }
 
     override suspend fun getUpdateServerHost(): String =
         configRepository.get(JsonStoreKeys.UPDATE_SERVER_HOST) ?: "http://83.166.246.158:9083"
@@ -74,6 +83,45 @@ constructor(
         configRepository.set(JsonStoreKeys.UPDATE_SERVER_HOST, host)
 
     override suspend fun checkUpdate(): Result<AppUpdate?> =
+        withContext(Dispatchers.IO) {
+            if (isLegacyFallbackEnabled()) {
+                checkLegacyUpdate()
+            } else {
+                checkTelemetryUpdate()
+            }
+        }
+
+    override suspend fun checkTelemetryUpdate(): Result<AppUpdate?> =
+        withContext(Dispatchers.IO) {
+            appUpdateCoordinator.checkForUpdatesManual().map { offer ->
+                offer?.toLegacyAppUpdate()
+            }
+        }
+
+    override suspend fun downloadAndInstall(update: AppUpdate): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            if (update.telemetryOffer) {
+                installTelemetryUpdate(requireFirmwareScope = true, hasFirmwareScope = true)
+            } else {
+                downloadAndInstallLegacy(update)
+            }
+        }
+
+    override suspend fun installTelemetryUpdate(
+        requireFirmwareScope: Boolean,
+        hasFirmwareScope: Boolean,
+    ): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            appUpdateCoordinator.installOfferedUpdate(requireFirmwareScope, hasFirmwareScope)
+        }
+
+    override suspend fun isLegacyFallbackEnabled(): Boolean = appUpdateCoordinator.isLegacyFallbackEnabled()
+
+    override suspend fun setLegacyFallbackEnabled(enabled: Boolean) {
+        appUpdateCoordinator.setLegacyFallbackEnabled(enabled)
+    }
+
+    private suspend fun checkLegacyUpdate(): Result<AppUpdate?> =
         withContext(Dispatchers.IO) {
             try {
                 val host = getUpdateServerHost().trimEnd('/')
@@ -86,13 +134,13 @@ constructor(
                 val body = response.body?.string() ?: return@withContext Result.success(null)
                 val update = json.decodeFromString<AppUpdate>(body)
                 val currentVersion = getCurrentVersion()
-                Result.success(if (update.version == currentVersion) null else update)
+                Result.success(if (update.version == currentVersion) null else update.copy(telemetryOffer = false))
             } catch (e: Throwable) {
                 Result.failure(e)
             }
         }
 
-    override suspend fun downloadAndInstall(update: AppUpdate): Result<Unit> =
+    private suspend fun downloadAndInstallLegacy(update: AppUpdate): Result<Unit> =
         withContext(Dispatchers.IO) {
             try {
                 val response =
@@ -111,7 +159,7 @@ constructor(
                         while (input.read(buffer).also { bytesRead = it } != -1) {
                             output.write(buffer, 0, bytesRead)
                             downloaded += bytesRead
-                            _progressFlow.emit(UpdateProgress(downloaded, totalBytes))
+                            appUpdateCoordinator.emitProgress(UpdateProgress(downloaded, totalBytes))
                         }
                     }
                 }
@@ -134,5 +182,16 @@ constructor(
             } catch (e: Throwable) {
                 Result.failure(e)
             }
+        }
+
+    private fun installedPackageInfo() =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.PackageInfoFlags.of(0),
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, 0)
         }
 }

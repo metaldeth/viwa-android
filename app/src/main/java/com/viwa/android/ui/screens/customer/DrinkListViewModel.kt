@@ -1,6 +1,7 @@
 package com.viwa.android.ui.screens.customer
 
 import androidx.lifecycle.ViewModel
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.viewModelScope
 import com.viwa.android.data.local.db.JsonStoreKeys
 import com.viwa.android.data.network.NetworkTrafficEntry
@@ -41,6 +42,8 @@ import com.viwa.android.hardware.controller.decodeFlowTemperatureByte
 import com.viwa.android.hardware.controller.RequestCommand
 import com.viwa.android.hardware.controller.ResponseCommand
 import com.viwa.android.domain.loyalty.LoyaltyWaterUseCoordinator
+import com.viwa.android.domain.offline.OfflineAuthorizationReason
+import com.viwa.android.domain.offline.SubscriptionPourContext
 import com.viwa.android.services.telemetry.SubscriptionLevelItem
 import com.viwa.android.services.telemetry.UseSubscriptionPayMethod
 import com.viwa.android.services.telemetry.UseSubscriptionSaleBody
@@ -57,16 +60,9 @@ import javax.inject.Inject
 import com.viwa.android.BuildConfig
 import java.text.SimpleDateFormat
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.SupervisorJob
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
-import java.util.UUID
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
@@ -78,6 +74,10 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import timber.log.Timber
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+import java.util.UUID
 import kotlin.random.Random
 
 enum class PaymentSheetStep {
@@ -91,6 +91,7 @@ enum class PaymentSheetStep {
 /** Объём по умолчанию при первом выборе напитка (шапка: 300 / 700 мл). Раньше было 700 мл. */
 private const val DEFAULT_SELECTED_VOLUME_ML = 300
 
+@Immutable
 data class DrinkListUiState(
  /** Пока нет `TELEMETRY_MERGED_INVENTORY` — пусто; реальное наполнение приходит из телеметрии. */
     val containers: List<DrinkContainer> = emptyList(),
@@ -326,6 +327,7 @@ constructor(
         }
         observeLoyaltyCardScansForDrinkListUi()
         observeInvalidLoyaltyCards()
+        observeOfflineLoyaltyDeny()
         observeControllerTemperature()
         startTemperaturePolling()
     }
@@ -369,6 +371,37 @@ constructor(
                 )
         }
     }
+
+    private fun observeOfflineLoyaltyDeny() {
+        viewModelScope.launch {
+            telemetryService.offlineLoyaltyDenyReason.collect { reason ->
+                _state.update {
+                    it.copy(
+                        flowBanner = offlineSubscriptionDenyMessage(reason),
+                        flowBannerIsError = true,
+                        subscriptionLevelsLoading = false,
+                        invalidSubscriptionCardVisible = reason != OfflineAuthorizationReason.GRANTED,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun offlineSubscriptionDenyMessage(reason: OfflineAuthorizationReason): String =
+        when (reason) {
+            OfflineAuthorizationReason.OFFLINE_NO_GRANT -> "Нет offline-разрешения. Подключите сеть."
+            OfflineAuthorizationReason.OFFLINE_GRANT_EXPIRED -> "Offline-разрешение истекло."
+            OfflineAuthorizationReason.OFFLINE_GRANT_REVOKED -> "Offline-разрешение отозвано."
+            OfflineAuthorizationReason.OFFLINE_GRANT_TAMPERED -> "Offline-разрешение недействительно."
+            OfflineAuthorizationReason.OFFLINE_CLOCK_UNSAFE -> "Ненадёжные часы. Подключите сеть."
+            OfflineAuthorizationReason.OFFLINE_POUR_LIMIT -> "Лимит offline-наливов исчерпан."
+            OfflineAuthorizationReason.OFFLINE_VOLUME_LIMIT -> "Превышен offline-объём."
+            OfflineAuthorizationReason.OFFLINE_DAILY_EXCEEDED -> "Превышен дневной лимит."
+            OfflineAuthorizationReason.OFFLINE_DISABLED -> "Offline-налив недоступен для тарифа."
+            OfflineAuthorizationReason.OFFLINE_FEATURE_DISABLED -> "Offline-налив отключён."
+            OfflineAuthorizationReason.OFFLINE_GRANT_MACHINE_MISMATCH -> "Grant не для этой машины."
+            OfflineAuthorizationReason.GRANTED -> "OK"
+        }
 
     private fun observeInvalidLoyaltyCards() {
         viewModelScope.launch {
@@ -486,6 +519,11 @@ constructor(
                 flowBanner = null,
             )
         }
+    }
+
+    fun selectContainerByNumber(containerNumber: Int) {
+        val container = _state.value.containers.firstOrNull { it.containerNumber == containerNumber } ?: return
+        selectContainer(container)
     }
 
     fun setVolume(ml: Int) {
@@ -649,13 +687,12 @@ constructor(
         subscriptionPaymentRequestUuid = null
     }
 
-    @OptIn(DelicateCoroutinesApi::class)
     private fun cancelPendingSubscriptionPaymentIfNeeded() {
         val clientId = _state.value.scannedSubscriptionClientId
         val requestUuid = subscriptionPaymentRequestUuid
         val paymentId = subscriptionPaymentId ?: _state.value.sbpLink?.orderId
         if (!clientId.isNullOrBlank() && !requestUuid.isNullOrBlank() && paymentId != null) {
-            GlobalScope.launch(Dispatchers.Unconfined) {
+            viewModelScope.launch(Dispatchers.IO) {
                 runCatching { cancelMachineSubscriptionUseCase(clientId, requestUuid) }
                     .onFailure { Timber.w(it, "subscription purchase cancel failed") }
             }
@@ -1275,6 +1312,23 @@ constructor(
         saleTotalPriceRub: Double = 0.0,
         salePayMethod: String? = null,
     ) {
+        val subClientId = s.scannedSubscriptionClientId
+        val subscriptionPourContext =
+            if (!subClientId.isNullOrBlank() && salePayMethod == "SUBSCRIBE") {
+                val requestUuid =
+                    pendingSubscriptionPourRequestUuid
+                        ?: UUID.randomUUID().toString().also { pendingSubscriptionPourRequestUuid = it }
+                val machineId = telemetryService.loadMachineRegistration().machineId
+                SubscriptionPourContext(
+                    clientId = subClientId,
+                    requestUuid = requestUuid,
+                    saleId = UUID.randomUUID().toString(),
+                    machineId = machineId,
+                    offlineMode = s.telemetryWsConnected.not(),
+                )
+            } else {
+                null
+            }
         val result =
             preparingManager.prepareDrink(
                 tasteId = container.product.taste.id,
@@ -1283,39 +1337,10 @@ constructor(
                 concentrationRatio = s.concentration.toRatio(),
                 saleTotalPriceRub = saleTotalPriceRub,
                 salePayMethod = salePayMethod,
+                subscriptionPourContext = subscriptionPourContext,
             )
         when (result) {
             is PrepareDrinkResult.Ok -> {
-                val subClientId = s.scannedSubscriptionClientId
- // Налив по остатку карты (salePayMethod == null): и подписка, и бесплатный литр — иначе телеметрия не уходит.
- // Телеметрия best-effort: ошибка регистрации машины не должна блокировать навигацию на экран готовки.
-                if (!subClientId.isNullOrBlank() && salePayMethod == "SUBSCRIBE") {
-                    runCatching {
-                        val requestUuid =
-                            pendingSubscriptionPourRequestUuid
-                                ?: UUID.randomUUID().toString().also { pendingSubscriptionPourRequestUuid = it }
-                        if (loyaltyWaterUseCoordinator.shouldSend(requestUuid)) {
-                            telemetryService.sendUseSubscriptionSaleTopic(
-                                UseSubscriptionSaleBody(
-                                    clientId = subClientId,
-                                    volume = volume.toDouble() / 1000.0,
-                                    machineId =
-                                        telemetryService.loadMachineRegistration().machineId.toIntOrNull()
-                                            ?: 0,
-                                    isFree = true,
-                                    ingredientId = container.product.id,
-                                    requestUuid = requestUuid,
-                                    date = isoUtcTimestamp(),
-                                    payMethod = UseSubscriptionPayMethod.SUBSCRIBE,
-                                    price = 0.0,
-                                ),
-                            )
-                        }
-                        telemetryService.sendStatusSubscribeTopic(subClientId)
-                    }.onFailure { e ->
-                        Timber.e(e, "subscription telemetry failed, continuing to preparing screen")
-                    }
-                }
                 val linePriceRub =
                     container.product.dPrices.firstOrNull { it.volume == volume }?.priceRub ?: 0
                 onNavigateToPreparing(

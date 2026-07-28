@@ -1,6 +1,9 @@
 package com.viwa.android.domain.model.customer
 
+import androidx.compose.runtime.Immutable
+
 /** Дозировка → `Dosage`. */
+@Immutable
 data class DrinkDosage(
     val conversionFactor: Double,
     val drinkVolume: Int,
@@ -8,6 +11,7 @@ data class DrinkDosage(
     val water: Double,
 )
 
+@Immutable
 data class DrinkTaste(
     val id: Int,
     val name: String,
@@ -15,12 +19,14 @@ data class DrinkTaste(
     val hexColor: String?,
 )
 
+@Immutable
 data class DrinkPrice(
     val volume: Int,
  /** Цена в рублях (. */
     val priceRub: Int,
 )
 
+@Immutable
 data class DrinkProduct(
     val id: Int,
     val name: String,
@@ -32,6 +38,7 @@ data class DrinkProduct(
 /**
  * Контейнер для UI и рецепта ChooseDrink (номер ячейки, остаток — как `ContainerDTO` в wiva).
  */
+@Immutable
 data class DrinkContainer(
     val containerNumber: Int,
     val sodaStatus: Boolean?,

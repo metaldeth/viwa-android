@@ -30,7 +30,7 @@ class TelemetryRegistrationScannerCoordinatorTest {
         flow.emit(
             BarcodeEvent.TelemetryRegistrationQr(
                 """
-                {"type":"VIWA_TELEMETRY_REGISTRATION","version":1,"registrationKey":"REG-0123456789AB","serialNumber":"VIWA-000004","apiUrl":"https://194.67.74.147"}
+                {"type":"VIWA_TELEMETRY_REGISTRATION","version":1,"registrationKey":"REG-0123456789AB","serialNumber":"VIWA-000004","apiUrl":"https://tl.vitamin-water.ru"}
                 """.trimIndent(),
             ),
         )
@@ -39,7 +39,7 @@ class TelemetryRegistrationScannerCoordinatorTest {
         val event = deferred.await()
         assertEquals("REG-0123456789AB", event.registrationKey)
         assertEquals("VIWA-000004", event.serialNumber)
-        assertEquals("https://194.67.74.147", event.apiUrl)
+        assertEquals("https://tl.vitamin-water.ru", event.apiUrl)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

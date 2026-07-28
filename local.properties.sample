@@ -1,10 +1,14 @@
-## Sample local.properties (copy to local.properties — never commit secrets)
-
-# Android SDK (required)
-# sdk.dir=F:\\AndroidSDK
-
-# Simple Telemetry MVP — must match viwa-telemetry MACHINE_ENROLLMENT_KEY (.env)
-# See docs/SIMPLE_TELEMETRY_MVP_ANDROID.md and viwa-telemetry/.env.example
-# telemetry.enrollmentKey=your-dev-enrollment-key-here
-
-# Alternative: set env VIWA_TELEMETRY_ENROLLMENT_KEY before gradlew (PowerShell: $env:VIWA_TELEMETRY_ENROLLMENT_KEY = "...")
+## Sample local.properties (copy to local.properties — never commit secrets)
+
+# Android SDK (required)
+# sdk.dir=F:\\AndroidSDK
+
+# Simple Telemetry MVP — must match viwa-telemetry MACHINE_ENROLLMENT_KEY (.env)
+# See docs/SIMPLE_TELEMETRY_MVP_ANDROID.md and viwa-telemetry/.env.example
+# telemetry.enrollmentKey=your-dev-enrollment-key-here
+
+# Alternative: set env VIWA_TELEMETRY_ENROLLMENT_KEY before gradlew (PowerShell: $env:VIWA_TELEMETRY_ENROLLMENT_KEY = "...")
+
+# OTA manifest verification (optional — pinned Ed25519 key from viwa-telemetry OTA_SIGNING_*)
+# ota.signingKeyId=ota-dev-v1
+# ota.signingPublicKeyPem=-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----

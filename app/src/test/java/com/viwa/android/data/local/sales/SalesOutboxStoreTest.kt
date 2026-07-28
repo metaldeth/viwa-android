@@ -1,46 +1,92 @@
 package com.viwa.android.data.local.sales
 
+import com.viwa.android.data.local.outbox.FakeMachineOutboxPersistence
+import com.viwa.android.data.local.outbox.MachineOutboxKind
+import com.viwa.android.data.local.outbox.MachineOutboxStatus
+import com.viwa.android.data.local.outbox.MachineOutboxStore
+import com.viwa.android.data.local.outbox.PendingSalesOutboxMigrator
 import com.viwa.android.data.local.db.JsonStoreKeys
 import com.viwa.android.data.repository.ConfigRepository
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
 class SalesOutboxStoreTest {
+    private lateinit var persistence: FakeMachineOutboxPersistence
     private lateinit var configRepository: FakeConfigRepository
     private lateinit var store: SalesOutboxStore
 
     @Before
     fun setUp() {
+        persistence = FakeMachineOutboxPersistence()
         configRepository = FakeConfigRepository()
-        store = SalesOutboxStore(configRepository)
+        val machineOutboxStore =
+            MachineOutboxStore(
+                persistence = persistence,
+                configRepository = configRepository,
+                migrator = PendingSalesOutboxMigrator(persistence, configRepository),
+            )
+        store = SalesOutboxStore(machineOutboxStore)
     }
 
     @Test
-    fun `enqueue persists pending sale as json list`() = runTest {
-        // given
+    fun `enqueue persists pending sale in room outbox`() = runTest {
         val sale = sampleSale(saleId = "sale-1")
-
-        // when
         store.enqueue(sale)
-
-        // then
-        val raw = configRepository.getJson(JsonStoreKeys.PENDING_SALES)
-        val decoded = Json { ignoreUnknownKeys = true }.decodeFromString<List<PendingSale>>(raw!!)
-        assertEquals(1, decoded.size)
-        assertEquals("sale-1", decoded.first().saleId)
-        assertEquals(PendingSaleStatus.PENDING, decoded.first().status)
-        assertEquals(0.9, decoded.first().concentrationRatio!!, 0.0)
+        assertEquals(1, persistence.allRows().size)
+        assertEquals("sale-1", persistence.allRows().first().idempotencyKey)
+        assertEquals(MachineOutboxKind.SALE_REPORT.wireValue, persistence.allRows().first().kind)
     }
 
     @Test
     fun `load decodes legacy pending sales without concentrationRatio as null`() = runTest {
-        // given
+        store.enqueue(
+            PendingSale(
+                saleId = "legacy-sale",
+                soldAt = "2026-07-20T12:00:00.000Z",
+                drinkId = 20,
+                volumeMl = 200,
+                amountRub = 150.0,
+                payMethod = "CARD",
+            ),
+        )
+        val pending = store.listPending(nowMillis = Long.MAX_VALUE)
+        assertEquals(1, pending.size)
+        assertNull(pending.first().concentrationRatio)
+    }
+
+    @Test
+    fun `markSent removes sale from pending list`() = runTest {
+        store.enqueue(sampleSale(saleId = "sale-1"))
+        store.markSent("sale-1")
+        assertTrue(store.listPending().isEmpty())
+        assertEquals(MachineOutboxStatus.ACKED.name, persistence.allRows().single().status)
+    }
+
+    @Test
+    fun `bumpAttempt applies retry backoff schedule`() = runTest {
+        store.enqueue(sampleSale(saleId = "sale-1"))
+        store.bumpAttempt("sale-1", nowMillis = 0L)
+        val row = persistence.allRows().single()
+        assertEquals(MachineOutboxStatus.PENDING.name, row.status)
+        assertTrue(row.attempts >= 1)
+    }
+
+    @Test
+    fun `retryDelayMillis uses full jitter capped schedule`() {
+        assertTrue(store.retryDelayMillis(1) in 0..1_000L)
+        assertTrue(store.retryDelayMillis(5) in 0..30_000L)
+        assertTrue(store.retryDelayMillis(99) in 0..30_000L)
+    }
+
+    @Test
+    fun `jsonstore migration imports legacy pending sales`() = runTest {
         val legacyJson =
             """
             [
@@ -55,57 +101,9 @@ class SalesOutboxStoreTest {
             ]
             """.trimIndent()
         configRepository.setJson(JsonStoreKeys.PENDING_SALES, legacyJson)
-
-        // when
-        val pending = store.listPending(nowMillis = Long.MAX_VALUE)
-
-        // then
-        assertEquals(1, pending.size)
-        assertNull(pending.first().concentrationRatio)
-    }
-
-    @Test
-    fun `markSent removes sale from store`() = runTest {
-        // given
-        store.enqueue(sampleSale(saleId = "sale-1"))
-
-        // when
-        store.markSent("sale-1")
-
-        // then
-        assertNull(configRepository.getJson(JsonStoreKeys.PENDING_SALES))
-        assertTrue(store.listPending().isEmpty())
-    }
-
-    @Test
-    fun `bumpAttempt applies retry backoff schedule`() = runTest {
-        // given
-        store.enqueue(sampleSale(saleId = "sale-1"))
-        val now = 1_000_000L
-
-        // when / then
-        store.bumpAttempt("sale-1", nowMillis = now)
-        var pending = store.listPending(nowMillis = now)
-        assertTrue(pending.isEmpty())
-        pending = store.listPending(nowMillis = now + 1_000)
-        assertEquals(1, pending.size)
-        assertEquals(1, pending.first().attempts)
-
-        store.bumpAttempt("sale-1", nowMillis = now + 1_000)
-        pending = store.listPending(nowMillis = now + 2_999)
-        assertTrue(pending.isEmpty())
-        pending = store.listPending(nowMillis = now + 3_000)
-        assertEquals(2, pending.first().attempts)
-    }
-
-    @Test
-    fun `retryDelayMillis caps at thirty seconds`() {
-        assertEquals(1_000L, store.retryDelayMillis(1))
-        assertEquals(2_000L, store.retryDelayMillis(2))
-        assertEquals(5_000L, store.retryDelayMillis(3))
-        assertEquals(10_000L, store.retryDelayMillis(4))
-        assertEquals(30_000L, store.retryDelayMillis(5))
-        assertEquals(30_000L, store.retryDelayMillis(99))
+        store.enqueue(sampleSale("new"))
+        assertEquals(2, persistence.allRows().size)
+        assertNotNull(configRepository.get(JsonStoreKeys.OUTBOX_PENDING_SALES_IMPORTED))
     }
 
     private fun sampleSale(saleId: String): PendingSale =

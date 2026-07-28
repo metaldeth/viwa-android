@@ -14,7 +14,7 @@ class TelemetryRegistrationScanApplierTest {
             TelemetryRegistrationScanUiEvent(
                 registrationKey = "REG-0123456789AB",
                 serialNumber = "VIWA-000004",
-                apiUrl = "https://194.67.74.147",
+                apiUrl = "https://tl.vitamin-water.ru",
             )
 
         val result = TelemetryRegistrationScanApplier.apply(event, TelemetryConfig.DEFAULT_API_URL)
@@ -64,7 +64,7 @@ class TelemetryRegistrationScanApplierTest {
             TelemetryRegistrationScanUiEvent(
                 registrationKey = "REG-0123456789AB",
                 serialNumber = "VIWA-000004",
-                apiUrl = "https://194.67.74.147",
+                apiUrl = "https://tl.vitamin-water.ru",
             )
 
         val result = TelemetryRegistrationScanApplier.apply(event, TelemetryConfig.DEFAULT_API_URL)

@@ -9,7 +9,7 @@ data class TelemetryConfig(
     val wsUrl: String = "",
 ) {
     companion object {
-        const val DEFAULT_API_URL = "https://194.67.74.147"
+        const val DEFAULT_API_URL = "https://tl.vitamin-water.ru"
 
         /** Сбрасывает устаревший Shaker WS из сохранённого конфига. */
         fun normalize(config: TelemetryConfig): TelemetryConfig {

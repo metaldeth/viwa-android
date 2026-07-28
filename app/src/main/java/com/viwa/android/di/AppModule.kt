@@ -51,6 +51,8 @@ object AppModule {
         client: OkHttpClient,
         config: ConfigRepository,
         @ApplicationContext ctx: Context,
+        appUpdateCoordinator: com.viwa.android.domain.ota.AppUpdateCoordinator,
+        apkVerifier: com.viwa.android.domain.ota.OtaApkVerifier,
         @AppIoScope scope: CoroutineScope,
-    ): UpdateRepository = UpdateRepositoryImpl(client, config, ctx, scope)
+    ): UpdateRepository = UpdateRepositoryImpl(client, config, ctx, appUpdateCoordinator, apkVerifier, scope)
 }

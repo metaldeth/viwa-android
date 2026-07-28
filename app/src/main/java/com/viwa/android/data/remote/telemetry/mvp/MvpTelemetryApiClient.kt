@@ -1,5 +1,6 @@
 package com.viwa.android.data.remote.telemetry.mvp
 
+import com.viwa.android.data.network.redactNetworkPayload
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -226,9 +227,217 @@ class MvpTelemetryApiClient(
         }
     }
 
-    private fun redactApiLog(text: String): String =
-        text
-            .replace(Regex("""\"machineSecret\"\s*:\s*\"[^\"]*\""""), "\"machineSecret\":\"***\"")
-            .replace(Regex("""\"registrationKey\"\s*:\s*\"[^\"]*\""""), "\"registrationKey\":\"***\"")
-            .replace(Regex("""\"accessToken\"\s*:\s*\"[^\"]*\""""), "\"accessToken\":\"***\"")
+    private fun redactApiLog(text: String): String = redactNetworkPayload(text)
+
+    suspend fun submitOutboxBatch(
+        endpoint: String,
+        bearerToken: String,
+        request: MachineOutboxBatchRequestDto,
+    ): Result<MachineOutboxBatchResponseDto> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body = json.encodeToString(MachineOutboxBatchRequestDto.serializer(), request)
+                val httpRequest =
+                    Request.Builder()
+                        .url(endpoint)
+                        .post(body.toRequestBody(jsonMediaType))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer $bearerToken")
+                        .build()
+                executeJson(httpRequest, MachineOutboxBatchResponseDto.serializer())
+            }
+        }
+
+    suspend fun fetchOfflineGrantsDelta(
+        endpoint: String,
+        bearerToken: String,
+        cursor: String,
+    ): Result<com.viwa.android.data.remote.telemetry.mvp.offline.OfflineGrantsDeltaResponseDto> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val url =
+                    if (cursor.isBlank() || cursor == "0") {
+                        endpoint
+                    } else {
+                        "$endpoint?cursor=${java.net.URLEncoder.encode(cursor, Charsets.UTF_8.name())}"
+                    }
+                val httpRequest =
+                    Request.Builder()
+                        .url(url)
+                        .get()
+                        .header("Authorization", "Bearer $bearerToken")
+                        .build()
+                executeJson(
+                    httpRequest,
+                    com.viwa.android.data.remote.telemetry.mvp.offline.OfflineGrantsDeltaResponseDto.serializer(),
+                )
+            }
+        }
+
+    suspend fun submitOfflineReconcileBatch(
+        endpoint: String,
+        bearerToken: String,
+        request: com.viwa.android.data.remote.telemetry.mvp.offline.OfflineReconcileBatchRequestDto,
+    ): Result<com.viwa.android.data.remote.telemetry.mvp.offline.OfflineReconcileBatchResponseDto> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body =
+                    json.encodeToString(
+                        com.viwa.android.data.remote.telemetry.mvp.offline.OfflineReconcileBatchRequestDto.serializer(),
+                        request,
+                    )
+                val httpRequest =
+                    Request.Builder()
+                        .url(endpoint)
+                        .post(body.toRequestBody(jsonMediaType))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer $bearerToken")
+                        .build()
+                executeJson(
+                    httpRequest,
+                    com.viwa.android.data.remote.telemetry.mvp.offline.OfflineReconcileBatchResponseDto.serializer(),
+                )
+            }
+        }
+
+    suspend fun fetchTechnicianAllowlistDelta(
+        endpoint: String,
+        bearerToken: String,
+        cursor: String,
+    ): Result<com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianAllowlistDeltaResponseDto> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val url =
+                    if (cursor.isBlank() || cursor == "0") {
+                        endpoint
+                    } else {
+                        "$endpoint?cursor=${java.net.URLEncoder.encode(cursor, Charsets.UTF_8.name())}"
+                    }
+                val httpRequest =
+                    Request.Builder()
+                        .url(url)
+                        .get()
+                        .header("Authorization", "Bearer $bearerToken")
+                        .build()
+                executeJson(
+                    httpRequest,
+                    com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianAllowlistDeltaResponseDto.serializer(),
+                )
+            }
+        }
+
+    suspend fun validateTechnicianKey(
+        endpoint: String,
+        bearerToken: String,
+        request: com.viwa.android.data.remote.telemetry.mvp.offline.ValidateTechnicianKeyRequestDto,
+    ): Result<com.viwa.android.data.remote.telemetry.mvp.offline.ValidateTechnicianKeyResponseDto> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body =
+                    json.encodeToString(
+                        com.viwa.android.data.remote.telemetry.mvp.offline.ValidateTechnicianKeyRequestDto.serializer(),
+                        request,
+                    )
+                val httpRequest =
+                    Request.Builder()
+                        .url(endpoint)
+                        .post(body.toRequestBody(jsonMediaType))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer $bearerToken")
+                        .build()
+                executeJson(
+                    httpRequest,
+                    com.viwa.android.data.remote.telemetry.mvp.offline.ValidateTechnicianKeyResponseDto.serializer(),
+                )
+            }.recoverCatching { error ->
+                throw mapTechnicianKeyApiError(error)
+            }
+        }
+
+    suspend fun submitTechnicianAuditBatch(
+        endpoint: String,
+        bearerToken: String,
+        request: com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianAuditBatchRequestDto,
+    ): Result<com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianAuditBatchResponseDto> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body =
+                    json.encodeToString(
+                        com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianAuditBatchRequestDto.serializer(),
+                        request,
+                    )
+                val httpRequest =
+                    Request.Builder()
+                        .url(endpoint)
+                        .post(body.toRequestBody(jsonMediaType))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer $bearerToken")
+                        .build()
+                executeJson(
+                    httpRequest,
+                    com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianAuditBatchResponseDto.serializer(),
+                )
+            }
+        }
+
+    private fun mapTechnicianKeyApiError(error: Throwable): Throwable {
+        val message = error.message.orEmpty()
+        val codeRegex = """"code"\s*:\s*"([A-Z_]+)"""".toRegex()
+        val code = codeRegex.find(message)?.groupValues?.getOrNull(1) ?: "ERROR"
+        return com.viwa.android.domain.technician.TechnicianKeyApiException(code, message)
+    }
+
+    suspend fun checkAppUpdate(
+        baseUrl: String,
+        bearerToken: String,
+        currentVersionCode: Int,
+    ): Result<com.viwa.android.data.remote.ota.OtaCheckResponseDto> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val url =
+                    "${baseUrl.trimEnd('/')}/api/v1/machines/app-updates/check?currentVersionCode=$currentVersionCode"
+                val httpRequest =
+                    Request.Builder()
+                        .url(url)
+                        .get()
+                        .header("Authorization", "Bearer $bearerToken")
+                        .build()
+                executeJson(httpRequest, com.viwa.android.data.remote.ota.OtaCheckResponseDto.serializer())
+            }
+        }
+
+    suspend fun reportAppUpdate(
+        baseUrl: String,
+        bearerToken: String,
+        requestUuid: String,
+        releaseId: String,
+        fromVersionCode: Int?,
+        toVersionCode: Int,
+        status: com.viwa.android.data.remote.ota.OtaReportStatus,
+        failureReason: String? = null,
+    ): Result<com.viwa.android.data.remote.ota.OtaReportResponseDto> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body =
+                    json.encodeToString(
+                        com.viwa.android.data.remote.ota.OtaReportRequestDto.serializer(),
+                        com.viwa.android.data.remote.ota.OtaReportRequestDto(
+                            requestUuid = requestUuid,
+                            releaseId = releaseId,
+                            fromVersionCode = fromVersionCode,
+                            toVersionCode = toVersionCode,
+                            status = status,
+                            failureReason = failureReason,
+                        ),
+                    )
+                val httpRequest =
+                    Request.Builder()
+                        .url("${baseUrl.trimEnd('/')}/api/v1/machines/app-updates/report")
+                        .post(body.toRequestBody(jsonMediaType))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer $bearerToken")
+                        .build()
+                executeJson(httpRequest, com.viwa.android.data.remote.ota.OtaReportResponseDto.serializer())
+            }
+        }
 }

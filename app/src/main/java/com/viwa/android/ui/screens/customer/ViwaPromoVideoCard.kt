@@ -20,7 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -60,14 +60,7 @@ fun ViwaPromoVideoCard(
 
     val videoIndex = remember(files.size) { Random.nextInt(files.size) }
 
-    val exoPlayer =
-        remember(context) {
-            ExoPlayer.Builder(context).build().apply {
-                repeatMode = Player.REPEAT_MODE_ONE
-                playWhenReady = true
-                volume = 0f
-            }
-        }
+    val exoPlayer = remember(context) { buildCustomerBackgroundExoPlayer(context) }
 
     DisposableEffect(lifecycleOwner, exoPlayer) {
         val obs =
@@ -111,15 +104,13 @@ fun ViwaPromoVideoCard(
             Modifier
                 .width((495f * s).dp)
                 .height((154f * s).dp)
-                .shadow(
-                    elevation = (4f * s).dp,
-                    shape = cardShape,
-                    clip = false,
-                    ambientColor = Color(0x1A121212),
-                    spotColor = Color(0x1A121212),
-                )
+                .viwaCardShadow(elevation = (4f * s).dp, shape = cardShape)
                 .background(Color.Black, cardShape)
                 .clip(cardShape)
+                .drawWithContent {
+                    drawContent()
+                    drawRect(Color.Black.copy(alpha = 0.35f))
+                }
                 .clickable { onClick() },
     ) {
         AndroidView(
@@ -133,16 +124,10 @@ fun ViwaPromoVideoCard(
                         )
                     player = exoPlayer
                     useController = false
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                 }
             },
-            update = { it.player = exoPlayer },
-        )
-        Box(
-            modifier =
-                Modifier
-                    .matchParentSize()
-                    .background(Color.Black.copy(alpha = 0.35f)),
         )
         Column(
             modifier =

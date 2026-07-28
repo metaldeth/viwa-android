@@ -62,6 +62,10 @@ class SimpleTelemetryCoordinatorLifecycleTest {
                 machineSecretStore = secretStore,
                 jwtCache = MachineJwtCache(SystemEpochMillisClock()),
                 flowTemperatureStore = FlowTemperatureStore(),
+                networkObserver = mockk(relaxed = true),
+                offlineEntitlementCoordinator = mockk(relaxed = true),
+                technicianKeySessionCoordinator = mockk(relaxed = true),
+                networkValidatedSideEffects = mockk(relaxed = true),
                 appScope = this,
             )
         coordinator.connect()

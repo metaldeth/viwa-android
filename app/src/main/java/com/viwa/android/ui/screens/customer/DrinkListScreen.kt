@@ -53,6 +53,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,7 +69,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
@@ -352,8 +353,8 @@ fun DrinkListScreen(
                     headerEnabled = state.activeContainer != null,
                     selectedVolumeMl = state.selectedVolumeMl,
                     waterOption = state.waterOption,
-                    onVolume = { viewModel.setVolume(it) },
-                    onWater = { viewModel.setWater(it) },
+                    onVolume = viewModel::setVolume,
+                    onWater = viewModel::setWater,
                     s = s,
                 )
                 androidx.compose.animation.AnimatedVisibility(
@@ -384,23 +385,29 @@ fun DrinkListScreen(
                 modifier = Modifier.fillMaxWidth().height(332f.epx()),
                 verticalArrangement = Arrangement.spacedBy(20f.epx()),
             ) {
-                val row1 = state.containers.take(3)
-                val row2 = state.containers.drop(3).take(3)
+                val row1 = remember(state.containers) { state.containers.take(3) }
+                val row2 = remember(state.containers) { state.containers.drop(3).take(3) }
+                val activeContainerNumber = state.activeContainer?.containerNumber
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(20f.epx(), Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     row1.forEach { c ->
-                        ViwaDrinkCard(
-                            container = c,
-                            isActive = state.activeContainer?.containerNumber == c.containerNumber,
-                            selectedVolumeMl = state.selectedVolumeMl,
-                            concentration = state.concentration,
-                            onConcentrationChange = { viewModel.setConcentration(it) },
-                            onClick = { viewModel.selectContainer(c) },
-                            s = s,
-                        )
+                        key(c.containerNumber) {
+                            val onSelect = remember(c.containerNumber) {
+                                { viewModel.selectContainerByNumber(c.containerNumber) }
+                            }
+                            ViwaDrinkCard(
+                                container = c,
+                                isActive = activeContainerNumber == c.containerNumber,
+                                selectedVolumeMl = state.selectedVolumeMl,
+                                concentration = state.concentration,
+                                onConcentrationChange = viewModel::setConcentration,
+                                onClick = onSelect,
+                                s = s,
+                            )
+                        }
                     }
                 }
                 if (row2.isNotEmpty()) {
@@ -410,15 +417,20 @@ fun DrinkListScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         row2.forEach { c ->
-                            ViwaDrinkCard(
-                                container = c,
-                                isActive = state.activeContainer?.containerNumber == c.containerNumber,
-                                selectedVolumeMl = state.selectedVolumeMl,
-                                concentration = state.concentration,
-                                onConcentrationChange = { viewModel.setConcentration(it) },
-                                onClick = { viewModel.selectContainer(c) },
-                                s = s,
-                            )
+                            key(c.containerNumber) {
+                                val onSelect = remember(c.containerNumber) {
+                                    { viewModel.selectContainerByNumber(c.containerNumber) }
+                                }
+                                ViwaDrinkCard(
+                                    container = c,
+                                    isActive = activeContainerNumber == c.containerNumber,
+                                    selectedVolumeMl = state.selectedVolumeMl,
+                                    concentration = state.concentration,
+                                    onConcentrationChange = viewModel::setConcentration,
+                                    onClick = onSelect,
+                                    s = s,
+                                )
+                            }
                         }
                     }
                 }
@@ -1100,18 +1112,11 @@ private fun HeaderOptionCluster(
     content: @Composable RowScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(bottomStart = (20f * s).dp, bottomEnd = (20f * s).dp)
-    val shadowTint = Color(0x1A121212)
     Row(
         modifier =
             modifier
                 .height(IntrinsicSize.Min)
-                .shadow(
-                    elevation = (4f * s).dp,
-                    shape = shape,
-                    clip = false,
-                    ambientColor = shadowTint,
-                    spotColor = shadowTint,
-                )
+                .viwaCardShadow(elevation = (4f * s).dp, shape = shape)
                 .background(MaterialTheme.colorScheme.surface, shape)
                 .clip(shape)
         ,
@@ -1169,11 +1174,17 @@ private fun RowScope.HeaderOptionChip(
         label = "headerOptionIconScale",
     )
 
+    val chipInteraction = remember { MutableInteractionSource() }
     Column(
         modifier =
             modifier
                 .fillMaxHeight()
-                .clickable(enabled = enabled, onClick = onClick)
+                .clickable(
+                    interactionSource = chipInteraction,
+                    indication = null,
+                    enabled = enabled,
+                    onClick = onClick,
+                )
                 .padding(vertical = (12f * s).dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy((4f * s).dp),
@@ -1224,8 +1235,10 @@ private fun ViwaDrinkCard(
     val mk = container.product.taste.mediaKey
     val hex = (mk?.let { MediaKeyHexOverride[it] } ?: container.product.taste.hexColor) ?: "#5C6BC0"
     val accent =
-        runCatching { Color(android.graphics.Color.parseColor(hex)) }
-            .getOrDefault(MaterialTheme.colorScheme.primary)
+        remember(mk, hex) {
+            runCatching { Color(android.graphics.Color.parseColor(hex)) }
+                .getOrElse { Color(0xFF5C6BC0) }
+        }
     val imageUri = remember(mk) { ViwaElectronAssets.horizontalCardImageUri(mk) }
     val initialLetter = container.product.name.take(1).uppercase()
     val priceText =
@@ -1286,13 +1299,7 @@ private fun ViwaDrinkCard(
                 .scale(cardScale)
                 .then(
                     if (!isActive) {
-                        Modifier.shadow(
-                            elevation = (4f * s).dp,
-                            shape = cardShape,
-                            clip = false,
-                            ambientColor = Color(0x1A121212),
-                            spotColor = Color(0x1A121212),
-                        )
+                        Modifier.viwaCardShadow(elevation = (4f * s).dp, shape = cardShape)
                     } else {
                         Modifier
                     },
@@ -1634,13 +1641,11 @@ private fun ConcentrationSlider(
                         .offset(x = thumbOffsetXDp)
                         .size(thumbDp)
                         .scale(thumbScale)
-                        .shadow(
-                            elevation = (3f * s).dp,
-                            shape = CircleShape,
-                            clip = false,
-                            ambientColor = Color.Black.copy(alpha = 0.22f),
-                            spotColor = Color.Black.copy(alpha = 0.28f),
-                        )
+                        .graphicsLayer {
+                            shadowElevation = (3f * s).dp.toPx()
+                            shape = CircleShape
+                            clip = false
+                        }
                         .background(accent, CircleShape),
             )
         }

@@ -40,7 +40,7 @@ class TelemetryRegisterEndpointFlowTest {
 
               "serialNumber":"VIWA-000004",
 
-              "apiUrl":"https://194.67.74.147:443"
+              "apiUrl":"https://tl.vitamin-water.ru:443"
 
             }
 
@@ -95,7 +95,7 @@ class TelemetryRegisterEndpointFlowTest {
 
     fun `invalid http apiUrl rejected before trust check`() {
 
-        val result = TelemetryUrlValidator.validateStrict("http://194.67.74.147")
+        val result = TelemetryUrlValidator.validateStrict("http://tl.vitamin-water.ru")
 
         assertTrue(result is TelemetryUrlValidator.Result.Invalid)
 

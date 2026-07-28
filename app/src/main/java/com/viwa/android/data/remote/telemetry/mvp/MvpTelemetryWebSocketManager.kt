@@ -42,6 +42,7 @@ import kotlin.random.Random
 
 /**
  * WebSocket simple-telemetry MVP: JWT auth, hello → ONLINE, heartbeat с ack, RFC6455 ping/pong.
+ * Phase 1: session generation fencing, explicit FSM transitions, coordinated liveness detectors.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -50,6 +51,11 @@ class MvpTelemetryWebSocketManager
 constructor(
     @AppIoScope private val appScope: CoroutineScope,
     private val networkTrafficLogger: NetworkTrafficLogger,
+    private val ackRouter: TelemetryAckRouter,
+    private val outboxDrainCoordinator: MachineOutboxDrainCoordinator,
+    private val offlineEntitlementCoordinator: com.viwa.android.data.remote.telemetry.mvp.offline.OfflineEntitlementSessionCoordinator,
+    private val technicianKeySessionCoordinator: com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianKeySessionCoordinator,
+    private val appUpdateCoordinatorProvider: javax.inject.Provider<com.viwa.android.domain.ota.AppUpdateCoordinator>,
 ) {
     private val json =
         Json {
@@ -58,6 +64,9 @@ constructor(
             explicitNulls = false
         }
 
+    private val fsm = TelemetryConnectionFsm()
+    private val reconnectRandom = Random.Default
+
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected())
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
@@ -65,10 +74,20 @@ constructor(
     private var connectJob: Job? = null
     private var activeClient: MvpWsClient? = null
     private var heartbeatJob: Job? = null
+    private var helloTimeoutJob: Job? = null
+    private var heartbeatWatchdogJob: Job? = null
     private var helloReceived = false
     private var heartbeatIntervalSeconds = DEFAULT_HEARTBEAT_INTERVAL_SEC
     private var authFailure = false
     private var temperatureProvider: () -> Double? = { null }
+    private var lastHeartbeatMessageId: String? = null
+    @Volatile private var lastHeartbeatAckAtMs: Long = 0L
+    @Volatile private var networkValidated = true
+    @Volatile private var pendingSupersedeBackoff = false
+    @Volatile private var outboxBatchCapability: MvpOutboxBatchCapabilityDto? = null
+    @Volatile private var offlineEntitlementCapability: com.viwa.android.data.remote.telemetry.mvp.offline.MvpOfflineEntitlementCapabilityDto? = null
+    @Volatile private var technicianKeysCapability: com.viwa.android.data.remote.telemetry.mvp.offline.MvpTechnicianKeysCapabilityDto? = null
+    @Volatile private var serverTechnicianKeysEnabled: Boolean? = null
     private val heartbeatTrafficLogCounter = AtomicInteger(0)
     private val transportPingLogCounter = AtomicInteger(0)
 
@@ -78,16 +97,24 @@ constructor(
     /** Делегат loyalty WS; wiring из [ViwaTelemetryService]. */
     var loyaltySyncHandler: MvpTelemetryLoyaltySyncHandler? = null
 
+    /** Делегат technician.key.validate ack/error; wiring из [TechnicianKeyOnlineValidator]. */
+    var technicianKeySyncHandler: com.viwa.android.domain.technician.MvpTelemetryTechnicianKeySyncHandler? = null
+
     private companion object {
-        val RECONNECT_DELAYS_MS = longArrayOf(1_000, 2_000, 5_000, 10_000, 30_000)
         const val DEFAULT_HEARTBEAT_INTERVAL_SEC = 10
         const val AUTH_CLOSE_CODE = 4401
+        const val SUPERSEDE_CLOSE_CODE = 4001
         const val HEARTBEAT_TRAFFIC_LOG_EVERY_N = 20
         const val TRANSPORT_PING_LOG_EVERY_N = 10
+        const val CONNECTION_LOST_TIMEOUT_SEC = 18
+        const val HELLO_TIMEOUT_MS = 15_000L
+        const val HEARTBEAT_ACK_GRACE_SEC = 5
+        const val HEARTBEAT_WATCHDOG_CHECK_INTERVAL_MS = 1_000L
     }
 
     fun reportAuthFailure(message: String) {
         authFailure = true
+        transitionFsm(TelemetryConnectionPhase.AuthError, "auth failure: $message")
         _connectionState.value = ConnectionState.Error(message)
     }
 
@@ -103,15 +130,27 @@ constructor(
             appScope.launch {
                 lifecycleMutex.withLock {
                     authFailure = false
+                    fsm.resetBackoff()
                     var attempt = 0
                     while (isActive && !authFailure) {
                         helloReceived = false
-                        heartbeatJob?.cancel()
+                        cancelLivenessJobs()
+                        resetHeartbeatAckTracking()
+                        val sessionGeneration = fsm.nextSessionGeneration()
+                        transitionFsm(TelemetryConnectionPhase.Connecting, "connect attempt")
                         _connectionState.value = ConnectionState.Connecting
-                        logSystem("MVP WS: подключение $wsUrl")
+                        logSystem("MVP WS: подключение $wsUrl gen=$sessionGeneration")
 
-                        val delayMs = reconnectDelayMs(attempt)
-                        if (attempt > 0) {
+                        val useSupersedeBackoff = pendingSupersedeBackoff
+                        pendingSupersedeBackoff = false
+                        val delayMs =
+                            TelemetryReconnectBackoff.delayMs(
+                                attempt = attempt,
+                                supersededFlatBackoff = useSupersedeBackoff,
+                                random = reconnectRandom,
+                            )
+                        if (attempt > 0 || useSupersedeBackoff) {
+                            transitionFsm(TelemetryConnectionPhase.Backoff, "backoff ${delayMs}ms")
                             _connectionState.value = ConnectionState.Disconnected(delayMs)
                             delay(delayMs)
                         }
@@ -123,6 +162,7 @@ constructor(
                             }
                         if (bearerToken.isNullOrBlank()) {
                             authFailure = true
+                            transitionFsm(TelemetryConnectionPhase.AuthError, "JWT unavailable")
                             if (_connectionState.value !is ConnectionState.Error) {
                                 _connectionState.value = ConnectionState.Error("Не удалось получить JWT")
                             }
@@ -133,37 +173,85 @@ constructor(
                             suspendCancellableCoroutine { cont ->
                                 cont.invokeOnCancellation { activeClient?.close() }
 
-                                val client =
+                                lateinit var client: MvpWsClient
+                                client =
                                     MvpWsClient(
+                                        sessionGeneration = sessionGeneration,
                                         uri = URI.create(wsUrl),
                                         bearer = "Bearer $bearerToken",
                                         onOpenCallback = { handshake ->
+                                            if (!acceptSession(client, sessionGeneration, "onOpen")) return@MvpWsClient
                                             if (handshake.httpStatus == 401.toShort() || handshake.httpStatus == 403.toShort()) {
                                                 authFailure = true
+                                                transitionFsm(
+                                                    TelemetryConnectionPhase.AuthError,
+                                                    "HTTP ${handshake.httpStatus}",
+                                                )
                                                 _connectionState.value =
-                                                    ConnectionState.Error("Ошибка авторизации WS (HTTP ${handshake.httpStatus})")
+                                                    ConnectionState.Error(
+                                                        "Ошибка авторизации WS (HTTP ${handshake.httpStatus})",
+                                                    )
                                                 logSystem("MVP WS: auth failure HTTP ${handshake.httpStatus}")
                                                 onAuthFailure()
                                                 if (cont.isActive) cont.resume(Unit) {}
                                                 return@MvpWsClient
                                             }
-                                            logSystem("MVP WS: сокет открыт HTTP ${handshake.httpStatus}")
+                                            transitionFsm(TelemetryConnectionPhase.AwaitingHello, "socket open")
+                                            logSystem("MVP WS: сокет открыт HTTP ${handshake.httpStatus} gen=$sessionGeneration")
+                                            startHelloTimeout(client, sessionGeneration)
                                         },
-                                        onText = { text -> handleIncoming(text) },
+                                        onText = { text -> handleIncoming(text, client, sessionGeneration) },
                                         onClosed = { code, reason ->
-                                            if (code == AUTH_CLOSE_CODE || code == 1008 || code == 1002) {
-                                                authFailure = true
-                                                _connectionState.value =
-                                                    ConnectionState.Error("Ошибка авторизации WS: $reason")
-                                                onAuthFailure()
+                                            if (!acceptSession(client, sessionGeneration, "onClosed")) {
+                                                if (cont.isActive) cont.resume(Unit) {}
+                                                return@MvpWsClient
+                                            }
+                                            when (code) {
+                                                AUTH_CLOSE_CODE, 1008, 1002 -> {
+                                                    authFailure = true
+                                                    transitionFsm(
+                                                        TelemetryConnectionPhase.AuthError,
+                                                        "close $code $reason",
+                                                    )
+                                                    _connectionState.value =
+                                                        ConnectionState.Error("Ошибка авторизации WS: $reason")
+                                                    onAuthFailure()
+                                                }
+                                                SUPERSEDE_CLOSE_CODE -> {
+                                                    pendingSupersedeBackoff = true
+                                                    fsm.bumpGenerationForSupersede("4001 $reason")
+                                                    logFsmStructured(
+                                                        fsm.transitions.lastOrNull()
+                                                            ?: return@MvpWsClient,
+                                                    )
+                                                    helloReceived = false
+                                                    cancelLivenessJobs()
+                                                }
+                                                else -> Unit
                                             }
                                             if (cont.isActive) cont.resume(Unit) {}
                                         },
                                         onErrorCallback = {
+                                            if (!acceptSession(client, sessionGeneration, "onError")) {
+                                                if (cont.isActive) cont.resume(Unit) {}
+                                                return@MvpWsClient
+                                            }
+                                            if (helloReceived && !authFailure) {
+                                                transitionFsm(TelemetryConnectionPhase.Backoff, "socket error")
+                                                _connectionState.value = ConnectionState.Disconnected()
+                                            }
                                             if (cont.isActive) cont.resume(Unit) {}
                                         },
-                                        onTransportPing = { logTransportPing() },
-                                        onTransportPong = { logTransportPong() },
+                                        onTransportPing = {
+                                            if (acceptSession(client, sessionGeneration, "transportPing")) {
+                                                logTransportPing()
+                                            }
+                                        },
+                                        onTransportPong = {
+                                            if (acceptSession(client, sessionGeneration, "transportPong")) {
+                                                logTransportPong()
+                                            }
+                                        },
                                     )
                                 activeClient = client
                                 client.connect()
@@ -174,19 +262,30 @@ constructor(
                             Timber.e(e, "MvpTelemetry WS connect exception")
                         }
 
-                        activeClient?.close()
-                        activeClient = null
+                        if (activeClient?.sessionGeneration == sessionGeneration) {
+                            activeClient?.close()
+                            activeClient = null
+                        }
                         heartbeatJob?.cancel()
+                        cancelLivenessJobs()
 
                         if (authFailure) break
                         if (helloReceived) {
+                            fsm.resetBackoff()
                             attempt = 0
                         } else {
-                            attempt++
+                            fsm.incrementBackoff()
+                            attempt = fsm.backoffAttempt
                         }
 
-                        if (!helloReceived && !authFailure) {
-                            _connectionState.value = ConnectionState.Disconnected(reconnectDelayMs(attempt))
+                        if (!authFailure) {
+                            val nextDelay =
+                                TelemetryReconnectBackoff.delayMs(
+                                    attempt = attempt,
+                                    random = reconnectRandom,
+                                )
+                            transitionFsm(TelemetryConnectionPhase.Backoff, "await reconnect")
+                            _connectionState.value = ConnectionState.Disconnected(nextDelay)
                         }
                     }
                 }
@@ -198,14 +297,81 @@ constructor(
         connectJob?.cancel()
         connectJob = null
         heartbeatJob?.cancel()
+        cancelLivenessJobs()
         activeClient?.close()
         activeClient = null
         helloReceived = false
         authFailure = false
+        pendingSupersedeBackoff = false
+        networkValidated = true
+        outboxBatchCapability = null
+        offlineEntitlementCapability = null
+        technicianKeysCapability = null
+        serverTechnicianKeysEnabled = null
+        outboxDrainCoordinator.stopPeriodicFlush()
+        technicianKeySessionCoordinator.onDisconnect()
+        resetHeartbeatAckTracking()
         heartbeatTrafficLogCounter.set(0)
         transportPingLogCounter.set(0)
+        fsm.resetToIdle()
+        transitionFsm(TelemetryConnectionPhase.Idle, "disconnect")
         _connectionState.value = ConnectionState.Disconnected()
     }
+
+    /** Network lost — do not force-close; watchdog / transport timeout handles half-open. */
+    fun notifyNetworkDegraded() {
+        if (!networkValidated) return
+        networkValidated = false
+        logSystem("MVP WS: network degraded — awaiting watchdog (gen=${fsm.sessionGeneration})")
+    }
+
+    /** Marks validated network; side effects are debounced in [TelemetryNetworkValidatedSideEffectsCoordinator]. */
+    fun notifyNetworkValidated() {
+        networkValidated = true
+    }
+
+    /**
+     * True while [connectJob] is running through connect / hello-wait / backoff retry lifecycle.
+     * Network-validated must not reset this with a fresh [connect] call.
+     */
+    fun hasActiveConnectLifecycle(): Boolean {
+        if (connectJob?.isActive != true) return false
+        return when (fsm.phase) {
+            TelemetryConnectionPhase.Connecting,
+            TelemetryConnectionPhase.AwaitingHello,
+            TelemetryConnectionPhase.Backoff,
+            -> true
+            else -> false
+        }
+    }
+
+    /**
+     * Whether a network-validated event may start a new WS connect from coordinator.
+     * Preserves half-open [Active] sessions and in-flight reconnect/backoff loops.
+     */
+    fun shouldInitiateConnectOnNetworkValidated(): Boolean {
+        if (fsm.phase == TelemetryConnectionPhase.Active) return false
+        if (hasActiveConnectLifecycle()) return false
+        return when (fsm.phase) {
+            TelemetryConnectionPhase.Idle,
+            TelemetryConnectionPhase.AwaitingNetwork,
+            TelemetryConnectionPhase.AuthError,
+            -> true
+            else -> false
+        }
+    }
+
+    fun isNetworkValidated(): Boolean = networkValidated
+
+    fun outboxBatchCapability(): MvpOutboxBatchCapabilityDto? = outboxBatchCapability
+
+    fun offlineEntitlementCapability(): com.viwa.android.data.remote.telemetry.mvp.offline.MvpOfflineEntitlementCapabilityDto? =
+        offlineEntitlementCapability
+
+    fun technicianKeysCapability(): com.viwa.android.data.remote.telemetry.mvp.offline.MvpTechnicianKeysCapabilityDto? =
+        technicianKeysCapability
+
+    fun serverTechnicianKeysEnabled(): Boolean? = serverTechnicianKeysEnabled
 
     suspend fun sendEnvelope(
         type: String,
@@ -223,68 +389,230 @@ constructor(
             messageId
         }
 
-    private fun handleIncoming(text: String) {
+    /** Test seam — deliver inbound without a live socket. */
+    internal fun deliverInboundForTests(
+        sessionGeneration: Long,
+        client: MvpWsClient,
+        text: String,
+    ) {
+        handleIncoming(text, client, sessionGeneration)
+    }
+
+    internal fun acceptInboundSession(
+        sourceClient: MvpWsClient,
+        sourceGeneration: Long,
+        event: String,
+    ): Boolean = acceptSession(sourceClient, sourceGeneration, event)
+
+    internal fun currentSessionGeneration(): Long = fsm.sessionGeneration
+
+    internal fun fsmPhase(): TelemetryConnectionPhase = fsm.phase
+
+    internal fun fsmTransitions(): List<FsmTransition> = fsm.transitions
+
+    internal fun bindActiveSessionForTests(
+        client: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        activeClient = client
+        fsm.assignSessionGenerationForTests(sessionGeneration)
+    }
+
+    internal fun createDetachedClientForTests(sessionGeneration: Long): MvpWsClient =
+        MvpWsClient(
+            sessionGeneration = sessionGeneration,
+            uri = URI.create("ws://127.0.0.1:9/test"),
+            bearer = "Bearer test",
+            onOpenCallback = {},
+            onText = {},
+            onClosed = { _, _ -> },
+            onErrorCallback = {},
+            onTransportPing = {},
+            onTransportPong = {},
+        )
+
+    internal fun startHelloTimeoutForTests(
+        client: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        startHelloTimeout(client, sessionGeneration)
+    }
+
+    internal fun startHeartbeatWatchdogForTests(
+        client: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        heartbeatJob?.cancel()
+        helloReceived = true
+        lastHeartbeatAckAtMs = System.currentTimeMillis() - 30_000L
+        heartbeatIntervalSeconds = DEFAULT_HEARTBEAT_INTERVAL_SEC
+        startHeartbeatWatchdog(client, sessionGeneration)
+    }
+
+    private fun acceptSession(
+        sourceClient: MvpWsClient,
+        sourceGeneration: Long,
+        event: String,
+    ): Boolean {
+        val accepted =
+            WsSessionFence.accept(
+                sourceClient = sourceClient,
+                sourceGeneration = sourceGeneration,
+                activeClient = activeClient,
+                activeGeneration = fsm.sessionGeneration,
+            )
+        if (!accepted) {
+            logSystem(
+                WsSessionFence.dropReason(
+                    event = event,
+                    sourceGeneration = sourceGeneration,
+                    activeGeneration = fsm.sessionGeneration,
+                    sameClient = sourceClient === activeClient,
+                ),
+            )
+        }
+        return accepted
+    }
+
+    private fun handleIncoming(
+        text: String,
+        sourceClient: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        if (!acceptSession(sourceClient, sessionGeneration, "inbound")) return
         val wsType = extractWsType(text)
         logIn(text, wsType = wsType)
         runCatching {
             val envelope = json.decodeFromString(MvpWsEnvelopeDto.serializer(), text)
             when (envelope.type) {
-                "hello" -> onHello(envelope)
-                "ack" -> onAck(envelope)
-                "error" -> onError(envelope)
-                "cells.snapshot" -> onCellsSnapshot(envelope)
-                LoyaltyWsCodec.TYPE_STATUS_CHANGED -> onLoyaltyStatusChanged(envelope)
+                "hello" -> onHello(envelope, sourceClient, sessionGeneration)
+                "ack" -> onAck(envelope, sourceClient, sessionGeneration)
+                "error" -> onError(envelope, sourceClient, sessionGeneration)
+                "cells.snapshot" -> onCellsSnapshot(envelope, sourceClient, sessionGeneration)
+                LoyaltyWsCodec.TYPE_STATUS_CHANGED ->
+                    onLoyaltyStatusChanged(envelope, sourceClient, sessionGeneration)
                 else -> Timber.d("MvpTelemetry WS: ignored type=${envelope.type}")
             }
         }.onFailure { Timber.w(it, "MvpTelemetry WS parse failed") }
     }
 
-    private fun onHello(envelope: MvpWsEnvelopeDto) {
+    private fun onHello(
+        envelope: MvpWsEnvelopeDto,
+        sourceClient: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        if (!acceptSession(sourceClient, sessionGeneration, "hello")) return
         val payloadEl = envelope.payload ?: return
         val hello = json.decodeFromJsonElement(MvpHelloPayloadDto.serializer(), payloadEl)
         heartbeatIntervalSeconds = hello.heartbeatIntervalSeconds.coerceAtLeast(5)
+        outboxBatchCapability = hello.capabilities?.outboxBatch
+        offlineEntitlementCapability = hello.capabilities?.offlineEntitlement
+        serverTechnicianKeysEnabled = hello.featureFlags?.technicianKeys
+        technicianKeysCapability =
+            if (
+                com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianKeyFeatureFlags.FEATURE_TECHNICIAN_KEYS &&
+                hello.featureFlags?.technicianKeys == true
+            ) {
+                hello.capabilities?.technicianKeys
+            } else {
+                null
+            }
         helloReceived = true
+        helloTimeoutJob?.cancel()
+        lastHeartbeatAckAtMs = System.currentTimeMillis()
+        transitionFsm(TelemetryConnectionPhase.Active, "hello received")
         _connectionState.value = ConnectionState.Connected
-        logSystem("MVP WS: ONLINE serial=${hello.serialNumber}, heartbeat=${heartbeatIntervalSeconds}s")
-        startHeartbeatLoop()
+        logSystem(
+            "MVP WS: ONLINE serial=${hello.serialNumber}, heartbeat=${heartbeatIntervalSeconds}s gen=$sessionGeneration",
+        )
+        startHeartbeatLoop(sourceClient, sessionGeneration)
+        startHeartbeatWatchdog(sourceClient, sessionGeneration)
         appScope.launch {
             runCatching { cellsSyncHandler?.onWebSocketHello() }
                 .onFailure { Timber.w(it, "MvpTelemetry WS: cells sync onHello failed") }
+            runCatching { offlineEntitlementCoordinator.onHello(hello) }
+                .onFailure { Timber.w(it, "MvpTelemetry WS: offline entitlement onHello failed") }
+            runCatching { technicianKeySessionCoordinator.onHello(hello) }
+                .onFailure { Timber.w(it, "MvpTelemetry WS: technician keys onHello failed") }
+            runCatching {
+                appUpdateCoordinatorProvider.get().onHello(
+                    appUpdatesEnabled = hello.featureFlags?.appUpdates,
+                    otaSigningPublicKeys = hello.otaSigningPublicKeys,
+                )
+            }.onFailure { Timber.w(it, "MvpTelemetry WS: OTA onHello failed") }
         }
     }
 
-    private fun onAck(envelope: MvpWsEnvelopeDto) {
+    private fun onAck(
+        envelope: MvpWsEnvelopeDto,
+        sourceClient: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        if (!acceptSession(sourceClient, sessionGeneration, "ack")) return
         val correlation =
             envelope.correlationId
                 ?: envelope.payload?.jsonObject?.get("correlationId")?.jsonPrimitive?.content
-        Timber.d("MvpTelemetry WS: ack correlationId=$correlation")
-        val payload = envelope.payload?.jsonObject ?: return
-        if (payload.containsKey("schemaHash")) {
-            appScope.launch {
-                runCatching { cellsSyncHandler?.onSchemaAck(payload) }
-                    .onFailure { Timber.w(it, "MvpTelemetry WS: cells sync schema ack failed") }
-            }
+        val pendingHeartbeatId = lastHeartbeatMessageId
+        if (!correlation.isNullOrBlank() && correlation == pendingHeartbeatId) {
+            lastHeartbeatAckAtMs = System.currentTimeMillis()
             return
         }
-        if (correlation.isNullOrBlank()) return
+        Timber.d("MvpTelemetry WS: ack correlationId=$correlation gen=$sessionGeneration")
+        val payload = envelope.payload?.jsonObject ?: return
         appScope.launch {
-            runCatching { loyaltySyncHandler?.onLoyaltyAck(correlation, payload) }
-                .onFailure { Timber.w(it, "MvpTelemetry WS: loyalty ack handler failed") }
+            runCatching {
+                ackRouter.routeAck(
+                    envelope = envelope,
+                    sessionGeneration = sessionGeneration,
+                    cellsHandler = { ackPayload ->
+                        cellsSyncHandler?.onSchemaAck(ackPayload)
+                    },
+                    loyaltyHandler = { corr, ackPayload ->
+                        loyaltySyncHandler?.onLoyaltyAck(corr, ackPayload)
+                    },
+                    technicianHandler = { corr, ackPayload ->
+                        technicianKeySyncHandler?.onValidateAck(corr, ackPayload)
+                    },
+                )
+            }.onFailure { Timber.w(it, "MvpTelemetry WS: ack router failed") }
         }
     }
 
-    private fun onError(envelope: MvpWsEnvelopeDto) {
+    private fun onError(
+        envelope: MvpWsEnvelopeDto,
+        sourceClient: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        if (!acceptSession(sourceClient, sessionGeneration, "error")) return
         val correlation = envelope.correlationId
         val payload = envelope.payload?.jsonObject ?: return
         val code = payload["code"]?.jsonPrimitive?.content ?: "UNKNOWN"
         val message = payload["message"]?.jsonPrimitive?.content ?: code
         appScope.launch {
-            runCatching { loyaltySyncHandler?.onLoyaltyError(correlation, code, message) }
-                .onFailure { Timber.w(it, "MvpTelemetry WS: loyalty error handler failed") }
+            runCatching {
+                ackRouter.routeError(
+                    envelope = envelope,
+                    sessionGeneration = sessionGeneration,
+                    outboxErrorHandler = { entry, errCode, errMessage ->
+                        outboxDrainCoordinator.handleOutboxError(entry, errCode, errMessage)
+                    },
+                    loyaltyErrorHandler = { corr, errCode, errMessage ->
+                        loyaltySyncHandler?.onLoyaltyError(corr, errCode, errMessage)
+                    },
+                    technicianErrorHandler = { corr, errCode, errMessage ->
+                        technicianKeySyncHandler?.onValidateError(corr, errCode, errMessage)
+                    },
+                )
+            }.onFailure { Timber.w(it, "MvpTelemetry WS: error router failed") }
         }
     }
 
-    private fun onLoyaltyStatusChanged(envelope: MvpWsEnvelopeDto) {
+    private fun onLoyaltyStatusChanged(
+        envelope: MvpWsEnvelopeDto,
+        sourceClient: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        if (!acceptSession(sourceClient, sessionGeneration, "loyalty.status.changed")) return
         val payload = envelope.payload?.jsonObject ?: return
         appScope.launch {
             runCatching { loyaltySyncHandler?.onStatusChanged(payload) }
@@ -292,7 +620,12 @@ constructor(
         }
     }
 
-    private fun onCellsSnapshot(envelope: MvpWsEnvelopeDto) {
+    private fun onCellsSnapshot(
+        envelope: MvpWsEnvelopeDto,
+        sourceClient: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        if (!acceptSession(sourceClient, sessionGeneration, "cells.snapshot")) return
         val payloadEl = envelope.payload ?: return
         val payloadJson = json.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), payloadEl)
         appScope.launch {
@@ -301,18 +634,96 @@ constructor(
         }
     }
 
-    private fun startHeartbeatLoop() {
-        heartbeatJob?.cancel()
-        heartbeatJob =
+    private fun startHelloTimeout(
+        client: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        helloTimeoutJob?.cancel()
+        helloTimeoutJob =
             appScope.launch {
-                while (isActive && helloReceived && activeClient?.readyState == ReadyState.OPEN) {
-                    delay(heartbeatIntervalSeconds * 1000L)
-                    sendHeartbeat(temperatureProvider())
+                delay(HELLO_TIMEOUT_MS)
+                if (
+                    acceptSession(client, sessionGeneration, "helloTimeout") &&
+                    !helloReceived &&
+                    !authFailure
+                ) {
+                    logSystem("MVP WS: hello timeout gen=$sessionGeneration")
+                    transitionFsm(TelemetryConnectionPhase.Backoff, "hello timeout")
+                    forceClose(client, "hello timeout")
                 }
             }
     }
 
-    private suspend fun sendHeartbeat(temperatureC: Double?) {
+    private fun startHeartbeatLoop(
+        client: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        heartbeatJob?.cancel()
+        heartbeatJob =
+            appScope.launch {
+                while (
+                    isActive &&
+                    acceptSession(client, sessionGeneration, "heartbeatLoop") &&
+                    helloReceived &&
+                    client.readyState == ReadyState.OPEN
+                ) {
+                    delay(heartbeatIntervalSeconds * 1000L)
+                    if (!acceptSession(client, sessionGeneration, "heartbeatLoop")) break
+                    sendHeartbeat(client, sessionGeneration, temperatureProvider())
+                }
+                if (
+                    isActive &&
+                    acceptSession(client, sessionGeneration, "heartbeatLoopEnd") &&
+                    helloReceived &&
+                    !authFailure
+                ) {
+                    logSystem("MVP WS: heartbeat loop ended unexpectedly gen=$sessionGeneration")
+                    transitionFsm(TelemetryConnectionPhase.Backoff, "heartbeat loop ended")
+                    forceClose(client, "heartbeat loop ended")
+                    _connectionState.value = ConnectionState.Disconnected()
+                }
+            }
+    }
+
+    private fun startHeartbeatWatchdog(
+        client: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        heartbeatWatchdogJob?.cancel()
+        heartbeatWatchdogJob =
+            appScope.launch {
+                while (
+                    isActive &&
+                    acceptSession(client, sessionGeneration, "heartbeatWatchdog") &&
+                    helloReceived &&
+                    !authFailure
+                ) {
+                    delay(HEARTBEAT_WATCHDOG_CHECK_INTERVAL_MS)
+                    if (!acceptSession(client, sessionGeneration, "heartbeatWatchdog")) break
+                    if (_connectionState.value !is ConnectionState.Connected) continue
+                    val timeoutMs = (2 * heartbeatIntervalSeconds + HEARTBEAT_ACK_GRACE_SEC) * 1000L
+                    val elapsed = System.currentTimeMillis() - lastHeartbeatAckAtMs
+                    if (elapsed > timeoutMs) {
+                        val degradedHint =
+                            if (!networkValidated) " networkDegraded=true" else ""
+                        logSystem(
+                            "MVP WS: heartbeat ack timeout (${elapsed}ms) gen=$sessionGeneration$degradedHint",
+                        )
+                        transitionFsm(TelemetryConnectionPhase.Backoff, "heartbeat ack timeout")
+                        forceClose(client, "heartbeat ack timeout")
+                        _connectionState.value = ConnectionState.Disconnected()
+                        break
+                    }
+                }
+            }
+    }
+
+    private suspend fun sendHeartbeat(
+        client: MvpWsClient,
+        sessionGeneration: Long,
+        temperatureC: Double?,
+    ) {
+        if (!acceptSession(client, sessionGeneration, "sendHeartbeat")) return
         val payload =
             buildJsonObject {
                 put("state", JsonPrimitive("idle"))
@@ -320,15 +731,48 @@ constructor(
                 put("appVersionCode", JsonPrimitive(BuildConfig.VERSION_CODE))
                 temperatureC?.let { put("temperatureC", JsonPrimitive(it)) }
             }
-        sendEnvelope("heartbeat", payload)
-            .onFailure { Timber.w(it, "MvpTelemetry heartbeat failed") }
+        val messageId = java.util.UUID.randomUUID().toString()
+        lastHeartbeatMessageId = messageId
+        sendEnvelope("heartbeat", payload, messageId)
+            .onFailure {
+                Timber.w(it, "MvpTelemetry heartbeat failed")
+                if (acceptSession(client, sessionGeneration, "heartbeatSendFailed")) {
+                    forceClose(client, "heartbeat send failed")
+                }
+            }
     }
 
-    private fun reconnectDelayMs(attempt: Int): Long {
-        val index = attempt.coerceIn(0, RECONNECT_DELAYS_MS.lastIndex)
-        val base = RECONNECT_DELAYS_MS[index]
-        val jitter = (base * 0.1 * Random.nextDouble()).toLong()
-        return base + jitter
+    private fun forceClose(
+        client: MvpWsClient,
+        reason: String,
+    ) {
+        if (client !== activeClient) return
+        logSystem("MVP WS: force close — $reason gen=${client.sessionGeneration}")
+        runCatching { client.close(1000, reason) }
+            .onFailure { runCatching { client.close() } }
+    }
+
+    private fun cancelLivenessJobs() {
+        helloTimeoutJob?.cancel()
+        helloTimeoutJob = null
+        heartbeatWatchdogJob?.cancel()
+        heartbeatWatchdogJob = null
+    }
+
+    private fun resetHeartbeatAckTracking() {
+        lastHeartbeatMessageId = null
+        lastHeartbeatAckAtMs = 0L
+    }
+
+    private fun transitionFsm(
+        to: TelemetryConnectionPhase,
+        reason: String,
+    ) {
+        fsm.transition(to, reason)?.let { logFsmStructured(it) }
+    }
+
+    private fun logFsmStructured(transition: FsmTransition) {
+        logSystem(fsm.formatTransitionLog(transition))
     }
 
     private fun shouldLogHeartbeatTraffic(): Boolean {
@@ -360,23 +804,29 @@ constructor(
         )
     }
 
-    private fun logIn(payload: String, wsType: String?) {
+    private fun logIn(
+        payload: String,
+        wsType: String?,
+    ) {
         if (wsType == "ack") return
         networkTrafficLogger.log(
             channel = NetworkTrafficChannel.WS,
             direction = NetworkTrafficDirection.IN,
             summary = extractTypeSummary(payload, wsType),
-            payload = redactNetworkPayload(payload),
+            payload = redactNetworkPayload(payload, wsType),
         )
     }
 
-    private fun logOut(payload: String, wsType: String?) {
+    private fun logOut(
+        payload: String,
+        wsType: String?,
+    ) {
         if (wsType == "heartbeat" && !shouldLogHeartbeatTraffic()) return
         networkTrafficLogger.log(
             channel = NetworkTrafficChannel.WS,
             direction = NetworkTrafficDirection.OUT,
             summary = extractTypeSummary(payload, wsType),
-            payload = redactNetworkPayload(payload),
+            payload = redactNetworkPayload(payload, wsType),
         )
     }
 
@@ -385,12 +835,16 @@ constructor(
             json.parseToJsonElement(payload).jsonObject["type"]?.jsonPrimitive?.content
         }.getOrNull()
 
-    private fun extractTypeSummary(payload: String, wsType: String? = null): String {
+    private fun extractTypeSummary(
+        payload: String,
+        wsType: String? = null,
+    ): String {
         val type = wsType ?: extractWsType(payload)
         return if (type.isNullOrBlank()) "MVP WS message" else "MVP WS type=$type"
     }
 
-    private inner class MvpWsClient(
+    internal inner class MvpWsClient(
+        val sessionGeneration: Long,
         uri: URI,
         bearer: String,
         private val onOpenCallback: (ServerHandshake) -> Unit,
@@ -402,6 +856,7 @@ constructor(
     ) : WebSocketClient(uri) {
         init {
             addHeader("Authorization", bearer)
+            connectionLostTimeout = CONNECTION_LOST_TIMEOUT_SEC
         }
 
         override fun onOpen(handshake: ServerHandshake) = onOpenCallback(handshake)
@@ -410,14 +865,21 @@ constructor(
 
         override fun onMessage(bytes: ByteBuffer) = Unit
 
-        override fun onClose(code: Int, reason: String, remote: Boolean) = onClosed(code, reason)
+        override fun onClose(
+            code: Int,
+            reason: String,
+            remote: Boolean,
+        ) = onClosed(code, reason)
 
         override fun onError(ex: Exception) {
             Timber.w(ex, "MvpTelemetry WS")
             onErrorCallback()
         }
 
-        override fun onWebsocketPing(conn: org.java_websocket.WebSocket?, f: org.java_websocket.framing.Framedata?) {
+        override fun onWebsocketPing(
+            conn: org.java_websocket.WebSocket?,
+            f: org.java_websocket.framing.Framedata?,
+        ) {
             onTransportPing()
             super.onWebsocketPing(conn, f)
             onTransportPong()

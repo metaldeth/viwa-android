@@ -1,5 +1,7 @@
 package com.viwa.android.data.remote.telemetry.mvp
 
+import com.viwa.android.data.remote.telemetry.mvp.offline.MvpOfflineEntitlementCapabilityDto
+import com.viwa.android.data.remote.telemetry.mvp.offline.OfflineSigningPublicKeyDto
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
@@ -107,6 +109,12 @@ data class MvpHelloPayloadDto(
     val serialNumber: String,
     val protocolVersion: Int = 1,
     val heartbeatIntervalSeconds: Int = 10,
+    val serverTimeUtc: String? = null,
+    val revocationEpoch: Int? = null,
+    val signingPublicKeys: List<OfflineSigningPublicKeyDto>? = null,
+    val otaSigningPublicKeys: List<OfflineSigningPublicKeyDto>? = null,
+    val capabilities: MvpHelloCapabilitiesDto? = null,
+    val featureFlags: com.viwa.android.data.remote.telemetry.mvp.offline.MvpHelloFeatureFlagsDto? = null,
 )
 
 @Serializable

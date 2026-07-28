@@ -14,7 +14,7 @@ const RELEASE_DIR = process.env.RELEASE_DIR || path.join(__dirname, 'release');
 const DEFAULT_UPDATE_BASE_URL = process.env.DEFAULT_UPDATE_BASE_URL || `http://dev.ishaker.ru:${PORT}`;
 const BASE_URL = process.env.BASE_URL || DEFAULT_UPDATE_BASE_URL;
 
-const APK_NAME_RE = /^wiva-android-(.+?)-release\.apk$/;
+const APK_NAME_RE = /^(?:viwa|wiva)-android-(.+?)-release\.apk$/;
 
 function logReleaseDirDiagnostics() {
   console.log('[Update server] === Диагностика каталога release ===');
@@ -41,7 +41,7 @@ function logReleaseDirDiagnostics() {
     console.log(`[Update server]   [${i}] "${name}" (${statStr})`);
   });
   const apkNames = list.filter((name) => APK_NAME_RE.test(name));
-  console.log('[Update server] Найденные APK (wiva-android-*-release.apk):', apkNames.length);
+  console.log('[Update server] Найденные APK ((viwa|wiva)-android-*-release.apk):', apkNames.length);
   apkNames.sort((a, b) => a.localeCompare(b));
   apkNames.forEach((name) => {
     console.log(`[Update server]   - "${name}"`);

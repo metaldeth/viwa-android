@@ -25,7 +25,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
@@ -156,13 +155,7 @@ fun ViwaSubscribePromoCard(
             Modifier
                 .width((495f * s).dp)
                 .height((154f * s).dp)
-                .shadow(
-                    elevation = (4f * s).dp,
-                    shape = cardShape,
-                    clip = false,
-                    ambientColor = Color(0x1A121212),
-                    spotColor = Color(0x1A121212),
-                )
+                .viwaCardShadow(elevation = (4f * s).dp, shape = cardShape)
                 .clip(cardShape)
                 .background(palette.cardBg),
     ) {

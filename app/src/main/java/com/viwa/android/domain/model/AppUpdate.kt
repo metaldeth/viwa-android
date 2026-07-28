@@ -7,6 +7,10 @@ data class AppUpdate(
     val version: String,
     val url: String,
     val changelog: String = "",
+    val versionCode: Int? = null,
+    val channel: String? = null,
+    val releaseId: String? = null,
+    val telemetryOffer: Boolean = false,
 )
 
 data class UpdateProgress(

@@ -591,13 +591,7 @@ private fun PreparingVideoBackground(mediaKey: String?) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    val exoPlayer = remember(context) {
-        ExoPlayer.Builder(context).build().apply {
-            repeatMode = Player.REPEAT_MODE_ONE
-            playWhenReady = true
-            volume = 0f
-        }
-    }
+    val exoPlayer = remember(context) { buildCustomerBackgroundExoPlayer(context) }
 
     DisposableEffect(lifecycleOwner, exoPlayer) {
         val obs = LifecycleEventObserver { _, event ->
@@ -631,9 +625,9 @@ private fun PreparingVideoBackground(mediaKey: String?) {
                 )
                 player = exoPlayer
                 useController = false
+                setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
             }
         },
-        update = { it.player = exoPlayer },
     )
 }

@@ -87,6 +87,12 @@ object JsonStoreKeys {
  /** JSON-массив [com.viwa.android.data.local.sales.PendingSale] — durable uplink sale.report. */
     const val PENDING_SALES = "pending_sales"
 
+    /** `"true"` после одноразового импорта [JsonStoreKeys.PENDING_SALES] в Room `machine_outbox`. */
+    const val OUTBOX_PENDING_SALES_IMPORTED = "outbox_pending_sales_imported_v1"
+
+    /** Last seen monotonic revision for offline grants delta sync. */
+    const val OFFLINE_GRANTS_DELTA_CURSOR = "offline_grants_delta_cursor"
+
  /**
  * Авто-выход с экрана готовки через N минут (строка с int). `0` — только ручной/секретный выход.
  * Ключ отсутствует — **5** минут.
@@ -121,4 +127,16 @@ object JsonStoreKeys {
  * ([CUSTOMER_PRIMARY_BUTTON_ARGB_LIGHT]).
  */
     const val FLOW_STRIP_RGB_ARGB = "flowStripRgbArgb"
+
+    /** JSON [PersistedAppUpdateState] — OTA coordinator persistence across process restart. */
+    /** Highest accepted OTA manifest revocation epoch (anti-rollback). */
+    const val OTA_TRUSTED_REVOCATION_EPOCH = "otaTrustedRevocationEpoch"
+
+    const val OTA_UPDATE_STATE = "otaUpdateState"
+
+    /** `"true"` — explicit client flag to enforce server mandatory updates. */
+    const val OTA_MANDATORY_ENFORCEMENT = "otaMandatoryEnforcement"
+
+    /** `"true"` — allow legacy HTTP version.json flow (debug/fallback only). */
+    const val OTA_LEGACY_HTTP_FALLBACK = "otaLegacyHttpFallback"
 }

@@ -18,6 +18,26 @@ class ViwaScannerTrafficLoggerTest {
     }
 
     @Test
+    fun `logger masks KEY technician key in employee scan line`() {
+        val key = "KEY-0123456789ABCDEFGHJK"
+        val logger = ViwaScannerTrafficLogger()
+        logger.log(key, BarcodeEvent.EmployeeKey(key))
+        val entry = logger.entries.value.single()
+        assertEquals("KEY-********************", entry.rawLine)
+        assertFalse(entry.rawLine.contains("0123456789ABCDEFGHJK"))
+    }
+
+    @Test
+    fun `logger masks EMP legacy technician key in employee scan line`() {
+        val key = "EMP:0123456789ABCDEFGHJK"
+        val logger = ViwaScannerTrafficLogger()
+        logger.log(key, BarcodeEvent.EmployeeKey(key))
+        val entry = logger.entries.value.single()
+        assertEquals("EMP:********************", entry.rawLine)
+        assertFalse(entry.rawLine.contains("0123456789ABCDEFGHJK"))
+    }
+
+    @Test
     fun `logger masks registrationKey in json qr raw line`() {
         val raw =
             """

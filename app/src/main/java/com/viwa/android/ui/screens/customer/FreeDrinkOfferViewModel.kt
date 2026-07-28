@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /** Базовый URL client web для QR регистрации подписки (без orgId). */
-private const val DEFAULT_SUBSCRIPTION_QR_BASE_URL = "http://dev.ishaker.ru:3005"
+private const val DEFAULT_SUBSCRIPTION_QR_BASE_URL = "https://cabinet.vitamin-water.ru"
 
 @HiltViewModel
 class FreeDrinkOfferViewModel

@@ -1,5 +1,7 @@
 package com.viwa.android.data.network
 
+private const val TECHNICIAN_KEY_VALIDATE_WS_TYPE = "technician.key.validate"
+
 private val jsonSecretPatterns =
     listOf(
         Regex("""\"extApiToken\"\s*:\s*\"[^\"]*\"""", RegexOption.IGNORE_CASE),
@@ -22,8 +24,39 @@ private val xmlSecretPatterns =
         Regex("""<token>[^<]*</token>""", RegexOption.IGNORE_CASE),
     )
 
-fun redactNetworkPayload(text: String): String {
+/** Plaintext technician keys (KEY-* / EMP:*) — must never appear in diagnostics. */
+private val technicianKeyPlainPattern =
+    Regex("""(?:KEY-|EMP:)[0-9A-HJKMNP-TV-Z]{20}""", RegexOption.IGNORE_CASE)
+
+/** JSON `code` field when value is a technician key body, not an error enum like KEY_REVOKED. */
+private val jsonTechnicianKeyCodePattern =
+    Regex("""(\"code\"\s*:\s*\")(?:KEY-|EMP:)[^\"]*(\")""", RegexOption.IGNORE_CASE)
+
+internal fun maskTechnicianKeyPlaintext(text: String): String =
+    technicianKeyPlainPattern.replace(text) { match ->
+        val raw = match.value
+        val prefix =
+            if (raw.uppercase().startsWith("EMP:")) {
+                "EMP:"
+            } else {
+                "KEY-"
+            }
+        prefix + "*".repeat(20)
+    }
+
+fun redactNetworkPayload(text: String, messageType: String? = null): String {
     var out = text
+    val isTechnicianValidate =
+        messageType == TECHNICIAN_KEY_VALIDATE_WS_TYPE ||
+            text.contains("\"type\":\"$TECHNICIAN_KEY_VALIDATE_WS_TYPE\"") ||
+            text.contains("\"type\": \"$TECHNICIAN_KEY_VALIDATE_WS_TYPE\"")
+    if (isTechnicianValidate) {
+        out =
+            jsonTechnicianKeyCodePattern.replace(out) { m ->
+                "${m.groupValues[1]}***${m.groupValues[2]}"
+            }
+    }
+    out = maskTechnicianKeyPlaintext(out)
     jsonSecretPatterns.forEach { rx ->
         out = rx.replace(out) { m ->
             val raw = m.value
@@ -36,6 +69,12 @@ fun redactNetworkPayload(text: String): String {
             val tag = m.value.substringAfter('<').substringBefore('>')
             "<$tag>***</$tag>"
         }
+    }
+    if (!isTechnicianValidate) {
+        out =
+            jsonTechnicianKeyCodePattern.replace(out) { m ->
+                "${m.groupValues[1]}***${m.groupValues[2]}"
+            }
     }
     return out
 }

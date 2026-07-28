@@ -13,11 +13,14 @@ import com.viwa.android.ui.screens.home.HomeScreen
 import com.viwa.android.ui.screens.service.ServiceScreen
 
 @Composable
-fun ViwaNavGraph(navController: NavHostController) {
+fun ViwaNavGraph(
+    navController: NavHostController,
+    onOpenService: () -> Unit,
+) {
     NavHost(navController = navController, startDestination = Routes.Home) {
         composable(Routes.Home) {
             HomeScreen(
-                onOpenService = { navController.navigate(Routes.Service) },
+                onOpenService = onOpenService,
                 onOpenFreeDrinkOffer = { navController.navigate(Routes.FreeDrinkOffer) },
                 onNavigateToPreparing = { tasteId, productName, estSeconds, mediaKey, payMethod, priceRub ->
                     navController.navigate(

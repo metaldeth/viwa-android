@@ -78,7 +78,12 @@ class SimpleTelemetryCoordinatorTest {
                 wsManager =
                     MvpTelemetryWebSocketManager(
                         appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
-                        networkTrafficLogger = mockk<NetworkTrafficLogger>(relaxed = true),
+                        networkTrafficLogger = mockk(relaxed = true),
+                        ackRouter = mockk(relaxed = true),
+                        outboxDrainCoordinator = mockk(relaxed = true),
+                        offlineEntitlementCoordinator = mockk(relaxed = true),
+                        technicianKeySessionCoordinator = mockk(relaxed = true),
+                        appUpdateCoordinatorProvider = mockOtaCoordinatorProvider(),
                     ),
                 cellsSyncCoordinator = mockk(relaxed = true),
                 salesSyncCoordinator = mockk(relaxed = true),
@@ -86,6 +91,10 @@ class SimpleTelemetryCoordinatorTest {
                 machineSecretStore = machineSecretStore,
                 jwtCache = jwtCache,
                 flowTemperatureStore = FlowTemperatureStore(),
+                networkObserver = mockk(relaxed = true),
+                offlineEntitlementCoordinator = mockk(relaxed = true),
+                technicianKeySessionCoordinator = mockk(relaxed = true),
+                networkValidatedSideEffects = mockk(relaxed = true),
                 appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
             )
     }
@@ -214,6 +223,10 @@ class SimpleTelemetryCoordinatorTest {
                 machineSecretStore = machineSecretStore,
                 jwtCache = jwtCache,
                 flowTemperatureStore = FlowTemperatureStore(),
+                networkObserver = mockk(relaxed = true),
+                offlineEntitlementCoordinator = mockk(relaxed = true),
+                technicianKeySessionCoordinator = mockk(relaxed = true),
+                networkValidatedSideEffects = mockk(relaxed = true),
                 appScope = this,
             )
         // when
@@ -221,7 +234,7 @@ class SimpleTelemetryCoordinatorTest {
         advanceUntilIdle()
         // then
         assertEquals(
-            "wss://194.67.74.147/api/v1/machines/ws",
+            "wss://tl.vitamin-water.ru/api/v1/machines/ws",
             connectedUrl,
         )
     }
@@ -247,6 +260,11 @@ class SimpleTelemetryCoordinatorTest {
                     MvpTelemetryWebSocketManager(
                         appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
                         networkTrafficLogger = mockk(relaxed = true),
+                        ackRouter = mockk(relaxed = true),
+                        outboxDrainCoordinator = mockk(relaxed = true),
+                        offlineEntitlementCoordinator = mockk(relaxed = true),
+                        technicianKeySessionCoordinator = mockk(relaxed = true),
+                        appUpdateCoordinatorProvider = mockOtaCoordinatorProvider(),
                     ),
                 cellsSyncCoordinator = mockk(relaxed = true),
                 salesSyncCoordinator = mockk(relaxed = true),
@@ -254,6 +272,10 @@ class SimpleTelemetryCoordinatorTest {
                 machineSecretStore = machineSecretStore,
                 jwtCache = jwtCache,
                 flowTemperatureStore = FlowTemperatureStore(),
+                networkObserver = mockk(relaxed = true),
+                offlineEntitlementCoordinator = mockk(relaxed = true),
+                technicianKeySessionCoordinator = mockk(relaxed = true),
+                networkValidatedSideEffects = mockk(relaxed = true),
                 appScope = this,
             )
         localCoordinator.saveTelemetryConfig(TelemetryConfig())

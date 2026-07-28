@@ -5,6 +5,10 @@ import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryLoyaltySyncHandler
 import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryWebSocketManager
 import com.viwa.android.data.remote.telemetry.mvp.RegistrationKeyUtils
 import com.viwa.android.data.remote.telemetry.mvp.SimpleTelemetryCoordinator
+import com.viwa.android.data.local.outbox.LoyaltyWaterOutboxStore
+import com.viwa.android.data.remote.telemetry.mvp.MachineOutboxDrainCoordinator
+import com.viwa.android.domain.offline.OfflineAuthorizationReason
+import com.viwa.android.domain.offline.OfflinePourAuthorizationService
 import com.viwa.android.data.telemetry.loyalty.LoyaltyWaterUseRequest
 import com.viwa.android.data.telemetry.loyalty.LoyaltyWsCodec
 import com.viwa.android.domain.subscription.LoyaltyPaymentException
@@ -50,6 +54,9 @@ constructor(
     private val configRepository: ConfigRepository,
     private val mvpCoordinator: SimpleTelemetryCoordinator,
     private val wsManager: MvpTelemetryWebSocketManager,
+    private val waterOutboxStore: LoyaltyWaterOutboxStore,
+    private val outboxDrainCoordinator: MachineOutboxDrainCoordinator,
+    private val offlinePourAuthorizationService: OfflinePourAuthorizationService,
     @AppIoScope private val scope: CoroutineScope,
 ) {
     private companion object {
@@ -99,6 +106,14 @@ constructor(
         )
     val invalidLoyaltyCardScans: SharedFlow<Unit> = _invalidLoyaltyCardScans.asSharedFlow()
 
+    private val _offlineLoyaltyDenyReason =
+        MutableSharedFlow<OfflineAuthorizationReason>(
+            replay = 0,
+            extraBufferCapacity = 4,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
+    val offlineLoyaltyDenyReason: SharedFlow<OfflineAuthorizationReason> = _offlineLoyaltyDenyReason.asSharedFlow()
+
     private val pendingLoyaltyRequests = ConcurrentHashMap<String, PendingLoyaltyKind>()
     private val pendingLoyaltyAcks = ConcurrentHashMap<String, CompletableDeferred<Result<JsonObject>>>()
     private val sentWaterUseRequestUuids = ConcurrentHashMap.newKeySet<String>()
@@ -108,11 +123,6 @@ constructor(
     private var telemetryPausedByUser: Boolean = false
 
     private var scheduledAutoConnect: Job? = null
-
-    data class AuthCodeResult(
-        val success: Boolean,
-        val message: String,
-    )
 
     init {
         wsManager.loyaltySyncHandler =
@@ -305,9 +315,6 @@ constructor(
     /** Legacy saleImportTopic — удалён. */
     suspend fun sendSaleImportTopic(items: List<SaleImportItem>): Result<Unit> = Result.success(Unit)
 
-    suspend fun sendAuthCodeRequest(code: String): AuthCodeResult =
-        AuthCodeResult(false, "authCodeRequestExport удалён (только MVP)")
-
     /** UC-5: `loyalty.status.get` envelope v2. */
     suspend fun sendStatusGet(clientId: String): Result<Unit> {
         val id = clientId.trim()
@@ -346,10 +353,39 @@ constructor(
         scope.launch {
             _subscriptionLevels.value = null
             _loyaltyCardClientScans.emit(id)
-            sendStatusGet(id)
-            sendSubscriptionLevelRequest()
-            Timber.d("ViwaTelemetry: loyalty scan $id → status.get + levels.list")
+            val connected = connectionState.value is ConnectionState.Connected
+            if (connected) {
+                sendStatusGet(id)
+                sendSubscriptionLevelRequest()
+                Timber.d("ViwaTelemetry: loyalty scan $id → status.get + levels.list")
+            } else {
+                handleOfflineLoyaltyCardScan(id)
+            }
         }
+    }
+
+    private suspend fun handleOfflineLoyaltyCardScan(clientUuid: String) {
+        val machineId = loadMachineRegistration().machineId
+        if (machineId.isBlank()) {
+            _offlineLoyaltyDenyReason.emit(OfflineAuthorizationReason.OFFLINE_NO_GRANT)
+            return
+        }
+        val grantInfo = offlinePourAuthorizationService.buildOfflineSubscribeInfo(clientUuid, machineId)
+        if (grantInfo == null) {
+            val probe = offlinePourAuthorizationService.authorizePour(clientUuid, machineId, volumeMl = 1)
+            _offlineLoyaltyDenyReason.emit(probe.reason)
+            return
+        }
+        _subscribeInfo.value =
+            SubscribeInformationState(
+                isStatusRequest = true,
+                isActiveSubscribe = grantInfo.dailyRemainingMl > 0,
+                clientId = clientUuid,
+                subscribeDateEnd = java.time.Instant.ofEpochMilli(grantInfo.expiresAtMs).toString(),
+                volumeMl = grantInfo.dailyRemainingMl,
+                maxVolumeMl = grantInfo.dailyLimitMl,
+            )
+        Timber.d("ViwaTelemetry: offline loyalty scan authorized remainingMl=%d", grantInfo.dailyRemainingMl)
     }
 
     fun onInvalidLoyaltyCardScan() {
@@ -437,25 +473,23 @@ constructor(
         subscriptionSaleTimers.remove(requestUuid)?.cancel()
     }
 
-    /** UC-6: `loyalty.water.use` with idempotent [requestUuid]. */
+    /** UC-6: durable `loyalty.water.use` via Room outbox (online + offline promote). */
     suspend fun sendWaterUse(request: LoyaltyWaterUseRequest): Result<Unit> {
         if (!sentWaterUseRequestUuids.add(request.requestUuid)) {
             Timber.d("ViwaTelemetry: water.use deduplicated requestUuid=${request.requestUuid}")
             return Result.success(Unit)
         }
         lastStatusClientId = request.clientId
-        val messageId = UUID.randomUUID().toString()
-        pendingLoyaltyRequests[messageId] = PendingLoyaltyKind.WATER_USE
-        return wsManager
-            .sendEnvelope(
-                type = LoyaltyWsCodec.TYPE_WATER_USE,
-                payload = LoyaltyWsCodec.encodeWaterUse(request),
-                messageId = messageId,
-            ).map { Unit }
-            .onFailure {
-                pendingLoyaltyRequests.remove(messageId)
-                sentWaterUseRequestUuids.remove(request.requestUuid)
-            }
+        waterOutboxStore.enqueueWaterUse(
+            clientId = request.clientId,
+            requestUuid = request.requestUuid,
+            volumeMl = request.volumeMl,
+            drinkId = request.drinkId ?: request.ingredientId,
+            isFree = request.isFree,
+            priceKopecks = request.priceKopecks,
+        )
+        outboxDrainCoordinator.onEnqueue()
+        return Result.success(Unit)
     }
 
     /** Backward-compatible wrapper mapping legacy body → loyalty.water.use. */

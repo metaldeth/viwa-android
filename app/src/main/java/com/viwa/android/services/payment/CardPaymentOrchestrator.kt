@@ -49,6 +49,8 @@ class CardPaymentOrchestrator(
         }
     }
 
+    fun isPaymentInProgress(): Boolean = paymentInProgress
+
     suspend fun cancelActivePayment() {
         if (!paymentInProgress) {
             Timber.tag(TAG).d("cancelActivePayment: no active payment")

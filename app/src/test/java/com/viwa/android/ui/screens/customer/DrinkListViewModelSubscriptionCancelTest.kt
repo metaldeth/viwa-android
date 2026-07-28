@@ -28,7 +28,7 @@ class DrinkListViewModelSubscriptionCancelTest {
     @Before
     fun setup() {
         executor = Executors.newSingleThreadExecutor()
-        Dispatchers.setMain(executor.asCoroutineDispatcher())
+        Dispatchers.setMain(kotlinx.coroutines.Dispatchers.Unconfined)
     }
 
     @After
@@ -67,6 +67,7 @@ class DrinkListViewModelSubscriptionCancelTest {
 
             // when
             vm.dismissPaymentSheet()
+            kotlinx.coroutines.delay(250)
             assertTrue(cancelLatch.await(5, TimeUnit.SECONDS))
 
             // then

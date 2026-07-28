@@ -74,7 +74,7 @@ class TelemetryCellsSyncCoordinatorTest {
                 conversionFactorMigration = conversionFactorMigration,
                 syrupCalibrationInventory = syrupCalibrationInventory,
             )
-        coEvery { wsManager.sendEnvelope(any(), any()) } returns Result.success("test-message-id")
+        coEvery { wsManager.sendEnvelope(any(), any(), any()) } returns Result.success("test-message-id")
     }
 
     @Test
@@ -97,15 +97,15 @@ class TelemetryCellsSyncCoordinatorTest {
             ),
         )
         val payloadSlot = slot<kotlinx.serialization.json.JsonObject>()
-        coEvery { wsManager.sendEnvelope("cells.schema.report", capture(payloadSlot)) } returns Result.success("test-message-id")
-        coEvery { wsManager.sendEnvelope("cells.content.report", any()) } returns Result.success("test-message-id")
+        coEvery { wsManager.sendEnvelope("cells.schema.report", capture(payloadSlot), any()) } returns Result.success("test-message-id")
+        coEvery { wsManager.sendEnvelope("cells.content.report", any(), any()) } returns Result.success("test-message-id")
 
         // when
         coordinator.onWebSocketHello()
 
         // then
-        coVerify { wsManager.sendEnvelope("cells.schema.report", any()) }
-        coVerify { wsManager.sendEnvelope("machine.calibration.report", any()) }
+        coVerify { wsManager.sendEnvelope("cells.schema.report", any(), any()) }
+        coVerify { wsManager.sendEnvelope("machine.calibration.report", any(), any()) }
         val cells = payloadSlot.captured["cells"]!!.jsonArray
         assertEquals(DefaultPhysicalCellSchemaProvider.DEFAULT_CELL_COUNT, cells.size)
         val first = cells.first().jsonObject
@@ -132,7 +132,7 @@ class TelemetryCellsSyncCoordinatorTest {
         )
         val typeSlot = slot<String>()
         val payloadSlot = slot<kotlinx.serialization.json.JsonObject>()
-        coEvery { wsManager.sendEnvelope(capture(typeSlot), capture(payloadSlot)) } returns Result.success("test-message-id")
+        coEvery { wsManager.sendEnvelope(capture(typeSlot), capture(payloadSlot), any()) } returns Result.success("test-message-id")
 
         // when
         coordinator.onLocalVolumeChange(
@@ -162,7 +162,7 @@ class TelemetryCellsSyncCoordinatorTest {
         )
         val typeSlot = slot<String>()
         val payloadSlot = slot<kotlinx.serialization.json.JsonObject>()
-        coEvery { wsManager.sendEnvelope(capture(typeSlot), capture(payloadSlot)) } returns Result.success("test-message-id")
+        coEvery { wsManager.sendEnvelope(capture(typeSlot), capture(payloadSlot), any()) } returns Result.success("test-message-id")
         val edited =
             sampleCell(
                 uuid = "u1",
@@ -242,8 +242,8 @@ class TelemetryCellsSyncCoordinatorTest {
             ),
         )
         val payloadSlot = slot<kotlinx.serialization.json.JsonObject>()
-        coEvery { wsManager.sendEnvelope("cells.schema.report", capture(payloadSlot)) } returns Result.success("test-message-id")
-        coEvery { wsManager.sendEnvelope("machine.calibration.report", any()) } returns Result.success("test-message-id")
+        coEvery { wsManager.sendEnvelope("cells.schema.report", capture(payloadSlot), any()) } returns Result.success("test-message-id")
+        coEvery { wsManager.sendEnvelope("machine.calibration.report", any(), any()) } returns Result.success("test-message-id")
 
         // when — first reconnect
         coordinator.onWebSocketHello()
@@ -251,7 +251,7 @@ class TelemetryCellsSyncCoordinatorTest {
         coordinator.onWebSocketHello()
 
         // then
-        coVerify(exactly = 2) { wsManager.sendEnvelope("cells.schema.report", any()) }
+        coVerify(exactly = 2) { wsManager.sendEnvelope("cells.schema.report", any(), any()) }
         assertEquals("server-hash-v2", payloadSlot.captured["clientSchemaHash"]!!.jsonPrimitive.content)
         assertEquals("41", payloadSlot.captured["clientContentRevision"]!!.jsonPrimitive.content)
     }
@@ -261,10 +261,7 @@ class TelemetryCellsSyncCoordinatorTest {
         // given — MVP-only path: cells sync always wired via SimpleTelemetryCoordinator
         val cellsSync = mockk<TelemetryCellsSyncCoordinator>(relaxed = true)
         val ws =
-            MvpTelemetryWebSocketManager(
-                appScope = this,
-                networkTrafficLogger = mockk(relaxed = true),
-            )
+            createWsManagerForTests(mockk(relaxed = true))
         val telemetryCoordinator =
             SimpleTelemetryCoordinator(
                 apiClient = mockk(relaxed = true),
@@ -275,6 +272,10 @@ class TelemetryCellsSyncCoordinatorTest {
                 machineSecretStore = mockk(relaxed = true),
                 jwtCache = mockk(relaxed = true),
                 flowTemperatureStore = FlowTemperatureStore(),
+                networkObserver = mockk(relaxed = true),
+                offlineEntitlementCoordinator = mockk(relaxed = true),
+                technicianKeySessionCoordinator = mockk(relaxed = true),
+                networkValidatedSideEffects = mockk(relaxed = true),
                 appScope = this,
             )
         telemetryCoordinator.saveTelemetryConfig(TelemetryConfig())
@@ -357,7 +358,7 @@ class TelemetryCellsSyncCoordinatorTest {
         coEvery { waterCalibrationService.readPumpTenths() } returns Result.success(3)
         val calibrationPayloadSlot = slot<kotlinx.serialization.json.JsonObject>()
         coEvery {
-            wsManager.sendEnvelope("machine.calibration.report", capture(calibrationPayloadSlot))
+            wsManager.sendEnvelope("machine.calibration.report", capture(calibrationPayloadSlot), any())
         } returns Result.success("test-message-id")
 
         // when

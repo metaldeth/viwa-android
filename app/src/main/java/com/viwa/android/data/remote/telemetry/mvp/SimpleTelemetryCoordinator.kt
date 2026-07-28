@@ -36,9 +36,29 @@ constructor(
     private val machineSecretStore: MachineSecretStore,
     private val jwtCache: MachineJwtCache,
     private val flowTemperatureStore: FlowTemperatureStore,
+    private val networkObserver: TelemetryNetworkObserver,
+    private val offlineEntitlementCoordinator: com.viwa.android.data.remote.telemetry.mvp.offline.OfflineEntitlementSessionCoordinator,
+    private val technicianKeySessionCoordinator: com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianKeySessionCoordinator,
+    private val networkValidatedSideEffects: TelemetryNetworkValidatedSideEffectsCoordinator,
     @AppIoScope private val appScope: CoroutineScope,
 ) {
     init {
+        offlineEntitlementCoordinator.onApplicationStart()
+        technicianKeySessionCoordinator.onApplicationStart()
+        networkObserver.onValidatedAvailable = {
+            appScope.launch {
+                if (isUserPaused()) return@launch
+                wsManager.notifyNetworkValidated()
+                networkValidatedSideEffects.scheduleDebounced()
+                if (!wsManager.shouldInitiateConnectOnNetworkValidated()) return@launch
+                scheduleConnect("network validated")
+            }
+        }
+        networkObserver.onValidatedLost = {
+            wsManager.notifyNetworkDegraded()
+        }
+        networkObserver.start()
+
         wsManager.cellsSyncHandler =
             object : MvpTelemetryCellsSyncHandler {
                 override suspend fun onWebSocketHello() {

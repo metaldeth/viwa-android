@@ -14,6 +14,6 @@ object TelemetrySalesMessageCodec {
             put("volumeMl", sale.volumeMl)
             put("amountRub", sale.amountRub)
             put("payMethod", sale.payMethod)
-            put("concentrationRatio", sale.concentrationRatio ?: 1.0)
+            sale.concentrationRatio?.let { put("concentrationRatio", it) }
         }
 }

@@ -60,15 +60,19 @@ CMD (legacy): `set VIWA_TELEMETRY_ENROLLMENT_KEY=...`
 
 
 
-- Base URL: поле `apiUrl` в `TelemetryConfig` (JsonStore `telemetryConfig`), по умолчанию `https://194.67.74.147` (`TelemetryConfig.DEFAULT_API_URL`).
+- Base URL: поле `apiUrl` в `TelemetryConfig` (JsonStore `telemetryConfig`), по умолчанию `https://tl.vitamin-water.ru` (`TelemetryConfig.DEFAULT_API_URL`).
 
 - **Активный MVP-поток:** REG register + JWT WS (без `X-Enrollment-Key`).
 
 - **Legacy (gated):** reserve/enroll с `X-Enrollment-Key: <BuildConfig.TELEMETRY_ENROLLMENT_KEY>`.
 
+### OTA app updates (Phase 3)
 
+- Feature gate: WS hello `featureFlags.appUpdates=true` (fail-closed if absent/false).
+- REST: `/api/v1/machines/app-updates/*` с machine JWT — см. `docs/OTA_UPDATE.md` и `viwa-telemetry/docs/contracts/app-updates.md`.
+- Pinned key: `ota.signingKeyId` / `ota.signingPublicKeyPem` в `local.properties` → `BuildConfig`.
+- Install scope: `firmware.update` (online-only technician key).
 
-### QR v1 (регистрация)
 
 
 
@@ -88,7 +92,7 @@ CMD (legacy): `set VIWA_TELEMETRY_ENROLLMENT_KEY=...`
 
   "serialNumber": "VIWA-000004",
 
-  "apiUrl": "https://194.67.74.147"
+  "apiUrl": "https://tl.vitamin-water.ru"
 
 }
 
@@ -261,6 +265,10 @@ Nest возвращает вложенный объект в `message`:
 - Heartbeat по интервалу из `hello` (сервер по умолчанию 10 с).
 
 - **RFC6455 ping/pong:** сервер шлёт transport PING; клиент отвечает PONG через `onWebsocketPing` (Java-WebSocket). В traffic log — sampled `MVP WS transport: PING/PONG` без секретов.
+
+- **Phase 1 resilience (`ws-offline-resilience`):** явный FSM + `sessionGeneration` — stale inbound (hello/ack/error/cells/loyalty) от предыдущего сокета отбрасываются; dual liveness (hello timeout 15 s, heartbeat ACK watchdog, `connectionLostTimeout=18`); reconnect backoff 1/2/5/10/30 s с **full jitter**; close **4001** → bump generation + flat 60 s backoff, flush outbox только после нового hello; `ConnectivityManager.registerDefaultNetworkCallback` (validated, debounce 500 ms) → expedited reconnect через coordinator; при потере сети сокет не рвётся сразу — degraded signal для watchdog. Structured logs: `MVP WS FSM: <from> → <to> gen=N reason=…`.
+
+- **Phase 2 outbox (`ws-offline-resilience`):** Room `machine_outbox` (DB v2) — durable `sale.report` с `idempotencyKey=saleId`; ACK-gated (socket write → `IN_FLIGHT`, server ack/error → `ACKED`/`PENDING`/`REJECTED`/`DEAD`); one-time import JsonStore `pending_sales` (marker `outbox_pending_sales_imported_v1`, source preserved); `TelemetryAckRouter` для ack/error; flush на hello/Active, каждые 30 s, validated network, enqueue; REST batch fallback (`POST /api/v1/machines/outbox/batch`) после 3 WS ACK failures или WS down + `capabilities.outboxBatch` — gated `OutboxFeatureFlags.FEATURE_OUTBOX_REST_SYNC=false` until soak. Contract: `viwa-telemetry/docs/contracts/machine-outbox.md`.
 
 
 

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copy to firmware image:
+    /system/etc/permissions/privapp-permissions-com.viwa.android.xml
+
+  Pair with release APK:
+    /system/priv-app/ViwaAndroid/ViwaAndroid.apk
+-->
+<permissions>
+    <privapp-permissions package="com.viwa.android">
+        <permission name="android.permission.WRITE_SECURE_SETTINGS" />
+        <permission name="android.permission.STATUS_BAR" />
+    </privapp-permissions>
+</permissions>

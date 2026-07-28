@@ -166,6 +166,10 @@ class SimpleTelemetryCoordinatorSerialGuardTest {
             machineSecretStore = secretStore,
             jwtCache = jwtCache,
             flowTemperatureStore = FlowTemperatureStore(),
+            networkObserver = mockk(relaxed = true),
+            offlineEntitlementCoordinator = mockk(relaxed = true),
+            technicianKeySessionCoordinator = mockk(relaxed = true),
+            networkValidatedSideEffects = mockk(relaxed = true),
             appScope = appScope,
         )
 

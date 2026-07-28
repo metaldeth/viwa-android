@@ -4,6 +4,14 @@ import android.content.Context
 import androidx.room.Room
 import com.viwa.android.data.local.db.ViwaDatabase
 import com.viwa.android.data.local.db.JsonStoreDao
+import com.viwa.android.data.local.outbox.MachineOutboxDao
+import com.viwa.android.data.local.entitlement.EntitlementCacheDao
+import com.viwa.android.data.local.entitlement.OfflineUsageLedgerDao
+import com.viwa.android.data.local.technician.TechnicianAllowlistDao
+import com.viwa.android.data.local.technician.TechnicianAllowlistStateDao
+import com.viwa.android.data.local.technician.TechnicianAuditOutboxDao
+import com.viwa.android.data.local.outbox.MachineOutboxPersistence
+import com.viwa.android.data.local.outbox.RoomMachineOutboxPersistence
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -19,8 +27,32 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): ViwaDatabase =
         Room
             .databaseBuilder(context, ViwaDatabase::class.java, "wiva.db")
+            .addMigrations(ViwaDatabase.MIGRATION_1_2, ViwaDatabase.MIGRATION_2_3, ViwaDatabase.MIGRATION_3_4)
             .build()
 
     @Provides
     fun provideJsonStoreDao(db: ViwaDatabase): JsonStoreDao = db.jsonStoreDao()
+
+    @Provides
+    fun provideMachineOutboxDao(db: ViwaDatabase): MachineOutboxDao = db.machineOutboxDao()
+
+    @Provides
+    fun provideEntitlementCacheDao(db: ViwaDatabase): EntitlementCacheDao = db.entitlementCacheDao()
+
+    @Provides
+    fun provideOfflineUsageLedgerDao(db: ViwaDatabase): OfflineUsageLedgerDao = db.offlineUsageLedgerDao()
+
+    @Provides
+    fun provideTechnicianAllowlistDao(db: ViwaDatabase): TechnicianAllowlistDao = db.technicianAllowlistDao()
+
+    @Provides
+    fun provideTechnicianAllowlistStateDao(db: ViwaDatabase): TechnicianAllowlistStateDao = db.technicianAllowlistStateDao()
+
+    @Provides
+    fun provideTechnicianAuditOutboxDao(db: ViwaDatabase): TechnicianAuditOutboxDao = db.technicianAuditOutboxDao()
+
+    @Provides
+    @Singleton
+    fun provideMachineOutboxPersistence(dao: MachineOutboxDao): MachineOutboxPersistence =
+        RoomMachineOutboxPersistence(dao)
 }

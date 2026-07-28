@@ -6,11 +6,14 @@
         android:required="false" />
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Granted only as priv-app whitelist or `pm grant` — enables Settings.Global policy_control. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
 
     <application
         android:name=".ViwaApplication"
@@ -47,6 +50,10 @@
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/aqsi_usb_device_filter" />
         </receiver>
+
+        <receiver
+            android:name=".services.ota.OtaInstallResultReceiver"
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
