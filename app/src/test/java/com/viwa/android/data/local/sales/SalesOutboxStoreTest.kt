@@ -1,5 +1,6 @@
 package com.viwa.android.data.local.sales
 
+import com.viwa.android.data.local.outbox.CommerceOutboxStore
 import com.viwa.android.data.local.outbox.FakeMachineOutboxPersistence
 import com.viwa.android.data.local.outbox.MachineOutboxKind
 import com.viwa.android.data.local.outbox.MachineOutboxStatus
@@ -32,7 +33,7 @@ class SalesOutboxStoreTest {
                 configRepository = configRepository,
                 migrator = PendingSalesOutboxMigrator(persistence, configRepository),
             )
-        store = SalesOutboxStore(machineOutboxStore)
+        store = SalesOutboxStore(machineOutboxStore, CommerceOutboxStore(machineOutboxStore))
     }
 
     @Test
@@ -41,7 +42,7 @@ class SalesOutboxStoreTest {
         store.enqueue(sale)
         assertEquals(1, persistence.allRows().size)
         assertEquals("sale-1", persistence.allRows().first().idempotencyKey)
-        assertEquals(MachineOutboxKind.SALE_REPORT.wireValue, persistence.allRows().first().kind)
+        assertEquals(MachineOutboxKind.TELEMETRY_PAID_COMPLETE.wireValue, persistence.allRows().first().kind)
     }
 
     @Test
@@ -51,7 +52,7 @@ class SalesOutboxStoreTest {
                 saleId = "legacy-sale",
                 soldAt = "2026-07-20T12:00:00.000Z",
                 drinkId = 20,
-                volumeMl = 200,
+                volumeMl = 300,
                 amountRub = 150.0,
                 payMethod = "CARD",
             ),
@@ -86,7 +87,7 @@ class SalesOutboxStoreTest {
     }
 
     @Test
-    fun `jsonstore migration imports legacy pending sales`() = runTest {
+    fun `jsonstore migration skips legacy pending sales under telemetry v3`() = runTest {
         val legacyJson =
             """
             [
@@ -102,7 +103,7 @@ class SalesOutboxStoreTest {
             """.trimIndent()
         configRepository.setJson(JsonStoreKeys.PENDING_SALES, legacyJson)
         store.enqueue(sampleSale("new"))
-        assertEquals(2, persistence.allRows().size)
+        assertEquals(1, persistence.allRows().size)
         assertNotNull(configRepository.get(JsonStoreKeys.OUTBOX_PENDING_SALES_IMPORTED))
     }
 

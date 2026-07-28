@@ -32,6 +32,7 @@ import com.viwa.android.hardware.controller.ControllerResponseEvent
 import com.viwa.android.data.payment.aqsi.AqsiUsbPaymentManager
 import com.viwa.android.services.payment.CardPaymentOrchestrator
 import com.viwa.android.services.payment.ControllerSbpNotifyService
+import com.viwa.android.domain.telemetry.HoldPourTelemetryCoordinator
 import com.viwa.android.services.preparing.CustomerPreparingPhase
 import com.viwa.android.services.preparing.PreparingManager
 import com.viwa.android.services.telemetry.SubscriptionLevelItem
@@ -196,6 +197,7 @@ class DrinkListViewModelTest {
                 networkTraffic,
                 controllerTraffic,
                 cardPaymentOrchestrator,
+                mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
             )
         return vm to subscriptionUseCases
     }

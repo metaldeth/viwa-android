@@ -15,15 +15,15 @@ import com.viwa.android.services.drink.DrinkPreparationCalculations
 import com.viwa.android.services.drink.ViwaDrinkPreparingService
 import com.viwa.android.services.drink.ViwaDrinkSelectionService
 import com.viwa.android.hardware.FlowStripRgbCoordinator
-import com.viwa.android.data.local.sales.PendingSale
-import com.viwa.android.data.remote.telemetry.mvp.TelemetryIsoTimestamps
-import com.viwa.android.data.remote.telemetry.mvp.TelemetrySalesSyncCoordinator
+import com.viwa.android.data.remote.telemetry.v3.TelemetryDispenseSyncCoordinator
 import com.viwa.android.data.remote.telemetry.mvp.MachineOutboxDrainCoordinator
-import com.viwa.android.data.local.outbox.LoyaltyWaterOutboxStore
+import com.viwa.android.domain.model.customer.DrinkConcentration
+import com.viwa.android.domain.model.customer.toRatio
 import com.viwa.android.domain.offline.OfflineAuthorizationReason
 import com.viwa.android.domain.offline.OfflinePourTransactionCoordinator
 import com.viwa.android.domain.offline.SubscriptionPourContext
-import java.util.UUID
+import com.viwa.android.domain.telemetry.DispenseTelemetryFactory
+import com.viwa.android.domain.telemetry.DispenseTelemetryFactory.newStableUuid
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -53,9 +53,8 @@ constructor(
     private val preparingTimeHistoryStore: PreparingTimeHistoryStore,
     private val waterCounter: ViwaWaterCounterService,
     private val flowStripRgbCoordinator: FlowStripRgbCoordinator,
-    private val salesSyncCoordinator: TelemetrySalesSyncCoordinator,
+    private val dispenseSyncCoordinator: TelemetryDispenseSyncCoordinator,
     private val offlinePourCoordinator: OfflinePourTransactionCoordinator,
-    private val waterOutboxStore: LoyaltyWaterOutboxStore,
     private val outboxDrainCoordinator: MachineOutboxDrainCoordinator,
     @AppIoScope private val scope: CoroutineScope,
 ) {
@@ -87,6 +86,7 @@ constructor(
         volumeMl: Int,
         waterOption: DrinkWaterOption = DrinkWaterOption.STANDARD,
         concentrationRatio: Double = 1.0,
+        concentration: DrinkConcentration = DrinkConcentration.Standard,
         saleTotalPriceRub: Double = 0.0,
         salePayMethod: String? = null,
         subscriptionPourContext: SubscriptionPourContext? = null,
@@ -130,15 +130,26 @@ constructor(
                 return@withLock PrepareDrinkResult.Error(PreparingErrorCodes.WATER_NOT_CALIBRATED, msg)
             }
 
+            val effectiveRatio = concentration.toRatio()
             val preparingTime =
                 drinkSelection.chooseDrink(
                     container = container,
                     drinkVolumeMl = volumeMl,
                     waterOption = waterOption,
-                    concentrationRatio = concentrationRatio,
+                    concentrationRatio = effectiveRatio,
                     flowRateMlPerSec = flowRate,
                 )
             val dosage = container.product.dosage
+            val isPaidPour = isPaidSalePayMethod(salePayMethod)
+            val pourRequestUuid =
+                subscriptionPourContext?.requestUuid
+                    ?: newStableUuid()
+            val transactionId =
+                if (isPaidPour) {
+                    newStableUuid()
+                } else {
+                    null
+                }
             val actualWaterMl =
                 DrinkPreparationCalculations.waterMlForDrink(
                     dosageWaterMl = dosage.water,
@@ -150,18 +161,23 @@ constructor(
                     startedAtMs = System.currentTimeMillis(),
                     startedAtMonotonicMs = android.os.SystemClock.elapsedRealtime(),
                     tasteId = container.product.taste.id,
+                    productUuid = container.productUuid,
                     drinkName = container.product.name,
                     containerNumber = container.containerNumber,
                     volumeMl = volumeMl,
                     recipeDrinkVolumeMl = dosage.drinkVolume,
                     recipeWaterMl = dosage.water,
+                    recipeProductMl = dosage.product,
                     actualWaterMl = actualWaterMl,
                     flowRateMlPerSec = flowRate,
                     expectedTimeSec = preparingTime,
                     saleTotalPriceRub = saleTotalPriceRub,
                     salePayMethod = salePayMethod,
-                    concentrationRatio = concentrationRatio,
+                    concentration = concentration,
+                    concentrationRatio = effectiveRatio,
                     subscriptionPourContext = subscriptionPourContext,
+                    pourRequestUuid = pourRequestUuid,
+                    transactionId = transactionId,
                 )
 
             if (subscriptionPourContext != null) {
@@ -198,7 +214,7 @@ constructor(
                 scope.launch {
                     try {
                         gateway.incomingResponses.first { it.response == ResponseCommand.DrinkPreparingSuccess }
-                        inventoryService.applyWriteOff(container.containerNumber, volumeMl, concentrationRatio)
+                        inventoryService.applyWriteOff(container.containerNumber, volumeMl, effectiveRatio)
                         runCatching {
                             waterCounter.accumulateHardwareReadingAfterSuccessfulPreparation()
                         }.onFailure { Timber.tag(TAG).w(it, "water counter accumulate") }
@@ -207,10 +223,7 @@ constructor(
                         flowStripRgbCoordinator.scheduleGreenForTenSecondsThenRestoreSaved()
                         val pourContext = currentPreparingContext
                         persistPreparingTimeRecord()
-                        enqueueSuccessfulSaleReport()
-                        pourContext?.let {
-                            finalizeSubscriptionPourIfNeeded(it.actualWaterMl.toInt().coerceAtLeast(1))
-                        }
+                        pourContext?.let { enqueueDispenseTelemetry(it) }
                     } catch (e: Exception) {
                         Timber.tag(TAG).e(e, "await DrinkPreparingSuccess")
                     } finally {
@@ -227,37 +240,57 @@ constructor(
         onStateChanged(state)
     }
 
-    private suspend fun enqueueSuccessfulSaleReport() {
-        val context = currentPreparingContext ?: return
-        val saleId = context.subscriptionPourContext?.saleId ?: UUID.randomUUID().toString()
-        val pendingSale =
-            PendingSale(
-                saleId = saleId,
-                soldAt = TelemetryIsoTimestamps.nowUtc(),
-                drinkId = context.tasteId,
-                volumeMl = context.volumeMl,
-                amountRub = context.saleTotalPriceRub,
-                payMethod = resolveSalePayMethod(context.salePayMethod),
-                concentrationRatio = context.concentrationRatio,
+    private suspend fun enqueueDispenseTelemetry(context: CurrentPreparingContext) {
+        val dosage =
+            com.viwa.android.domain.model.customer.DrinkDosage(
+                conversionFactor = 0.0,
+                drinkVolume = context.recipeDrinkVolumeMl,
+                product = context.recipeProductMl,
+                water = context.recipeWaterMl,
             )
-        runCatching {
-            salesSyncCoordinator.enqueueAndTrySend(pendingSale)
-        }.onFailure { Timber.tag(TAG).e(it, "enqueue sale.report failed") }
-    }
-
-    private suspend fun finalizeSubscriptionPourIfNeeded(dispensedVolumeMl: Int) {
-        val ctx = currentPreparingContext?.subscriptionPourContext ?: return
-        offlinePourCoordinator.finalizePour(ctx.requestUuid, dispensedVolumeMl)
-        waterOutboxStore.enqueueWaterUse(
-            clientId = ctx.clientId,
-            requestUuid = ctx.requestUuid,
-            volumeMl = dispensedVolumeMl,
-            drinkId = currentPreparingContext?.tasteId,
-            saleId = ctx.saleId,
-            isFree = true,
-        )
-        offlinePourCoordinator.enqueueForSync(ctx.requestUuid, ctx.clientId, isFree = true)
-        outboxDrainCoordinator.onEnqueue()
+        val dispensedVolumeMl = context.volumeMl
+        when {
+            isPaidSalePayMethod(context.salePayMethod) -> {
+                val payMethod = context.salePayMethod!!.uppercase()
+                val paid =
+                    DispenseTelemetryFactory.paidComplete(
+                        transactionId = context.transactionId ?: newStableUuid(),
+                        requestUuid = context.pourRequestUuid,
+                        volumeMl = dispensedVolumeMl,
+                        amountRub = context.saleTotalPriceRub,
+                        payMethod = payMethod,
+                        productId = context.productUuid,
+                        productNameSnapshot = context.drinkName,
+                        concentration = context.concentration,
+                        dosage = dosage,
+                    )
+                runCatching {
+                    dispenseSyncCoordinator.enqueuePaidComplete(paid)
+                }.onFailure { Timber.tag(TAG).e(it, "enqueue telemetry.paid.complete failed") }
+            }
+            context.subscriptionPourContext != null -> {
+                val sub = context.subscriptionPourContext
+                offlinePourCoordinator.finalizePour(sub.requestUuid, dispensedVolumeMl)
+                if (!sub.offlineMode) {
+                    val pour =
+                        DispenseTelemetryFactory.flavoredPourEvent(
+                            requestUuid = context.pourRequestUuid,
+                            volumeMl = dispensedVolumeMl,
+                            productId = context.productUuid,
+                            productNameSnapshot = context.drinkName,
+                            concentration = context.concentration,
+                            dosage = dosage,
+                            clientId = sub.clientId,
+                        )
+                    runCatching {
+                        dispenseSyncCoordinator.enqueuePourReport(pour)
+                    }.onFailure { Timber.tag(TAG).e(it, "enqueue telemetry.pour.report failed") }
+                } else {
+                    offlinePourCoordinator.enqueueForSync(sub.requestUuid, sub.clientId, isFree = true)
+                    outboxDrainCoordinator.onEnqueue()
+                }
+            }
+        }
     }
 
     private fun offlineDenyMessage(reason: OfflineAuthorizationReason): String =
@@ -276,8 +309,31 @@ constructor(
             OfflineAuthorizationReason.OFFLINE_GRANT_MACHINE_MISMATCH -> "Grant не для этой машины."
         }
 
-    private fun resolveSalePayMethod(salePayMethod: String?): String =
-        salePayMethod?.takeIf { it.isNotBlank() } ?: "FREE"
+    private fun isPaidSalePayMethod(salePayMethod: String?): Boolean =
+        salePayMethod?.uppercase() in setOf("CARD", "SBP")
+
+    private data class CurrentPreparingContext(
+        val startedAtMs: Long,
+        val startedAtMonotonicMs: Long,
+        val tasteId: Int,
+        val productUuid: String,
+        val drinkName: String,
+        val containerNumber: Int,
+        val volumeMl: Int,
+        val recipeDrinkVolumeMl: Int,
+        val recipeWaterMl: Double,
+        val recipeProductMl: Double,
+        val actualWaterMl: Double,
+        val flowRateMlPerSec: Double,
+        val expectedTimeSec: Int,
+        val saleTotalPriceRub: Double,
+        val salePayMethod: String?,
+        val concentration: DrinkConcentration,
+        val concentrationRatio: Double,
+        val subscriptionPourContext: SubscriptionPourContext? = null,
+        val pourRequestUuid: String,
+        val transactionId: String? = null,
+    )
 
     private suspend fun persistPreparingTimeRecord() {
         val context = currentPreparingContext ?: return
@@ -305,24 +361,6 @@ constructor(
             )
         }.onFailure { Timber.tag(TAG).e(it, "persistPreparingTimeRecord failed") }
     }
-
-    private data class CurrentPreparingContext(
-        val startedAtMs: Long,
-        val startedAtMonotonicMs: Long,
-        val tasteId: Int,
-        val drinkName: String,
-        val containerNumber: Int,
-        val volumeMl: Int,
-        val recipeDrinkVolumeMl: Int,
-        val recipeWaterMl: Double,
-        val actualWaterMl: Double,
-        val flowRateMlPerSec: Double,
-        val expectedTimeSec: Int,
-        val saleTotalPriceRub: Double,
-        val salePayMethod: String?,
-        val concentrationRatio: Double,
-        val subscriptionPourContext: SubscriptionPourContext? = null,
-    )
 
     companion object {
         private const val TAG = "PreparingManager"

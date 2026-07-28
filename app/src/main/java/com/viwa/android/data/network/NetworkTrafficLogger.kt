@@ -41,10 +41,11 @@ internal class NetworkTrafficRingBuffer(
 
     @Synchronized
     fun snapshot(): List<NetworkTrafficEntry> {
-        if (size == 0) return emptyList()
-        val start = if (size < capacity) 0 else writeIndex
-        return buildList(size) {
-            repeat(size) { offset ->
+        val entryCount = size
+        if (entryCount == 0) return emptyList()
+        val start = if (entryCount < capacity) 0 else writeIndex
+        return buildList(entryCount) {
+            repeat(entryCount) { offset ->
                 buffer[(start + offset) % capacity]?.let(::add)
             }
         }

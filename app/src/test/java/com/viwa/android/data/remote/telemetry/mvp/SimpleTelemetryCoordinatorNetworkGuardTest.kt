@@ -66,7 +66,7 @@ class SimpleTelemetryCoordinatorNetworkGuardTest {
             apiClient = mockk(relaxed = true),
             wsManager = wsManager,
             cellsSyncCoordinator = mockk(relaxed = true),
-            salesSyncCoordinator = mockk(relaxed = true),
+            dispenseSyncCoordinator = mockk(relaxed = true),
             configRepository = configRepository,
             machineSecretStore = InMemoryMachineSecretStore(),
             jwtCache = MachineJwtCache(SystemEpochMillisClock()),

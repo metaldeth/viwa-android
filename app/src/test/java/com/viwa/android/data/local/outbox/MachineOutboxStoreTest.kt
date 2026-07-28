@@ -18,6 +18,7 @@ class MachineOutboxStoreTest {
     private lateinit var persistence: FakeMachineOutboxPersistence
     private lateinit var configRepository: FakeConfigRepository
     private lateinit var store: MachineOutboxStore
+    private lateinit var commerceOutboxStore: CommerceOutboxStore
 
     @Before
     fun setUp() {
@@ -33,33 +34,45 @@ class MachineOutboxStoreTest {
                         configRepository = configRepository,
                     ),
             )
+        commerceOutboxStore = CommerceOutboxStore(store)
     }
 
     @Test
     fun `duplicate enqueue is idempotent by kind and idempotencyKey`() = runTest {
-        val sale = sampleSale("sale-1")
-        val first = store.enqueueSale(sale)
-        val second = store.enqueueSale(sale)
-
-        assertTrue(first is MachineOutboxStore.EnqueueResult.Inserted)
-        assertTrue(second is MachineOutboxStore.EnqueueResult.Duplicate)
+        TestOutboxFixtures.enqueueTestPaidComplete(commerceOutboxStore, "sale-1")
+        val firstRow = persistence.allRows().single()
+        val duplicate =
+            commerceOutboxStore.enqueuePaidComplete(
+                com.viwa.android.domain.telemetry.DispenseTelemetryFactory.paidComplete(
+                    transactionId = "sale-1",
+                    requestUuid = "pour-dup",
+                    volumeMl = 300,
+                    amountRub = 150.0,
+                    payMethod = "CARD",
+                    productId = "prod",
+                    productNameSnapshot = "Test",
+                    concentration = com.viwa.android.domain.model.customer.DrinkConcentration.Standard,
+                    dosage = com.viwa.android.domain.model.customer.DrinkDosage(0.5, 300, 30.0, 270.0),
+                ),
+            )
+        assertTrue(duplicate is MachineOutboxStore.EnqueueResult.Duplicate)
         assertEquals(1, persistence.allRows().size)
+        assertEquals(firstRow.localId, (duplicate as MachineOutboxStore.EnqueueResult.Duplicate).existingLocalId)
     }
 
     @Test
     fun `markInFlight then recover returns entry to PENDING`() = runTest {
-        store.enqueueSale(sampleSale("sale-1"))
+        TestOutboxFixtures.enqueueTestPaidComplete(commerceOutboxStore)
         val row = persistence.allRows().single()
         store.markInFlight(row, sessionGeneration = 7L)
         assertEquals(MachineOutboxStatus.IN_FLIGHT.name, persistence.allRows().single().status)
-
         store.recoverInFlightToPending()
         assertEquals(MachineOutboxStatus.PENDING.name, persistence.allRows().single().status)
     }
 
     @Test
     fun `ws send success does not mark acked`() = runTest {
-        store.enqueueSale(sampleSale("sale-1"))
+        TestOutboxFixtures.enqueueTestPaidComplete(commerceOutboxStore)
         val row = persistence.allRows().single()
         store.markInFlight(row, sessionGeneration = 1L)
         val stillThere = persistence.allRows().single()
@@ -69,17 +82,17 @@ class MachineOutboxStoreTest {
 
     @Test
     fun `ack removes entry from pending drain list`() = runTest {
-        store.enqueueSale(sampleSale("sale-1"))
+        TestOutboxFixtures.enqueueTestPaidComplete(commerceOutboxStore)
         val row = persistence.allRows().single()
         store.markInFlight(row, sessionGeneration = 1L)
-        store.markAcked(messageId = row.messageId)
+        store.markAcked(messageId = row.messageId, kind = MachineOutboxKind.TELEMETRY_PAID_COMPLETE)
         assertEquals(0, store.countPendingOrInFlight())
         assertEquals(MachineOutboxStatus.ACKED.name, persistence.allRows().single().status)
     }
 
     @Test
     fun `terminal server error marks REJECTED`() = runTest {
-        store.enqueueSale(sampleSale("sale-1"))
+        TestOutboxFixtures.enqueueTestPaidComplete(commerceOutboxStore)
         val row = persistence.allRows().single()
         val updated = store.markServerError(row, "INVALID_PAYLOAD", "bad payload")
         assertEquals(MachineOutboxStatus.REJECTED.name, updated.status)
@@ -87,7 +100,7 @@ class MachineOutboxStoreTest {
 
     @Test
     fun `retryable server error returns to PENDING with backoff`() = runTest {
-        store.enqueueSale(sampleSale("sale-1"))
+        TestOutboxFixtures.enqueueTestPaidComplete(commerceOutboxStore)
         val row = persistence.allRows().single()
         val updated = store.markServerError(row, "INTERNAL", "try again")
         assertEquals(MachineOutboxStatus.PENDING.name, updated.status)
@@ -97,9 +110,9 @@ class MachineOutboxStoreTest {
     @Test
     fun `attempts above 50 mark DEAD`() = runTest {
         persistence.insert(
-            com.viwa.android.data.local.outbox.MachineOutboxEntryEntity(
+            MachineOutboxEntryEntity(
                 localId = "local-1",
-                kind = MachineOutboxKind.SALE_REPORT.wireValue,
+                kind = MachineOutboxKind.TELEMETRY_PAID_COMPLETE.wireValue,
                 idempotencyKey = "sale-1",
                 messageId = "msg-1",
                 payloadJson = "{}",
@@ -120,7 +133,7 @@ class MachineOutboxStoreTest {
     }
 
     @Test
-    fun `import pending sales from JsonStore is idempotent`() = runTest {
+    fun `legacy JsonStore import is skipped under telemetry v3`() = runTest {
         val legacy =
             listOf(
                 PendingSale(
@@ -134,44 +147,21 @@ class MachineOutboxStoreTest {
                 ),
             )
         configRepository.setJson(JsonStoreKeys.PENDING_SALES, Json.encodeToString(legacy))
-        store.enqueueSale(sampleSale("new-sale"))
-        assertEquals(2, persistence.allRows().size)
+        TestOutboxFixtures.enqueueTestPaidComplete(commerceOutboxStore, "new-sale")
+        assertEquals(1, persistence.allRows().size)
         assertNotNull(configRepository.get(JsonStoreKeys.OUTBOX_PENDING_SALES_IMPORTED))
         assertNotNull(configRepository.getJson(JsonStoreKeys.PENDING_SALES))
-
-        val store2 =
-            MachineOutboxStore(
-                persistence = persistence,
-                configRepository = configRepository,
-                migrator =
-                    PendingSalesOutboxMigrator(
-                        persistence = persistence,
-                        configRepository = configRepository,
-                    ),
-            )
-        store2.enqueueSale(sampleSale("another"))
-        assertEquals(3, persistence.allRows().size)
     }
 
     @Test
     fun `ws ack timeout increments wsAckFailures`() = runTest {
-        store.enqueueSale(sampleSale("sale-1"))
+        TestOutboxFixtures.enqueueTestPaidComplete(commerceOutboxStore)
         val row = persistence.allRows().single()
         store.markInFlight(row, sessionGeneration = 1L)
         val updated = store.markWsAckTimeout(row)
         assertEquals(1, updated.wsAckFailures)
         assertEquals(MachineOutboxStatus.PENDING.name, updated.status)
     }
-
-    private fun sampleSale(saleId: String): PendingSale =
-        PendingSale(
-            saleId = saleId,
-            soldAt = "2026-07-20T12:00:00.000Z",
-            drinkId = 20,
-            volumeMl = 200,
-            amountRub = 150.0,
-            payMethod = "CARD",
-        )
 
     private class FakeConfigRepository : ConfigRepository {
         private val store = mutableMapOf<String, String>()

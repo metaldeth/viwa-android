@@ -41,7 +41,7 @@ import com.viwa.android.hardware.controller.FlowTemperatureStore
 import com.viwa.android.hardware.controller.decodeFlowTemperatureByte
 import com.viwa.android.hardware.controller.RequestCommand
 import com.viwa.android.hardware.controller.ResponseCommand
-import com.viwa.android.domain.loyalty.LoyaltyWaterUseCoordinator
+import com.viwa.android.domain.telemetry.HoldPourTelemetryCoordinator
 import com.viwa.android.domain.offline.OfflineAuthorizationReason
 import com.viwa.android.domain.offline.SubscriptionPourContext
 import com.viwa.android.services.telemetry.SubscriptionLevelItem
@@ -183,6 +183,7 @@ constructor(
     private val networkTrafficLogger: NetworkTrafficLogger,
     private val controllerTrafficLogger: ViwaControllerTrafficLogger,
     private val cardPaymentOrchestrator: CardPaymentOrchestrator,
+    private val holdPourTelemetryCoordinator: HoldPourTelemetryCoordinator,
 ) : ViewModel() {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -217,7 +218,7 @@ constructor(
     private var waterPourMaxHoldJob: Job? = null
     private var waterPourLimitHideJob: Job? = null
     private var waterPourStarted: Boolean = false
-    private val loyaltyWaterUseCoordinator = LoyaltyWaterUseCoordinator()
+    private var holdPourRequestUuid: String? = null
     private var pendingSubscriptionPourRequestUuid: String? = null
     private var subscriptionPaymentId: String? = null
     private var subscriptionPaymentRequestUuid: String? = null
@@ -574,6 +575,7 @@ constructor(
                     }
                     return@launch
                 }
+                beginHoldPourTelemetryIfNeeded()
                 waterPourMaxHoldJob?.cancel()
                 waterPourMaxHoldJob =
                     viewModelScope.launch {
@@ -586,6 +588,7 @@ constructor(
                                 WATER_POUR_STOP_BODY,
                             )
                         }.onFailure { Timber.w(it, "waterPour stop (max hold)") }
+                        finalizeHoldPourTelemetry()
                         _state.update { it.copy(isWaterPourActive = false, waterPourLimitBanner = true) }
                         waterPourLimitHideJob?.cancel()
                         waterPourLimitHideJob =
@@ -613,6 +616,7 @@ constructor(
                     it.copy(waterPourError = e.message ?: "Ошибка остановки налива воды")
                 }
             }
+            finalizeHoldPourTelemetry()
         }
         _state.update { it.copy(isWaterPourActive = false) }
     }
@@ -630,7 +634,11 @@ constructor(
                 runCatching {
                     controllerGateway.sendCommand(RequestCommand.WaterPourByTouch, WATER_POUR_STOP_BODY)
                 }.onFailure { Timber.w(it, "waterPour stop (cancel selection)") }
+                finalizeHoldPourTelemetry()
             }
+        } else {
+            holdPourTelemetryCoordinator.cancelHoldPourSession()
+            holdPourRequestUuid = null
         }
         _state.update {
             it.copy(isWaterPourActive = false, waterPourLimitBanner = false, waterPourError = null)
@@ -649,6 +657,29 @@ constructor(
     private fun waterPourStartPayload(): ByteArray {
         val sel = currentWaterPourSelByte().coerceIn(0, 2)
         return byteArrayOf(1, sel.toByte(), 1, sel.toByte(), 0)
+    }
+
+    private suspend fun beginHoldPourTelemetryIfNeeded() {
+        val clientId = _state.value.scannedSubscriptionClientId ?: return
+        val machineId = telemetryService.loadMachineRegistration().machineId
+        holdPourRequestUuid =
+            holdPourTelemetryCoordinator.beginHoldPourSession(
+                clientId = clientId,
+                machineId = machineId,
+                plainWaterType = _state.value.flowWaterPourType,
+                offlineMode = !_state.value.telemetryWsConnected,
+            )
+    }
+
+    private suspend fun finalizeHoldPourTelemetry() {
+        if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) {
+            holdPourTelemetryCoordinator.cancelHoldPourSession()
+            holdPourRequestUuid = null
+            return
+        }
+        if (holdPourRequestUuid == null) return
+        holdPourTelemetryCoordinator.finalizeHoldPourSession()
+        holdPourRequestUuid = null
     }
 
     fun clearSelection() {
@@ -1335,6 +1366,7 @@ constructor(
                 volumeMl = volume,
                 waterOption = s.waterOption,
                 concentrationRatio = s.concentration.toRatio(),
+                concentration = s.concentration,
                 saleTotalPriceRub = saleTotalPriceRub,
                 salePayMethod = salePayMethod,
                 subscriptionPourContext = subscriptionPourContext,

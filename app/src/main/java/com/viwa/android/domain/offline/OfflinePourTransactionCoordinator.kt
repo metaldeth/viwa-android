@@ -4,7 +4,6 @@ import com.viwa.android.data.local.entitlement.EntitlementCacheStore
 import com.viwa.android.data.local.entitlement.OfflineUsageLedgerEntity
 import com.viwa.android.data.local.entitlement.OfflineUsageLedgerState
 import com.viwa.android.data.local.entitlement.OfflineUsageLedgerStore
-import com.viwa.android.data.local.outbox.LoyaltyWaterOutboxStore
 import com.viwa.android.data.remote.telemetry.mvp.TelemetryIsoTimestamps
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,7 +19,6 @@ constructor(
     private val ledgerStore: OfflineUsageLedgerStore,
     private val cacheStore: EntitlementCacheStore,
     private val authorizationService: OfflinePourAuthorizationService,
-    private val waterOutboxStore: LoyaltyWaterOutboxStore,
     private val clock: BoundedTelemetryClock,
     private val metrics: OfflineEntitlementMetrics,
 ) {
@@ -130,15 +128,6 @@ constructor(
     suspend fun enqueueForSync(requestUuid: String, clientId: String, isFree: Boolean): Boolean {
         val row = ledgerStore.findByRequestUuid(requestUuid) ?: return false
         if (row.state != OfflineUsageLedgerState.FINALIZED.name) return false
-        val volume = row.finalizedVolumeMl ?: row.requestedVolumeMl
-        waterOutboxStore.enqueueWaterUse(
-            clientId = clientId,
-            requestUuid = requestUuid,
-            volumeMl = volume,
-            drinkId = row.drinkId,
-            saleId = row.saleId,
-            isFree = isFree,
-        )
         ledgerStore.update(row.copy(state = OfflineUsageLedgerState.ENQUEUED.name))
         return true
     }

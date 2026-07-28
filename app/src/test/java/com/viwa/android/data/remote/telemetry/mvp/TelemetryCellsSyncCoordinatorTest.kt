@@ -267,7 +267,7 @@ class TelemetryCellsSyncCoordinatorTest {
                 apiClient = mockk(relaxed = true),
                 wsManager = ws,
                 cellsSyncCoordinator = cellsSync,
-                salesSyncCoordinator = mockk(relaxed = true),
+                dispenseSyncCoordinator = mockk(relaxed = true),
                 configRepository = FakeConfigRepository(),
                 machineSecretStore = mockk(relaxed = true),
                 jwtCache = mockk(relaxed = true),

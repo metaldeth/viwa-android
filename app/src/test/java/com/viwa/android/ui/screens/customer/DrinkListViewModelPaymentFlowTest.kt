@@ -57,6 +57,7 @@ class DrinkListViewModelPaymentFlowTest {
             containerNumber = containerNumber,
             sodaStatus = null,
             product = product,
+            productUuid = "test-product-uuid",
             volumeMl = 1000,
             minVolumeMl = 0,
             isActive = true,

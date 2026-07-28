@@ -21,7 +21,6 @@ constructor(
     private val apiClient: MvpTelemetryApiClient,
     private val ledgerStore: OfflineUsageLedgerStore,
     private val pourCoordinator: OfflinePourTransactionCoordinator,
-    private val waterOutboxStore: com.viwa.android.data.local.outbox.LoyaltyWaterOutboxStore,
     private val bearerTokenProvider: MachineOutboxBearerTokenProvider,
     private val metrics: OfflineEntitlementMetrics,
     @AppIoScope private val appScope: CoroutineScope,

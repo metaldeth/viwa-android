@@ -161,7 +161,7 @@ class SimpleTelemetryCoordinatorSerialGuardTest {
                 ),
             wsManager = wsManager,
             cellsSyncCoordinator = mockk(relaxed = true),
-            salesSyncCoordinator = mockk(relaxed = true),
+            dispenseSyncCoordinator = mockk(relaxed = true),
             configRepository = configRepository,
             machineSecretStore = secretStore,
             jwtCache = jwtCache,

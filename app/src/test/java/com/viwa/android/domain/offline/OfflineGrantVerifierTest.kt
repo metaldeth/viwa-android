@@ -155,9 +155,8 @@ class OfflinePourAuthorizationServiceTest {
         val verifier = OfflineGrantVerifier(keysStore)
         val metrics = OfflineEntitlementMetrics(cacheStore, ledgerStore)
         service = OfflinePourAuthorizationService(cacheStore, ledgerStore, verifier, clock, metrics)
-        val waterOutbox = mockk<com.viwa.android.data.local.outbox.LoyaltyWaterOutboxStore>(relaxed = true)
         pourCoordinator =
-            OfflinePourTransactionCoordinator(ledgerStore, cacheStore, service, waterOutbox, clock, metrics)
+            OfflinePourTransactionCoordinator(ledgerStore, cacheStore, service, clock, metrics)
         runBlocking { seedGrant(clientId, machineId, signature) }
     }
 

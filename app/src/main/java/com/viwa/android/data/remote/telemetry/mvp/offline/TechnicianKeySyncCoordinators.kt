@@ -89,6 +89,10 @@ constructor(
 
     private val syncMutex = Mutex()
 
+    private var syncSessionGeneration = 0L
+
+    private var helloJob: Job? = null
+
     private var periodicJob: Job? = null
 
     private var backoffAttempt = 0
@@ -133,13 +137,17 @@ constructor(
 
         if (capability == null) return
 
-        appScope.launch {
+        val generation = ++syncSessionGeneration
 
-            syncDelta(capability, reason = "hello")
+        helloJob?.cancel()
 
-            schedulePeriodicSync(capability.syncIntervalSeconds)
-
-        }
+        helloJob =
+            appScope.launch {
+                syncDelta(capability, reason = "hello")
+                if (generation == syncSessionGeneration) {
+                    schedulePeriodicSync(capability.syncIntervalSeconds, generation)
+                }
+            }
 
     }
 
@@ -179,6 +187,12 @@ constructor(
 
     fun onDisconnect() {
 
+        syncSessionGeneration++
+
+        helloJob?.cancel()
+
+        helloJob = null
+
         periodicJob?.cancel()
 
         periodicJob = null
@@ -187,7 +201,12 @@ constructor(
 
 
 
-    private fun schedulePeriodicSync(intervalSeconds: Int) {
+    private fun schedulePeriodicSync(
+        intervalSeconds: Int,
+        generation: Long,
+    ) {
+
+        if (generation != syncSessionGeneration) return
 
         periodicJob?.cancel()
 
@@ -197,9 +216,11 @@ constructor(
 
             appScope.launch {
 
-                while (isActive) {
+                while (isActive && generation == syncSessionGeneration) {
 
                     delay(intervalMs)
+
+                    if (generation != syncSessionGeneration) break
 
                     val capability =
                         wsManager.technicianKeysCapability()
@@ -378,6 +399,10 @@ constructor(
 
     private val syncMutex = Mutex()
 
+    private var syncSessionGeneration = 0L
+
+    private var helloJob: Job? = null
+
     private var periodicJob: Job? = null
 
     private var backoffAttempt = 0
@@ -390,13 +415,17 @@ constructor(
 
         if (capability == null || !TechnicianKeyFeatureFlags.FEATURE_TECHNICIAN_KEYS) return
 
-        appScope.launch {
+        val generation = ++syncSessionGeneration
 
-            syncBatch(capability)
+        helloJob?.cancel()
 
-            schedulePeriodicSync()
-
-        }
+        helloJob =
+            appScope.launch {
+                syncBatch(capability)
+                if (generation == syncSessionGeneration) {
+                    schedulePeriodicSync(generation)
+                }
+            }
 
     }
 
@@ -414,6 +443,12 @@ constructor(
 
     fun onDisconnect() {
 
+        syncSessionGeneration++
+
+        helloJob?.cancel()
+
+        helloJob = null
+
         periodicJob?.cancel()
 
         periodicJob = null
@@ -424,7 +459,9 @@ constructor(
 
 
 
-    private fun schedulePeriodicSync() {
+    private fun schedulePeriodicSync(generation: Long) {
+
+        if (generation != syncSessionGeneration) return
 
         periodicJob?.cancel()
 
@@ -432,9 +469,11 @@ constructor(
 
             appScope.launch {
 
-                while (isActive) {
+                while (isActive && generation == syncSessionGeneration) {
 
                     delay(TechnicianKeyConstants.AUDIT_SYNC_INTERVAL_MS)
+
+                    if (generation != syncSessionGeneration) break
 
                     val capability = wsManager.technicianKeysCapability() ?: continue
 

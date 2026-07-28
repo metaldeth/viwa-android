@@ -41,6 +41,7 @@ object TelemetryCellsSnapshotAdapter {
         return DrinkContainer(
             containerNumber = cell.cellNumber,
             sodaStatus = null,
+            productUuid = productUuid,
             product =
                 DrinkProduct(
                     id = cell.cellNumber,

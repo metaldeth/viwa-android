@@ -1,9 +1,9 @@
 package com.viwa.android.data.local.outbox
 
-/** Canonical outbox kind strings — must match backend `machine-outbox.md`. */
+/** Canonical outbox kind strings — must match `telemetry-v3-ingest.md` / `machine-outbox.md`. */
 enum class MachineOutboxKind(val wireValue: String) {
-    SALE_REPORT("sale.report"),
-    LOYALTY_WATER_USE("loyalty.water.use"),
+    TELEMETRY_POUR_REPORT("telemetry.pour.report"),
+    TELEMETRY_PAID_COMPLETE("telemetry.paid.complete"),
     ;
 
     companion object {

@@ -1,15 +1,23 @@
 package com.viwa.android.data.network
 
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NetworkTrafficLoggerTest {
+    private var threadPool: ExecutorService? = null
+
+    @After
+    fun tearDown() {
+        threadPool?.shutdownNow()
+        threadPool?.awaitTermination(5, TimeUnit.SECONDS)
+        threadPool = null
+    }
     @Test
     fun `should preserve insertion order in snapshot`() {
         val logger = NetworkTrafficLogger()
@@ -41,25 +49,30 @@ class NetworkTrafficLoggerTest {
         val threads = 8
         val perThread = 200
         val pool = Executors.newFixedThreadPool(threads)
+        threadPool = pool
         val startGate = CountDownLatch(1)
         val doneGate = CountDownLatch(threads)
 
-        repeat(threads) { threadIndex ->
-            pool.execute {
-                startGate.await()
-                repeat(perThread) { offset ->
-                    val id = threadIndex * perThread + offset
-                    logger.log(NetworkTrafficChannel.WS, NetworkTrafficDirection.OUT, "t$id")
+        try {
+            repeat(threads) { threadIndex ->
+                pool.execute {
+                    startGate.await()
+                    repeat(perThread) { offset ->
+                        val id = threadIndex * perThread + offset
+                        logger.log(NetworkTrafficChannel.WS, NetworkTrafficDirection.OUT, "t$id")
+                    }
+                    doneGate.countDown()
                 }
-                doneGate.countDown()
             }
+
+            startGate.countDown()
+            assertTrue(doneGate.await(10, TimeUnit.SECONDS))
+        } finally {
+            pool.shutdownNow()
+            threadPool = null
         }
 
-        startGate.countDown()
-        assertTrue(doneGate.await(10, TimeUnit.SECONDS))
-        pool.shutdownNow()
-
-        val entries = runBlocking { logger.entries.first { it.size == NetworkTrafficLogger.MAX_ENTRIES } }
+        val entries = logger.entries.value
         assertEquals(NetworkTrafficLogger.MAX_ENTRIES, entries.size)
         assertTrue(entries.last().summary.startsWith("t"))
     }

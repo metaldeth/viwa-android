@@ -4,6 +4,7 @@ import com.viwa.android.data.local.db.JsonStoreKeys
 import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryLoyaltySyncHandler
 import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryWebSocketManager
 import com.viwa.android.data.remote.telemetry.mvp.SimpleTelemetryCoordinator
+import com.viwa.android.data.remote.telemetry.v3.TelemetryDispenseSyncCoordinator
 import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.data.telemetry.loyalty.LoyaltyWsCodec
 import io.mockk.coEvery
@@ -43,8 +44,7 @@ class ViwaTelemetryServiceTest {
                 configRepository = configRepository,
                 mvpCoordinator = mockk<SimpleTelemetryCoordinator>(relaxed = true),
                 wsManager = wsManager,
-                waterOutboxStore = mockk(relaxed = true),
-                outboxDrainCoordinator = mockk(relaxed = true),
+                dispenseSyncCoordinator = mockk(relaxed = true),
                 offlinePourAuthorizationService = mockk(relaxed = true),
                 scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
             )
@@ -157,9 +157,7 @@ class ViwaTelemetryServiceTest {
         // given
         val wsManager = mockk<MvpTelemetryWebSocketManager>(relaxed = true)
         coEvery { wsManager.sendEnvelope(any(), any(), any()) } returns Result.success("msg-legacy")
-        val waterOutboxStore = mockk<com.viwa.android.data.local.outbox.LoyaltyWaterOutboxStore>(relaxed = true)
-        val outboxDrainCoordinator =
-            mockk<com.viwa.android.data.remote.telemetry.mvp.MachineOutboxDrainCoordinator>(relaxed = true)
+        val dispenseSyncCoordinator = mockk<TelemetryDispenseSyncCoordinator>(relaxed = true)
         val configRepository = mockk<ConfigRepository>(relaxed = true)
         coEvery { configRepository.get(JsonStoreKeys.TELEMETRY_PAUSED_BY_USER) } returns "false"
         var handler: MvpTelemetryLoyaltySyncHandler? = null
@@ -173,8 +171,7 @@ class ViwaTelemetryServiceTest {
                 configRepository = configRepository,
                 mvpCoordinator = mockk<SimpleTelemetryCoordinator>(relaxed = true),
                 wsManager = wsManager,
-                waterOutboxStore = waterOutboxStore,
-                outboxDrainCoordinator = outboxDrainCoordinator,
+                dispenseSyncCoordinator = dispenseSyncCoordinator,
                 offlinePourAuthorizationService = mockk(relaxed = true),
                 scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
             )
@@ -201,16 +198,14 @@ class ViwaTelemetryServiceTest {
         coVerify { wsManager.sendEnvelope(LoyaltyWsCodec.TYPE_STATUS_GET, any(), any()) }
         coVerify { wsManager.sendEnvelope(LoyaltyWsCodec.TYPE_LEVELS_LIST, any(), any()) }
         coVerify {
-            waterOutboxStore.enqueueWaterUse(
-                clientId = "660e8400-e29b-41d4-a716-446655440010",
-                requestUuid = "880e8400-e29b-41d4-a716-446655440034",
-                volumeMl = 200,
-                drinkId = 1,
-                isFree = true,
-                priceKopecks = 0,
+            dispenseSyncCoordinator.enqueuePourReport(
+                match {
+                    it.requestUuid == "880e8400-e29b-41d4-a716-446655440034" &&
+                        it.volumeMl == 200 &&
+                        it.plainWaterType == "FILTERED"
+                },
             )
         }
-        coVerify { outboxDrainCoordinator.onEnqueue() }
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.viwa.android.data.remote.telemetry.mvp
 
 import com.viwa.android.data.local.outbox.MachineOutboxEntryEntity
+import com.viwa.android.data.local.outbox.MachineOutboxKind
 import com.viwa.android.data.local.outbox.MachineOutboxStore
 import com.viwa.android.data.local.outbox.OutboxFeatureFlags
 import com.viwa.android.data.local.outbox.OutboxRetryPolicy
@@ -214,7 +215,8 @@ constructor(
             val entry = byMessageId[result.messageId] ?: return@forEach
             when (result.status.lowercase()) {
                 "acked", "idempotent" -> {
-                    outboxStore.markAcked(messageId = result.messageId)
+                    val kind = MachineOutboxKind.fromWire(entry.kind) ?: return@forEach
+                    outboxStore.markAcked(messageId = result.messageId, kind = kind)
                     ackedMessageIds += result.messageId
                 }
                 "rejected" -> outboxStore.markServerError(entry, result.code ?: "REJECTED", "batch rejected")

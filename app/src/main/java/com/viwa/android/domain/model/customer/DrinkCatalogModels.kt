@@ -43,6 +43,8 @@ data class DrinkContainer(
     val containerNumber: Int,
     val sodaStatus: Boolean?,
     val product: DrinkProduct,
+    /** Stable catalog UUID from telemetry cells snapshot. */
+    val productUuid: String,
     val volumeMl: Int?,
     val minVolumeMl: Int?,
     val isActive: Boolean = true,

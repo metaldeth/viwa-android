@@ -1,10 +1,7 @@
 package com.viwa.android.data.local.outbox
 
 import com.viwa.android.data.local.db.JsonStoreKeys
-import com.viwa.android.data.local.sales.PendingSale
-import com.viwa.android.data.local.sales.PendingSaleStatus
 import com.viwa.android.data.repository.ConfigRepository
-import com.viwa.android.data.remote.telemetry.mvp.TelemetrySalesMessageCodec
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -33,47 +30,6 @@ constructor(
 
     private val migrationMutex = Mutex()
     private var migrationDone = false
-
-    suspend fun enqueueSale(sale: PendingSale): EnqueueResult {
-        ensureMigrated()
-        val existing =
-            dao.findByKindAndIdempotencyKey(
-                MachineOutboxKind.SALE_REPORT.wireValue,
-                sale.saleId,
-            )
-        if (existing != null) {
-            return EnqueueResult.Duplicate(existing.localId)
-        }
-        val now = clock()
-        val localId = UUID.randomUUID().toString()
-        val messageId = UUID.randomUUID().toString()
-        val payloadJson = json.encodeToString(TelemetrySalesMessageCodec.encodeSaleReportPayload(sale))
-        val row =
-            MachineOutboxEntryEntity(
-                localId = localId,
-                kind = MachineOutboxKind.SALE_REPORT.wireValue,
-                idempotencyKey = sale.saleId,
-                messageId = messageId,
-                payloadJson = payloadJson,
-                status = MachineOutboxStatus.PENDING.name,
-                attempts = sale.attempts,
-                wsAckFailures = 0,
-                nextRetryAtMs = sale.nextRetryAtMillis.coerceAtMost(now),
-                lastError = null,
-                sessionGenerationAtSend = null,
-                createdAtMs = now,
-                ackedAtMs = null,
-                inFlightSinceMs = null,
-            )
-        val inserted = dao.insert(row)
-        return if (inserted == -1L) {
-            EnqueueResult.Duplicate(
-                dao.findByKindAndIdempotencyKey(MachineOutboxKind.SALE_REPORT.wireValue, sale.saleId)?.localId,
-            )
-        } else {
-            EnqueueResult.Inserted(localId)
-        }
-    }
 
     suspend fun listDrainable(limit: Int = OutboxRetryPolicy.MAX_BATCH_SIZE): List<MachineOutboxEntryEntity> {
         ensureMigrated()
@@ -108,7 +64,7 @@ constructor(
     suspend fun markAcked(
         messageId: String? = null,
         idempotencyKey: String? = null,
-        kind: MachineOutboxKind = MachineOutboxKind.SALE_REPORT,
+        kind: MachineOutboxKind,
     ): Boolean {
         val entry =
             when {
@@ -327,45 +283,9 @@ constructor(
         if (configRepository.get(JsonStoreKeys.OUTBOX_PENDING_SALES_IMPORTED) == "true") {
             return
         }
-        val raw = configRepository.getJson(JsonStoreKeys.PENDING_SALES) ?: run {
-            markImported()
-            return
-        }
-        val legacySales =
-            runCatching {
-                json.decodeFromString<List<PendingSale>>(raw)
-            }.getOrElse {
-                Timber.tag(TAG).e(it, "Pending sales migration: decode failed")
-                emptyList()
-            }
-        val now = clock()
-        var imported = 0
-        legacySales
-            .filter { it.status == PendingSaleStatus.PENDING }
-            .forEach { sale ->
-                val messageId = UUID.randomUUID().toString()
-                val payloadJson = json.encodeToString(TelemetrySalesMessageCodec.encodeSaleReportPayload(sale))
-                val row =
-                    MachineOutboxEntryEntity(
-                        localId = UUID.randomUUID().toString(),
-                        kind = MachineOutboxKind.SALE_REPORT.wireValue,
-                        idempotencyKey = sale.saleId,
-                        messageId = messageId,
-                        payloadJson = payloadJson,
-                        status = MachineOutboxStatus.PENDING.name,
-                        attempts = sale.attempts,
-                        wsAckFailures = 0,
-                        nextRetryAtMs = sale.nextRetryAtMillis,
-                        lastError = null,
-                        sessionGenerationAtSend = null,
-                        createdAtMs = now,
-                        ackedAtMs = null,
-                        inFlightSinceMs = null,
-                    )
-                if (dao.insert(row) != -1L) imported++
-            }
+        // Telemetry v3 breaks sale.report compatibility; legacy JsonStore rows are not migrated.
         markImported()
-        Timber.i("PendingSalesOutboxMigrator: imported $imported/${legacySales.size} rows (JsonStore preserved)")
+        Timber.i("PendingSalesOutboxMigrator: skipped legacy sale.report import (telemetry v3)")
     }
 
     private suspend fun markImported() {

@@ -6,6 +6,7 @@ import com.viwa.android.data.local.db.JsonStoreKeys
 import com.viwa.android.data.local.security.MachineSecretStore
 import com.viwa.android.data.remote.telemetry.ConnectionState
 import com.viwa.android.data.repository.ConfigRepository
+import com.viwa.android.data.remote.telemetry.v3.TelemetryDispenseSyncCoordinator
 import com.viwa.android.di.AppIoScope
 import com.viwa.android.domain.model.MachineRegistration
 import com.viwa.android.domain.model.TelemetryConfig
@@ -31,7 +32,7 @@ constructor(
     private val apiClient: MvpTelemetryApiClient,
     private val wsManager: MvpTelemetryWebSocketManager,
     private val cellsSyncCoordinator: TelemetryCellsSyncCoordinator,
-    private val salesSyncCoordinator: TelemetrySalesSyncCoordinator,
+    private val dispenseSyncCoordinator: TelemetryDispenseSyncCoordinator,
     private val configRepository: ConfigRepository,
     private val machineSecretStore: MachineSecretStore,
     private val jwtCache: MachineJwtCache,
@@ -62,7 +63,7 @@ constructor(
         wsManager.cellsSyncHandler =
             object : MvpTelemetryCellsSyncHandler {
                 override suspend fun onWebSocketHello() {
-                    salesSyncCoordinator.onWebSocketHello()
+                    dispenseSyncCoordinator.onWebSocketHello()
                     cellsSyncCoordinator.onWebSocketHello()
                 }
 

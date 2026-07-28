@@ -23,7 +23,40 @@ constructor(
     private val hardware: ControllerHardwareManager,
     private val configRepository: ConfigRepository,
 ) {
-    suspend fun getWaterUsageMl(): Int =
+    private var holdPourBaselineMl: Int? = null
+
+    suspend fun getWaterUsageMl(): Int {
+        val ml = readCounterMlWithoutReset()
+        if (ml > 0) {
+            hardware.sendCommand(RequestCommand.ResetWaterCounter, ControllerConstants.DEFAULT_BODY)
+        }
+        return ml
+    }
+
+    /** Baseline for subscription hold-to-pour delta measurement. */
+    suspend fun beginHoldPourSession() {
+        holdPourBaselineMl = readCounterMlWithoutReset()
+    }
+
+    suspend fun endHoldPourSessionAndReset(): Int {
+        val baseline = holdPourBaselineMl ?: return 0
+        holdPourBaselineMl = null
+        val after = readCounterMlWithoutReset()
+        val delta = (after - baseline).coerceAtLeast(0)
+        if (delta > 0) {
+            hardware.sendCommand(RequestCommand.ResetWaterCounter, ControllerConstants.DEFAULT_BODY)
+            val current = configRepository.get(JsonStoreKeys.WATER_USAGE_ML)?.toDoubleOrNull() ?: 0.0
+            configRepository.set(JsonStoreKeys.WATER_USAGE_ML, (current + delta).toString())
+            Timber.tag(TAG).i("hold pour +%d ml → total %.1f ml", delta, current + delta)
+        }
+        return delta
+    }
+
+    fun cancelHoldPourSession() {
+        holdPourBaselineMl = null
+    }
+
+    private suspend fun readCounterMlWithoutReset(): Int =
         coroutineScope {
             val awaitAnswer =
                 async {
@@ -36,19 +69,15 @@ constructor(
             val answer =
                 withTimeoutOrNull(ControllerConstants.WATER_COUNTER_TIMEOUT_MS) {
                     awaitAnswer.await()
-                }
-            if (answer == null) {
-                return@coroutineScope 0
-            }
-            val p = answer.payload
-            val ml =
-                if (p.size >= 2) {
-                    ((p[0].toInt() and 0xff) shl 8) or (p[1].toInt() and 0xff)
-                } else {
-                    0
-                }
-            hardware.sendCommand(RequestCommand.ResetWaterCounter, ControllerConstants.DEFAULT_BODY)
-            ml
+                } ?: return@coroutineScope 0
+            decodeCounterPayload(answer.payload)
+        }
+
+    private fun decodeCounterPayload(payload: ByteArray): Int =
+        if (payload.size >= 2) {
+            ((payload[0].toInt() and 0xff) shl 8) or (payload[1].toInt() and 0xff)
+        } else {
+            0
         }
 
  /**

@@ -5,8 +5,11 @@ import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryLoyaltySyncHandler
 import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryWebSocketManager
 import com.viwa.android.data.remote.telemetry.mvp.RegistrationKeyUtils
 import com.viwa.android.data.remote.telemetry.mvp.SimpleTelemetryCoordinator
-import com.viwa.android.data.local.outbox.LoyaltyWaterOutboxStore
-import com.viwa.android.data.remote.telemetry.mvp.MachineOutboxDrainCoordinator
+import com.viwa.android.data.remote.telemetry.v3.TelemetryDispenseSyncCoordinator
+import com.viwa.android.data.remote.telemetry.mvp.TelemetryIsoTimestamps
+import com.viwa.android.domain.telemetry.PourEventSnapshot
+import com.viwa.android.domain.telemetry.PlainWaterType
+import com.viwa.android.domain.telemetry.PourKind
 import com.viwa.android.domain.offline.OfflineAuthorizationReason
 import com.viwa.android.domain.offline.OfflinePourAuthorizationService
 import com.viwa.android.data.telemetry.loyalty.LoyaltyWaterUseRequest
@@ -54,8 +57,7 @@ constructor(
     private val configRepository: ConfigRepository,
     private val mvpCoordinator: SimpleTelemetryCoordinator,
     private val wsManager: MvpTelemetryWebSocketManager,
-    private val waterOutboxStore: LoyaltyWaterOutboxStore,
-    private val outboxDrainCoordinator: MachineOutboxDrainCoordinator,
+    private val dispenseSyncCoordinator: TelemetryDispenseSyncCoordinator,
     private val offlinePourAuthorizationService: OfflinePourAuthorizationService,
     @AppIoScope private val scope: CoroutineScope,
 ) {
@@ -473,26 +475,27 @@ constructor(
         subscriptionSaleTimers.remove(requestUuid)?.cancel()
     }
 
-    /** UC-6: durable `loyalty.water.use` via Room outbox (online + offline promote). */
+    /** Legacy API → telemetry v3 `telemetry.pour.report` (plain water, measured ml). */
     suspend fun sendWaterUse(request: LoyaltyWaterUseRequest): Result<Unit> {
         if (!sentWaterUseRequestUuids.add(request.requestUuid)) {
-            Timber.d("ViwaTelemetry: water.use deduplicated requestUuid=${request.requestUuid}")
+            Timber.d("ViwaTelemetry: pour.report deduplicated requestUuid=${request.requestUuid}")
             return Result.success(Unit)
         }
         lastStatusClientId = request.clientId
-        waterOutboxStore.enqueueWaterUse(
-            clientId = request.clientId,
-            requestUuid = request.requestUuid,
-            volumeMl = request.volumeMl,
-            drinkId = request.drinkId ?: request.ingredientId,
-            isFree = request.isFree,
-            priceKopecks = request.priceKopecks,
-        )
-        outboxDrainCoordinator.onEnqueue()
+        val pour =
+            PourEventSnapshot(
+                requestUuid = request.requestUuid,
+                pouredAt = TelemetryIsoTimestamps.nowUtc(),
+                volumeMl = request.volumeMl,
+                pourKind = PourKind.PLAIN_WATER.wireValue,
+                clientId = request.clientId,
+                plainWaterType = PlainWaterType.FILTERED.wireValue,
+            )
+        dispenseSyncCoordinator.enqueuePourReport(pour)
         return Result.success(Unit)
     }
 
-    /** Backward-compatible wrapper mapping legacy body → loyalty.water.use. */
+    /** Backward-compatible wrapper mapping legacy body → telemetry.pour.report. */
     suspend fun sendUseSubscriptionSaleTopic(body: UseSubscriptionSaleBody): Result<Unit> {
         val volumeMl = (body.volume * 1000).toInt().coerceAtLeast(1)
         return sendWaterUse(

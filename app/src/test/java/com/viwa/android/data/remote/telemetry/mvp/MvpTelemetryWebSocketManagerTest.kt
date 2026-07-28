@@ -8,6 +8,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -39,6 +40,13 @@ class MvpTelemetryWebSocketManagerTest {
         trafficLogger = NetworkTrafficLogger()
         cellsHandler = mockk(relaxed = true)
         loyaltyHandler = mockk(relaxed = true)
+    }
+
+    @After
+    fun tearDown() {
+        if (::manager.isInitialized) {
+            manager.disconnect()
+        }
     }
 
     @Test

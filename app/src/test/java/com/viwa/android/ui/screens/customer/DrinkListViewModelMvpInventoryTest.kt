@@ -24,6 +24,7 @@ import com.viwa.android.services.payment.CardPaymentOrchestrator
 import com.viwa.android.data.payment.aqsi.AqsiUsbPaymentManager
 import com.viwa.android.services.payment.ControllerSbpNotifyService
 import com.viwa.android.services.preparing.PreparingManager
+import com.viwa.android.domain.telemetry.HoldPourTelemetryCoordinator
 import com.viwa.android.services.telemetry.ViwaTelemetryService
 import io.mockk.every
 import io.mockk.mockk
@@ -172,6 +173,7 @@ class DrinkListViewModelMvpInventoryTest {
             networkTraffic,
             controllerTraffic,
             orch,
+            mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
         )
     }
 

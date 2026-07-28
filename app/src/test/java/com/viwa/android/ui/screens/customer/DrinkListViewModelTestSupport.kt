@@ -23,6 +23,7 @@ import com.viwa.android.services.payment.ControllerSbpNotifyService
 import com.viwa.android.services.preparing.CustomerPreparingPhase
 import com.viwa.android.services.preparing.PreparingManager
 import com.viwa.android.services.telemetry.ViwaTelemetryService
+import com.viwa.android.domain.telemetry.HoldPourTelemetryCoordinator
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -119,6 +120,7 @@ internal object DrinkListViewModelTestSupport {
                 networkTraffic,
                 controllerTraffic,
                 cardPaymentOrchestrator,
+                mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
             )
         return vm to subscriptionUseCases
     }

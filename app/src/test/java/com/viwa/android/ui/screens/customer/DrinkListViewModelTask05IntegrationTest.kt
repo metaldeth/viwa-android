@@ -48,6 +48,7 @@ import com.viwa.android.services.payment.ControllerSbpNotifyService
 import com.viwa.android.services.preparing.CustomerPreparingPhase
 import com.viwa.android.services.preparing.PrepareDrinkResult
 import com.viwa.android.services.preparing.PreparingManager
+import com.viwa.android.domain.telemetry.HoldPourTelemetryCoordinator
 import com.viwa.android.services.telemetry.ViwaTelemetryService
 import com.viwa.android.data.payment.aqsi.AqsiDiagnosticOutcome
 import io.mockk.coEvery
@@ -237,6 +238,7 @@ class DrinkListViewModelTask05IntegrationTest {
             networkTraffic,
             controllerTraffic,
             cardPaymentOrchestrator,
+            mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
         ) to subscriptionUseCases
     }
 
@@ -258,6 +260,7 @@ class DrinkListViewModelTask05IntegrationTest {
             containerNumber = 3,
             sodaStatus = null,
             product = product,
+            productUuid = "test-product-uuid",
             volumeMl = 1000,
             minVolumeMl = 0,
             isActive = true,
@@ -429,6 +432,7 @@ class DrinkListViewModelTask05IntegrationTest {
             networkTraffic,
             controllerTraffic,
             orch,
+            mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
         ) to subscriptionUseCases
     }
 
