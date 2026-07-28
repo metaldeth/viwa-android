@@ -301,6 +301,25 @@ class TechnicianKeyPolicySecurityTest {
         assertTrue(access.isAuthorized())
     }
 
+    @Test
+    fun `studio password path establishes local session and navigates`() {
+        val clock = BoundedTelemetryClock().apply { updateFromServer("2026-07-27T10:00:00.000Z") }
+        val access = TechnicianServiceMenuAccess(sessionStore, clock)
+        val gate = ServiceMenuNavigationGate(access, sessionStore, clock)
+        var navigated = false
+        assertFalse(gate.isAuthorized())
+        gate.navigateAfterLocalStudioPassword { navigated = true }
+        assertTrue(navigated)
+        assertTrue(gate.isAuthorized())
+        assertEquals(
+            ServiceMenuNavigationGate.LOCAL_STUDIO_TECHNICIAN_KEY_ID,
+            sessionStore.currentSession()?.technicianKeyId,
+        )
+        assertTrue(
+            sessionStore.currentSession()?.scopes?.contains(TechnicianKeyConstants.SCOPE_SERVICE_MENU) == true,
+        )
+    }
+
     private suspend fun seedPolicy(
         serverEnabled: Boolean?,
         trustedSync: Boolean,

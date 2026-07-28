@@ -41,29 +41,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.viwa.android.data.remote.telemetry.mvp.SerialNumberUtils
+import com.viwa.android.ui.screens.service.devices.ViwaDevicesTab
+import com.viwa.android.ui.screens.service.tabs.ViwaAppearanceThemeSection
 import com.viwa.android.ui.screens.service.tabs.ViwaControllerDebugTab
 import com.viwa.android.ui.screens.service.tabs.ViwaIdleTab
-import com.viwa.android.ui.screens.service.tabs.ViwaSyrupCalibrationTab
-import com.viwa.android.ui.screens.service.tabs.ViwaWaterCalibrationTab
-import com.viwa.android.ui.screens.service.devices.ViwaDevicesControllerTab
-import com.viwa.android.ui.screens.service.devices.ViwaDevicesPaymentTab
-import com.viwa.android.ui.screens.service.devices.ViwaDevicesPortsTab
-import com.viwa.android.ui.screens.service.devices.ViwaDevicesScannerTab
-import com.viwa.android.ui.screens.service.devices.ViwaDevicesTab
-import com.viwa.android.ui.screens.service.tabs.ViwaEquipmentRfidTab
 import com.viwa.android.ui.screens.service.tabs.ViwaInventoryVolumesTab
-import com.viwa.android.ui.screens.service.tabs.ViwaTelemetryInventoryTab
-import com.viwa.android.ui.screens.service.tabs.ViwaAnimationTab
-import com.viwa.android.ui.screens.service.tabs.ViwaAqsiDiagnosticsTab
-import com.viwa.android.ui.screens.service.tabs.ViwaAqsiSettingsTab
-import com.viwa.android.ui.screens.service.tabs.ViwaCardPaymentMethodTab
 import com.viwa.android.ui.screens.service.tabs.ViwaPreparingTimeTab
-import com.viwa.android.ui.screens.service.tabs.ViwaFlowStripRgbSection
-import com.viwa.android.ui.screens.service.tabs.ViwaThemePrimaryButtonColorSection
-import com.viwa.android.ui.screens.service.tabs.ViwaSubscriptionDebugTab
-import com.viwa.android.ui.screens.service.tabs.ViwaKeyboardTestTab
-import com.viwa.android.ui.screens.service.tabs.ViwaTelemetryWsLogTab
 import com.viwa.android.ui.screens.service.tabs.ViwaServiceDashboardTab
+import com.viwa.android.ui.screens.service.tabs.ViwaSyrupCalibrationTab
+import com.viwa.android.ui.screens.service.tabs.ViwaTelemetryWsLogTab
+import com.viwa.android.ui.screens.service.tabs.ViwaWaterCalibrationTab
 
 @Composable
 fun ViwaServiceMenuTabContent(
@@ -81,8 +68,6 @@ fun ViwaServiceMenuTabContent(
             when (state.selectedServiceSubTabId) {
                 ViwaServiceSubTabId.TelemetryConnection -> ViwaTelemetryConnectionTab(state, viewModel)
                 ViwaServiceSubTabId.TelemetryAddresses -> ViwaTelemetryAddressesTab(state, viewModel)
-                ViwaServiceSubTabId.TelemetryInventory -> ViwaTelemetryInventoryTab(viewModel)
-                ViwaServiceSubTabId.TelemetryTests -> ViwaTelemetryTestsTab(state, viewModel)
                 else -> ViwaTelemetryConnectionTab(state, viewModel)
             }
 
@@ -90,8 +75,6 @@ fun ViwaServiceMenuTabContent(
             when (state.selectedServiceSubTabId) {
                 ViwaServiceSubTabId.DebugWsLogs -> ViwaTelemetryWsLogTab(viewModel)
                 ViwaServiceSubTabId.DebugController -> ViwaControllerDebugTab(state, viewModel)
-                ViwaServiceSubTabId.DebugSubscription -> ViwaSubscriptionDebugTab(state, viewModel)
-                ViwaServiceSubTabId.DebugKeyboardTest -> ViwaKeyboardTestTab()
                 else -> ViwaTelemetryWsLogTab(viewModel)
             }
 
@@ -103,24 +86,7 @@ fun ViwaServiceMenuTabContent(
                 else -> ViwaSbpIntegrationTab(state, viewModel)
             }
 
-        ViwaServiceGroupId.CardPayment ->
-            when (state.selectedServiceSubTabId) {
-                ViwaServiceSubTabId.CardPaymentMethod -> ViwaCardPaymentMethodTab()
-                ViwaServiceSubTabId.AqsiServiceSettings -> ViwaAqsiSettingsTab()
-                ViwaServiceSubTabId.AqsiServiceDiagnostics -> ViwaAqsiDiagnosticsTab()
-                else -> ViwaCardPaymentMethodTab()
-            }
-
-        ViwaServiceGroupId.Equipment ->
-            when (state.selectedServiceSubTabId) {
-                ViwaServiceSubTabId.Devices -> ViwaDevicesTab()
-                ViwaServiceSubTabId.Ports -> ViwaDevicesPortsTab()
-                ViwaServiceSubTabId.Controller -> ViwaDevicesControllerTab()
-                ViwaServiceSubTabId.Payment -> ViwaDevicesPaymentTab()
-                ViwaServiceSubTabId.Scanner -> ViwaDevicesScannerTab()
-                ViwaServiceSubTabId.Rfid -> ViwaEquipmentRfidTab(state, viewModel)
-                else -> ViwaDevicesTab()
-            }
+        ViwaServiceGroupId.Equipment -> ViwaDevicesTab()
 
         ViwaServiceGroupId.Maintenance ->
             when (state.selectedServiceSubTabId) {
@@ -145,29 +111,11 @@ fun ViwaServiceMenuTabContent(
                 else -> ViwaSettingsDevModeTab(state, viewModel)
             }
 
-        ViwaServiceGroupId.Updater ->
-            Box(modifier = Modifier.fillMaxSize()) {
-                ViwaUpdaterSection(state = state, viewModel = viewModel)
-            }
-
-        ViwaServiceGroupId.Performance ->
-            when (state.selectedServiceSubTabId) {
-                ViwaServiceSubTabId.PerformanceGeneral ->
- ViwaPlaceholderTab("Общие настройки производительности — как CommonPerfomanceTab.")
-                ViwaServiceSubTabId.Animation ->
-                    ViwaAnimationTab(state, viewModel)
-                else ->
- ViwaPlaceholderTab("Производительность — см.")
-            }
-
+        ViwaServiceGroupId.CardPayment,
+        ViwaServiceGroupId.Updater,
+        ViwaServiceGroupId.Performance,
         ViwaServiceGroupId.Metrics ->
-            when (state.selectedServiceSubTabId) {
-                ViwaServiceSubTabId.MetricsMemory ->
- ViwaPlaceholderTab("Метрики памяти и ресурсов — MetricsTab.")
-                else ->
- ViwaPlaceholderTab("Метрики — см.")
-            }
-
+            ViwaPlaceholderTab("Раздел недоступен в меню.")
     }
 }
 
@@ -177,46 +125,9 @@ private fun ViwaThemeTab(
     viewModel: ServiceViewModel,
 ) {
     SettingsColumn {
-        Text("Тема оформления", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                if (state.isDarkTheme) "Тёмная тема" else "Светлая тема",
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Switch(
-                checked = state.isDarkTheme,
-                onCheckedChange = viewModel::setDarkTheme,
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
- "Светлая тема — основная для продакшена. Тёмная тема.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            "Цвет бренда (кнопка «Налить воду», шкала подписки, акценты): настраивается отдельно для текущей темы — переключите «Тёмная тема», чтобы задать второй вариант.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        ViwaThemePrimaryButtonColorSection(
-            argb = state.customerPrimaryButtonArgb,
-            onRgbPreview = viewModel::previewCustomerPrimaryRgb,
-            onSliderFinished = viewModel::persistCustomerPrimaryButtonColor,
-            onReset = viewModel::resetCustomerPrimaryButtonColor,
-        )
-        ViwaFlowStripRgbSection(
-            argb = state.flowStripRgbArgb,
-            onRgbPreview = viewModel::previewFlowStripRgb,
-            onSliderFinished = viewModel::persistFlowStripRgb,
-            onReset = viewModel::resetFlowStripRgbToDefault,
-        )
+        ViwaAppearanceThemeSection(state = state, viewModel = viewModel)
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+        ViwaUpdaterSection(state = state, viewModel = viewModel, embedded = true)
     }
 }
 

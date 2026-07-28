@@ -1,19 +1,19 @@
 package com.viwa.android.ui.screens.service
 
-/** Группы и подвкладки сервисного меню; телеметрия — четыре горизонтальных таба (подключение, адреса, наполнение, тесты). Интеграции (СБП, Нанокасса, MAX) — отдельная группа. Rail+табы. */
+/** Группы и подвкладки сервисного меню (rail + горизонтальные табы). */
 
 sealed interface ViwaServiceGroupId {
- /** Сводка по автомату: ячейки, связь, вода. */
+    /** Сводка по автомату: ячейки, связь, вода. */
     data object Dashboard : ViwaServiceGroupId
 
     data object Telemetry : ViwaServiceGroupId
 
- /** Логи сети и дебаг контроллера. */
+    /** Логи сети и дебаг контроллера. */
     data object Debug : ViwaServiceGroupId
 
     data object Integrations : ViwaServiceGroupId
 
- /** Настройка и диагностика карточного метода (PAX / aQsi), см. ТЗ A6. */
+    /** Настройка карточного метода — только runtime, не в rail. */
     data object CardPayment : ViwaServiceGroupId
 
     data object Equipment : ViwaServiceGroupId
@@ -22,6 +22,7 @@ sealed interface ViwaServiceGroupId {
 
     data object Settings : ViwaServiceGroupId
 
+    /** OTA перенесено на вкладку «Тема». */
     data object Updater : ViwaServiceGroupId
 
     data object Performance : ViwaServiceGroupId
@@ -36,10 +37,10 @@ sealed interface ViwaServiceSubTabId {
 
     data object TelemetryAddresses : ViwaServiceSubTabId
 
- /** Перенесено в группу «Дебаг». */
+    /** Перенесено в группу «Дебаг». */
     data object TelemetryWsLogs : ViwaServiceSubTabId
 
- /** Итог merge базы + матрицы. */
+    /** Итог merge базы + матрицы. */
     data object TelemetryInventory : ViwaServiceSubTabId
 
     data object TelemetryTests : ViwaServiceSubTabId
@@ -50,7 +51,7 @@ sealed interface ViwaServiceSubTabId {
 
     data object DebugSubscription : ViwaServiceSubTabId
 
- /** Тест ViwaNumericKeyboard / ViwaAlphanumericKeyboard без IME. */
+    /** Тест ViwaNumericKeyboard / ViwaAlphanumericKeyboard без IME. */
     data object DebugKeyboardTest : ViwaServiceSubTabId
 
     data object Sbp : ViwaServiceSubTabId
@@ -95,7 +96,7 @@ sealed interface ViwaServiceSubTabId {
 
     data object MetricsMemory : ViwaServiceSubTabId
 
- /** Вкладка «Метод» — aQsi USB (единственный карточный метод). */
+    /** Вкладка «Метод» — aQsi USB (единственный карточный метод). */
     data object CardPaymentMethod : ViwaServiceSubTabId
 
     data object AqsiServiceSettings : ViwaServiceSubTabId
@@ -117,6 +118,17 @@ data class ViwaServiceGroupSpec(
 val ViwaServiceMenuGroups: List<ViwaServiceGroupSpec> =
     listOf(
         ViwaServiceGroupSpec(
+            id = ViwaServiceGroupId.Maintenance,
+            label = "Обслуживание",
+            subTabs =
+                listOf(
+                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.Inventory, "Остатки"),
+                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.CalibrationSyrup, "Калибровка сиропов"),
+                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.CalibrationWater, "Калибровка воды"),
+                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.PreparingTime, "Время готовки"),
+                ),
+        ),
+        ViwaServiceGroupSpec(
             id = ViwaServiceGroupId.Dashboard,
             label = "Дашборд",
             subTabs =
@@ -131,8 +143,6 @@ val ViwaServiceMenuGroups: List<ViwaServiceGroupSpec> =
                 listOf(
                     ViwaServiceSubTabSpec(ViwaServiceSubTabId.TelemetryConnection, "Подключение"),
                     ViwaServiceSubTabSpec(ViwaServiceSubTabId.TelemetryAddresses, "Адреса"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.TelemetryInventory, "Наполнение"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.TelemetryTests, "Тесты"),
                 ),
         ),
         ViwaServiceGroupSpec(
@@ -142,8 +152,6 @@ val ViwaServiceMenuGroups: List<ViwaServiceGroupSpec> =
                 listOf(
                     ViwaServiceSubTabSpec(ViwaServiceSubTabId.DebugWsLogs, "Логи сети"),
                     ViwaServiceSubTabSpec(ViwaServiceSubTabId.DebugController, "Дебаг контроллера"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.DebugSubscription, "Подписка"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.DebugKeyboardTest, "Клавиатура (тест)"),
                 ),
         ),
         ViwaServiceGroupSpec(
@@ -157,37 +165,11 @@ val ViwaServiceMenuGroups: List<ViwaServiceGroupSpec> =
                 ),
         ),
         ViwaServiceGroupSpec(
-            id = ViwaServiceGroupId.CardPayment,
-            label = "Оплата картой",
-            subTabs =
-                listOf(
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.CardPaymentMethod, "Метод"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.AqsiServiceSettings, "aQsi"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.AqsiServiceDiagnostics, "Тесты и журнал"),
-                ),
-        ),
-        ViwaServiceGroupSpec(
             id = ViwaServiceGroupId.Equipment,
             label = "Устройства",
             subTabs =
                 listOf(
                     ViwaServiceSubTabSpec(ViwaServiceSubTabId.Devices, "Устройства"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.Ports, "Порты"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.Controller, "Контроллер"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.Payment, "Платёжник"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.Scanner, "Сканер"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.Rfid, "RFID"),
-                ),
-        ),
-        ViwaServiceGroupSpec(
-            id = ViwaServiceGroupId.Maintenance,
-            label = "Обслуживание",
-            subTabs =
-                listOf(
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.Inventory, "Остатки"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.CalibrationSyrup, "Калибровка сиропов"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.CalibrationWater, "Калибровка воды"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.PreparingTime, "Время готовки"),
                 ),
         ),
         ViwaServiceGroupSpec(
@@ -199,28 +181,6 @@ val ViwaServiceMenuGroups: List<ViwaServiceGroupSpec> =
                     ViwaServiceSubTabSpec(ViwaServiceSubTabId.Idle, "Ожидание"),
                     ViwaServiceSubTabSpec(ViwaServiceSubTabId.Window, "Окно"),
                     ViwaServiceSubTabSpec(ViwaServiceSubTabId.Theme, "Тема"),
-                ),
-        ),
-        ViwaServiceGroupSpec(
-            id = ViwaServiceGroupId.Updater,
-            label = "Обновление",
-            subTabs = emptyList(),
-        ),
-        ViwaServiceGroupSpec(
-            id = ViwaServiceGroupId.Performance,
-            label = "Производительность / Оптимизация",
-            subTabs =
-                listOf(
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.PerformanceGeneral, "Общие настройки"),
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.Animation, "Анимации"),
-                ),
-        ),
-        ViwaServiceGroupSpec(
-            id = ViwaServiceGroupId.Metrics,
-            label = "Метрики",
-            subTabs =
-                listOf(
-                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.MetricsMemory, "Память и ресурсы"),
                 ),
         ),
     )

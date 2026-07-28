@@ -248,7 +248,8 @@ class MainActivity : ComponentActivity() {
                                 ViwaNavGraph(
                                     navController = navController,
                                     onOpenService = {
-                                        serviceMenuNavigationGate.navigateIfAuthorized {
+                                        // Password "studio" only — KEY scan uses navigateIfAuthorized above.
+                                        serviceMenuNavigationGate.navigateAfterLocalStudioPassword {
                                             navController.navigate(Routes.Service)
                                         }
                                     },

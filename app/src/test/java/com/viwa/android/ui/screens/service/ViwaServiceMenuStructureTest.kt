@@ -9,49 +9,48 @@ class ViwaServiceMenuStructureTest {
         val groupIds = ViwaServiceMenuGroups.map { it.id }
         assertEquals(
             listOf(
+                ViwaServiceGroupId.Maintenance,
                 ViwaServiceGroupId.Dashboard,
                 ViwaServiceGroupId.Telemetry,
                 ViwaServiceGroupId.Debug,
                 ViwaServiceGroupId.Integrations,
-                ViwaServiceGroupId.CardPayment,
                 ViwaServiceGroupId.Equipment,
-                ViwaServiceGroupId.Maintenance,
                 ViwaServiceGroupId.Settings,
-                ViwaServiceGroupId.Updater,
-                ViwaServiceGroupId.Performance,
-                ViwaServiceGroupId.Metrics,
             ),
             groupIds,
         )
     }
 
     @Test
-    fun telemetrySubTabs_keepConnectionFirst() {
+    fun telemetrySubTabs_keepConnectionAndAddressesOnly() {
         val telemetry = findViwaServiceGroup(ViwaServiceGroupId.Telemetry)
         assertEquals(
             listOf(
                 ViwaServiceSubTabId.TelemetryConnection,
                 ViwaServiceSubTabId.TelemetryAddresses,
-                ViwaServiceSubTabId.TelemetryInventory,
-                ViwaServiceSubTabId.TelemetryTests,
             ),
             telemetry.subTabs.map { it.id },
         )
     }
 
     @Test
-    fun equipmentSubTabs_matchHybridDevicesLayout() {
+    fun debugSubTabs_keepWsLogsAndControllerOnly() {
+        val debug = findViwaServiceGroup(ViwaServiceGroupId.Debug)
+        assertEquals(
+            listOf(
+                ViwaServiceSubTabId.DebugWsLogs,
+                ViwaServiceSubTabId.DebugController,
+            ),
+            debug.subTabs.map { it.id },
+        )
+    }
+
+    @Test
+    fun equipmentSubTabs_showDevicesOnly() {
         val equipment = findViwaServiceGroup(ViwaServiceGroupId.Equipment)
         assertEquals("Устройства", equipment.label)
         assertEquals(
-            listOf(
-                ViwaServiceSubTabId.Devices,
-                ViwaServiceSubTabId.Ports,
-                ViwaServiceSubTabId.Controller,
-                ViwaServiceSubTabId.Payment,
-                ViwaServiceSubTabId.Scanner,
-                ViwaServiceSubTabId.Rfid,
-            ),
+            listOf(ViwaServiceSubTabId.Devices),
             equipment.subTabs.map { it.id },
         )
     }

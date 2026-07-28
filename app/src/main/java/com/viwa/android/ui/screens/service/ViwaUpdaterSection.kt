@@ -33,21 +33,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 fun ViwaUpdaterSection(
     state: ServiceUiState,
     viewModel: ServiceViewModel,
+    embedded: Boolean = false,
 ) {
     val progress by viewModel.updateInstallProgress.collectAsStateWithLifecycle()
     var legacyHost by remember(state.updateHost) { mutableStateOf(state.updateHost) }
     val scheme = MaterialTheme.colorScheme
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = scheme.background,
-        contentColor = scheme.onBackground,
-    ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-        ) {
+    val content: @Composable () -> Unit = {
             Text(
                 "Обновления",
                 color = MaterialTheme.colorScheme.onBackground,
@@ -177,6 +168,25 @@ fun ViwaUpdaterSection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
+            }
+    }
+    if (embedded) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            content()
+        }
+    } else {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = scheme.background,
+            contentColor = scheme.onBackground,
+        ) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+            ) {
+                content()
             }
         }
     }
