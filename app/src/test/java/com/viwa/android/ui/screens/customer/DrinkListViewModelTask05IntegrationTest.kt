@@ -28,6 +28,7 @@ import com.viwa.android.domain.repository.NanoKassaRepository
 import com.viwa.android.domain.repository.SBPRepository
 import com.viwa.android.domain.repository.CardPaymentMethodRepository
 import com.viwa.android.domain.repository.CardPaymentMockModeRepository
+import com.viwa.android.domain.offline.OfflineAuthorizationReason
 import com.viwa.android.domain.usecase.CheckSBPStatusUseCase
 import com.viwa.android.domain.usecase.GetSBPLinkUseCase
 import com.viwa.android.domain.subscription.SubscriptionPaymentInit
@@ -131,7 +132,7 @@ class DrinkListViewModelTask05IntegrationTest {
     }
 
     private fun createTestTelemetry(): ViwaTelemetryService {
-        val mock = mockk<ViwaTelemetryService>(relaxUnitFun = true)
+        val mock = mockk<ViwaTelemetryService>(relaxed = true)
         every { mock.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Disconnected()).asStateFlow()
         every { mock.subscribeInfo } returns MutableStateFlow(null).asStateFlow()
@@ -140,6 +141,8 @@ class DrinkListViewModelTask05IntegrationTest {
             MutableSharedFlow<String>(extraBufferCapacity = 16).asSharedFlow()
         every { mock.invalidLoyaltyCardScans } returns
             MutableSharedFlow<Unit>(extraBufferCapacity = 16).asSharedFlow()
+        every { mock.offlineLoyaltyDenyReason } returns
+            MutableSharedFlow<OfflineAuthorizationReason>(extraBufferCapacity = 16).asSharedFlow()
         return mock
     }
 
@@ -201,8 +204,9 @@ class DrinkListViewModelTask05IntegrationTest {
         val aqsi = mockAqsiManager()
         val cellsRepo = mockk<TelemetryCellsRepository>(relaxUnitFun = true)
         every { cellsRepo.snapshotFlow } returns MutableStateFlow(null).asStateFlow()
-        val checkSbp = mockk<CheckSBPStatusUseCase>(relaxUnitFun = true)
+        val checkSbp = mockk<CheckSBPStatusUseCase>(relaxed = true)
         coEvery { checkSbp(any()) } returns Result.success(SBPStatus.Pending)
+        coEvery { checkSbp.forSubscriptionPayment(any()) } returns Result.success(SBPStatus.Pending)
         val subscriptionUseCases = relaxedSubscriptionPaymentUseCases()
         coEvery { subscriptionUseCases.init(any()) } returns
             Result.success(
@@ -212,7 +216,7 @@ class DrinkListViewModelTask05IntegrationTest {
                     status = SubscriptionPaymentStatus.PENDING,
                 ),
             )
-        val nano = mockk<NanoKassaRepository>(relaxUnitFun = true)
+        val nano = mockk<NanoKassaRepository>(relaxed = true)
         val networkTraffic = mockk<NetworkTrafficLogger>(relaxUnitFun = true)
         every { networkTraffic.entries } returns MutableStateFlow<List<NetworkTrafficEntry>>(emptyList()).asStateFlow()
         val controllerTraffic = mockk<ViwaControllerTrafficLogger>(relaxUnitFun = true)
@@ -379,7 +383,7 @@ class DrinkListViewModelTask05IntegrationTest {
             )
         val preparing =
             preparingOverride
-                ?: mockk<PreparingManager>(relaxUnitFun = true).also {
+                ?: mockk<PreparingManager>(relaxed = true).also {
                     every { it.customerPhase } returns
                         MutableStateFlow(CustomerPreparingPhase.Idle).asStateFlow()
                 }
@@ -445,7 +449,7 @@ class DrinkListViewModelTask05IntegrationTest {
                 getSbp.forSubscription(any(), any(), any())
             } returns Result.success(SBPLink("pay-id-t05", "https://pay/", "qr-data"))
             val tel = createTestTelemetry()
-            val preparing = mockk<PreparingManager>(relaxUnitFun = true)
+            val preparing = mockk<PreparingManager>(relaxed = true)
             every { preparing.customerPhase } returns
                 MutableStateFlow(CustomerPreparingPhase.Idle).asStateFlow()
             val vm = createViewModel(orch, preparing, tel, getSbp).first
@@ -473,7 +477,7 @@ class DrinkListViewModelTask05IntegrationTest {
             val orch = mockk<CardPaymentOrchestrator>(relaxUnitFun = true)
             coEvery { orch.pay(any(), any(), any(), any()) } returns CardPaymentResult.Failed("declined")
             val tel = createTestTelemetry()
-            val preparing = mockk<PreparingManager>(relaxUnitFun = true)
+            val preparing = mockk<PreparingManager>(relaxed = true)
             every { preparing.customerPhase } returns
                 MutableStateFlow(CustomerPreparingPhase.Idle).asStateFlow()
             val getSbp = mockk<GetSBPLinkUseCase>(relaxUnitFun = true)
@@ -503,7 +507,7 @@ class DrinkListViewModelTask05IntegrationTest {
             val orch = mockk<CardPaymentOrchestrator>(relaxUnitFun = true)
             coEvery { orch.pay(any(), any(), any(), any()) } returns CardPaymentResult.Failed("declined")
             val tel = createTestTelemetry()
-            val preparing = mockk<PreparingManager>(relaxUnitFun = true)
+            val preparing = mockk<PreparingManager>(relaxed = true)
             every { preparing.customerPhase } returns
                 MutableStateFlow(CustomerPreparingPhase.Idle).asStateFlow()
             val getSbp = mockk<GetSBPLinkUseCase>(relaxUnitFun = true)
@@ -702,10 +706,21 @@ class DrinkListViewModelTask05IntegrationTest {
     fun task07_aqsiApprovedDrink_prepareDrinkUsesCardSaleMethodLikePax() =
         runBlocking {
             val tel = createTestTelemetry()
-            val preparing = mockk<PreparingManager>(relaxUnitFun = true)
+            val preparing = mockk<PreparingManager>(relaxed = true)
             every { preparing.customerPhase } returns
                 MutableStateFlow(CustomerPreparingPhase.Idle).asStateFlow()
-            coEvery { preparing.prepareDrink(any(), any(), any(), any(), any(), any()) } returns
+            coEvery {
+                preparing.prepareDrink(
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    null,
+                )
+            } returns
                 PrepareDrinkResult.Ok(estSeconds = 30)
 
             val holder = AqsiLastOperationSnapshotHolder()

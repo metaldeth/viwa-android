@@ -9,17 +9,14 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,7 +24,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -36,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -47,51 +42,48 @@ import androidx.compose.ui.unit.sp
 import com.viwa.android.R
 import com.viwa.android.services.telemetry.SubscriptionLevelItem
 import com.viwa.android.ui.theme.MontserratFamily
+import kotlin.math.abs
 
-/** Аналог `RECOMMENDED_LEVEL_INDEX` в `SubscribeOfferScreen.tsx`. */
+/** Аналог рекомендованного тарифа в кабинете (средний из 2–3). */
 private const val RecommendedLevelIndex = 1
 
-private val BadgeBg = Color(0xFFFBBF24)
-private val BadgeText = Color(0xFF7C2D12)
-private val BackButtonGray = Color(0xFF9CA3AF)
+/** Палитра кабинета / лендинга Viwa. */
+private val ScreenBlack = Color(0xFF000000)
+private val VioletAccent = Color(0xFF7F5AF0)
+private val CyanAccent = Color(0xFF00E5FF)
+private val MintPrice = Color(0xF2A6FFE0)
+private val TextPrimary = Color(0xFFF5F5F5)
+private val TextMuted = Color(0x99F5F5F5)
+private val BackButtonGray = Color(0xFF353535)
+private val CtaUnselected = Color(0x2EFFFFFF)
 
 /**
- * Фото-фоны по позиции тарифа (циклически для 5+ тарифов).
- * Изображения с flowstation.ru: фокус → старт, восстановление → дейли, вкус → макс, минералы → 4-й тариф.
+ * Фото-фоны тарифов (drawable-nodpi), циклически для N уровней.
  */
 private data class SubscriptionCardVisual(
     @DrawableRes val photoRes: Int,
     val audienceLine: String,
-    val featureLine: String,
 )
 
-private val CardVisuals = listOf(
-    SubscriptionCardVisual(
-        photoRes = R.drawable.flow_card_nosugar,
-        audienceLine = "Для лёгкого ритма тренировок",
-        featureLine = "Без сахара и лишних калорий",
-    ),
-    SubscriptionCardVisual(
-        photoRes = R.drawable.flow_hero_bg,
-        audienceLine = "Оптимум для регулярных тренировок",
-        featureLine = "Ежедневный запас энергии и свежести",
-    ),
-    SubscriptionCardVisual(
-        photoRes = R.drawable.flow_ingredients_hero,
-        audienceLine = "Для тех, кто берёт максимум",
-        featureLine = "Чистый вкус фруктов и быстрое восстановление",
-    ),
-    SubscriptionCardVisual(
-        photoRes = R.drawable.flow_about_hero,
-        audienceLine = "Для максимального комфорта каждый день",
-        featureLine = "Свежий напиток всегда под рукой",
-    ),
-)
+private val CardVisuals =
+    listOf(
+        SubscriptionCardVisual(
+            photoRes = R.drawable.viwa_tier_card_01,
+            audienceLine = "Для лёгкого ритма",
+        ),
+        SubscriptionCardVisual(
+            photoRes = R.drawable.viwa_tier_card_02,
+            audienceLine = "Оптимум на каждый день",
+        ),
+        SubscriptionCardVisual(
+            photoRes = R.drawable.viwa_tier_card_03,
+            audienceLine = "Максимум запаса воды",
+        ),
+    )
 
 /**
- * Полноэкранный выбор тарифа подписки в стиле FLOW.
- * Карточки — с фото-фоном и двойным градиентным оверлеем; средний тариф акцентируется размером и бейджем.
- * Поддерживает светлую и тёмную темы (экранный фон и заголовок адаптируются, карточки — нет, они всегда тёмные).
+ * Полноэкранный выбор тарифа подписки (landscape kiosk).
+ * Визуал как кабинет клиента: тёмный фон, фото-карточки, mint-цена, violet/cyan акцент → далее СБП.
  */
 @Composable
 fun ViwaSubscriptionLevelPickerOverlay(
@@ -101,56 +93,42 @@ fun ViwaSubscriptionLevelPickerOverlay(
     tariffsError: String? = null,
     onDismiss: () -> Unit,
     onSelectLevel: (SubscriptionLevelItem) -> Unit,
+    onRetry: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
-    val screenBg = if (isLight) Color(0xFFF0F0F0) else ViwaCustomerUiTokens.ScreenBg
-    val headerColor = if (isLight) ViwaCustomerUiTokens.TypoMainPrimaryLight else Color.White
-    val subtitleColor =
-        if (isLight) ViwaCustomerUiTokens.TypoMainPrimaryLight.copy(alpha = 0.55f)
-        else Color.White.copy(alpha = 0.50f)
-
     Box(
-        modifier = modifier.fillMaxSize().background(screenBg),
+        modifier = modifier.fillMaxSize().background(ScreenBlack),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = (24f * s).dp, vertical = (20f * s).dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = (28f * s).dp, vertical = (22f * s).dp),
         ) {
- // ── Заголовок ──────────────────────────────────────────────────
             Text(
-                text = "Выберите подписку FLOW",
-                fontSize = (26f * s).sp,
-                lineHeight = (32f * s).sp,
+                text = "Выберите подписку",
+                fontSize = (28f * s).sp,
+                lineHeight = (34f * s).sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = MontserratFamily,
-                color = headerColor,
+                color = TextPrimary,
             )
-            Spacer(Modifier.height((4f * s).dp))
+            Spacer(modifier = Modifier.height((6f * s).dp))
             Text(
-                text = "Подберите объём под свой ритм тренировок",
+                text = "Объём на месяц — оплата через СБП или картой",
                 fontSize = (15f * s).sp,
                 lineHeight = (20f * s).sp,
                 fontFamily = MontserratFamily,
-                color = subtitleColor,
-                modifier = Modifier.padding(bottom = (6f * s).dp),
-            )
-            Text(
-                text = "Лимит обновляется каждый день в 00:00",
-                fontSize = (12f * s).sp,
-                lineHeight = (16f * s).sp,
-                fontFamily = MontserratFamily,
-                color = subtitleColor.copy(alpha = 0.9f),
-                modifier = Modifier.padding(bottom = (16f * s).dp),
+                color = TextMuted,
+                modifier = Modifier.padding(bottom = (18f * s).dp),
             )
 
- // ── Основной контент ───────────────────────────────────────────
             when {
                 !tariffsError.isNullOrBlank() -> {
                     ErrorBlock(
                         s = s,
                         message = tariffsError,
+                        onRetry = onRetry,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -158,54 +136,50 @@ fun ViwaSubscriptionLevelPickerOverlay(
                     LoadingBlock(s = s, modifier = Modifier.weight(1f))
                 }
                 levels.isEmpty() -> {
-                    EmptyBlock(s = s, modifier = Modifier.weight(1f))
+                    EmptyBlock(s = s, onRetry = onRetry, modifier = Modifier.weight(1f))
                 }
                 else -> {
                     val showRecommendedBadge = levels.size >= 2
-                    Box(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        contentAlignment = Alignment.Center,
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy((16f * s).dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        LazyRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(
-                                (18f * s).dp,
-                                Alignment.CenterHorizontally,
-                            ),
-                            verticalAlignment = Alignment.Top,
-                            contentPadding = PaddingValues(
-                                horizontal = (4f * s).dp,
-                                vertical = (4f * s).dp,
-                            ),
-                        ) {
-                            itemsIndexed(levels, key = { _, l -> l.uuid }) { index, level ->
-                                val recommended = showRecommendedBadge && index == RecommendedLevelIndex
-                                SubscriptionPhotoCard(
-                                    s = s,
-                                    level = level,
-                                    recommended = recommended,
-                                    visual = CardVisuals[index % CardVisuals.size],
-                                    onClick = { onSelectLevel(level) },
-                                )
-                            }
+                        levels.forEachIndexed { index, level ->
+                            val recommended = showRecommendedBadge && index == RecommendedLevelIndex
+                            SubscriptionPhotoCard(
+                                s = s,
+                                level = level,
+                                recommended = recommended,
+                                visual = CardVisuals[index % CardVisuals.size],
+                                onClick = { onSelectLevel(level) },
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(0.92f),
+                            )
                         }
                     }
                 }
             }
 
- // ── Кнопка назад ──────────────────────────────────────────────
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = (12f * s).dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = (12f * s).dp),
                 horizontalArrangement = Arrangement.Start,
             ) {
                 IconButton(
                     onClick = onDismiss,
-                    modifier = Modifier
-                        .size((48f * s).dp)
-                        .clip(CircleShape)
-                        .background(BackButtonGray),
+                    modifier =
+                        Modifier
+                            .size((48f * s).dp)
+                            .clip(CircleShape)
+                            .background(BackButtonGray),
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -226,172 +200,154 @@ private fun SubscriptionPhotoCard(
     recommended: Boolean,
     visual: SubscriptionCardVisual,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val cardWidth = if (recommended) (272f * s).dp else (226f * s).dp
-    val cardHeight = if (recommended) (390f * s).dp else (318f * s).dp
-    val cornerRadius = (20f * s).dp
+    val cornerRadius = (16f * s).dp
     val interaction = remember { MutableInteractionSource() }
+    val shape = RoundedCornerShape(cornerRadius)
 
     Box(
-        modifier = Modifier
-            .width(cardWidth)
-            .height(cardHeight)
-            .run {
-                if (recommended) border(
-                    width = (2.5f * s).dp,
-                    color = ViwaCustomerUiTokens.BrandPrimary,
-                    shape = RoundedCornerShape(cornerRadius),
-                ) else this
-            }
-            .clip(RoundedCornerShape(cornerRadius))
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        modifier =
+            modifier
+                .then(
+                    if (recommended) {
+                        Modifier.border(
+                            width = (2.5f * s).dp,
+                            color = VioletAccent,
+                            shape = shape,
+                        )
+                    } else {
+                        Modifier.border(
+                            width = (1f * s).dp,
+                            color = Color.White.copy(alpha = 0.12f),
+                            shape = shape,
+                        )
+                    },
+                )
+                .clip(shape)
+                .clickable(interactionSource = interaction, indication = null, onClick = onClick),
     ) {
- // ── Фото-фон ───────────────────────────────────────────────────────
+        if (recommended) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .border(
+                            width = (1.5f * s).dp,
+                            color = CyanAccent.copy(alpha = 0.45f),
+                            shape = shape,
+                        ),
+            )
+        }
         Image(
             painter = painterResource(visual.photoRes),
             contentDescription = null,
             contentScale = ContentScale.Crop,
+            alignment = Alignment.CenterEnd,
             modifier = Modifier.fillMaxSize(),
         )
 
- // ── Двойной градиент: затемняет верх (для текста) и низ (для цены) ─
+        // Горизонтальный градиент как в кабинете: текст слева, фото справа.
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0.00f to Color(0xA6000000),
-                            0.28f to Color(0x36000000),
-                            0.60f to Color(0x66000000),
-                            1.00f to Color(0xF1000000),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colorStops =
+                                arrayOf(
+                                    0.00f to Color(0xF2000000),
+                                    0.42f to Color(0xCC000000),
+                                    0.72f to Color(0x55000000),
+                                    1.00f to Color(0x14000000),
+                                ),
                         ),
                     ),
-                ),
         )
 
- // ── Контент ────────────────────────────────────────────────────────
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = (18f * s).dp, vertical = (18f * s).dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = (18f * s).dp, vertical = (16f * s).dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
- // Верх: бейдж + название
-            Column {
+            Column(modifier = Modifier.fillMaxWidth(0.72f)) {
                 if (recommended) {
                     Text(
-                        text = "Лучший выбор",
-                        fontSize = (12f * s).sp,
-                        lineHeight = (16f * s).sp,
-                        fontWeight = FontWeight.SemiBold,
+                        text = "ЛУЧШИЙ ВЫБОР",
+                        fontSize = (11f * s).sp,
+                        lineHeight = (14f * s).sp,
+                        fontWeight = FontWeight.Bold,
                         fontFamily = MontserratFamily,
-                        color = BadgeText,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape((8f * s).dp))
-                            .background(BadgeBg)
-                            .padding(horizontal = (10f * s).dp, vertical = (4f * s).dp),
+                        color = MintPrice,
+                        letterSpacing = (1.2f * s).sp,
                     )
-                    Spacer(Modifier.height((10f * s).dp))
+                    Spacer(modifier = Modifier.height((8f * s).dp))
                 }
                 Text(
                     text = level.name ?: "Подписка",
-                    fontSize = ((if (recommended) 22f else 18f) * s).sp,
-                    lineHeight = ((if (recommended) 28f else 24f) * s).sp,
+                    fontSize = (22f * s).sp,
+                    lineHeight = (28f * s).sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = MontserratFamily,
-                    color = Color.White,
+                    color = TextPrimary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height((4f * s).dp))
+                Spacer(modifier = Modifier.height((4f * s).dp))
                 Text(
                     text = visual.audienceLine,
                     fontSize = (12f * s).sp,
                     lineHeight = (16f * s).sp,
                     fontFamily = MontserratFamily,
-                    color = Color.White.copy(alpha = 0.72f),
+                    color = TextMuted,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
 
- // Низ: стек условий + кнопка
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape((16f * s).dp))
-                    .background(Color(0x332A2A2A))
-                    .border(
-                        width = (1f * s).dp,
-                        color = Color.White.copy(alpha = 0.14f),
-                        shape = RoundedCornerShape((16f * s).dp),
-                    )
-                    .padding((14f * s).dp),
-            ) {
-                Column {
-                    Text(
-                        text = "Ежедневный лимит",
-                        fontSize = (11f * s).sp,
-                        lineHeight = (14f * s).sp,
-                        fontWeight = FontWeight.Medium,
-                        fontFamily = MontserratFamily,
-                        color = Color.White.copy(alpha = 0.58f),
-                    )
-                    Spacer(Modifier.height((3f * s).dp))
-                    Text(
-                        text = level.volume?.let { "$it л / день" } ?: "Ежедневный лимит",
-                        fontSize = ((if (recommended) 28f else 22f) * s).sp,
-                        lineHeight = ((if (recommended) 32f else 26f) * s).sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = MontserratFamily,
-                        color = Color.White,
-                    )
-                    Spacer(Modifier.height((3f * s).dp))
-                    Text(
-                        text = formatPriceMonthly(level.price),
-                        fontSize = ((if (recommended) 15f else 13f) * s).sp,
-                        lineHeight = ((if (recommended) 20f else 18f) * s).sp,
-                        fontWeight = FontWeight.Medium,
-                        fontFamily = MontserratFamily,
-                        color = Color.White.copy(alpha = 0.84f),
-                    )
-                    Spacer(Modifier.height((8f * s).dp))
-                    Text(
-                        text = visual.featureLine,
-                        fontSize = (12f * s).sp,
-                        lineHeight = (16f * s).sp,
-                        fontFamily = MontserratFamily,
-                        color = Color.White.copy(alpha = 0.68f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height((12f * s).dp))
-                    Box(
-                        modifier = Modifier
+            Column(modifier = Modifier.fillMaxWidth(0.85f)) {
+                Text(
+                    text = formatVolumeMonthlyLiters(level.volume),
+                    fontSize = (15f * s).sp,
+                    lineHeight = (20f * s).sp,
+                    fontFamily = MontserratFamily,
+                    color = TextMuted,
+                )
+                Spacer(modifier = Modifier.height((4f * s).dp))
+                Text(
+                    text = formatPriceMonthly(level.price),
+                    fontSize = (20f * s).sp,
+                    lineHeight = (26f * s).sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = MontserratFamily,
+                    color = MintPrice,
+                )
+                Spacer(modifier = Modifier.height((14f * s).dp))
+                Box(
+                    modifier =
+                        Modifier
                             .fillMaxWidth()
-                            .height((46f * s).dp)
+                            .height((48f * s).dp)
                             .clip(RoundedCornerShape((12f * s).dp))
-                            .background(
-                                if (recommended) ViwaCustomerUiTokens.BrandPrimary
-                                else Color.White.copy(alpha = 0.18f),
-                            )
+                            .background(if (recommended) VioletAccent else CtaUnselected)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
                                 onClick = onClick,
                             ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "Выбрать",
-                            fontSize = (15f * s).sp,
-                            lineHeight = (20f * s).sp,
-                            fontWeight = FontWeight.SemiBold,
-                            fontFamily = MontserratFamily,
-                            color = Color.White,
-                        )
-                    }
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "ВЫБРАТЬ",
+                        fontSize = (14f * s).sp,
+                        lineHeight = (18f * s).sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = MontserratFamily,
+                        letterSpacing = (1.1f * s).sp,
+                        color = Color.White,
+                    )
                 }
             }
         }
@@ -407,21 +363,26 @@ private fun LoadingBlock(s: Float, modifier: Modifier = Modifier) {
     ) {
         CircularProgressIndicator(
             modifier = Modifier.size((40f * s).dp),
-            color = ViwaCustomerUiTokens.BrandPrimary,
+            color = VioletAccent,
             strokeWidth = (4f * s).dp,
         )
-        Spacer(Modifier.height((16f * s).dp))
+        Spacer(modifier = Modifier.height((16f * s).dp))
         Text(
-            text = "Загрузка тарифов...",
+            text = "Загрузка тарифов…",
             fontSize = (16f * s).sp,
             fontFamily = MontserratFamily,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = TextMuted,
         )
     }
 }
 
 @Composable
-private fun ErrorBlock(s: Float, message: String, modifier: Modifier = Modifier) {
+private fun ErrorBlock(
+    s: Float,
+    message: String,
+    onRetry: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.Center,
@@ -432,14 +393,22 @@ private fun ErrorBlock(s: Float, message: String, modifier: Modifier = Modifier)
             fontSize = (16f * s).sp,
             fontFamily = MontserratFamily,
             textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.error,
+            color = Color(0xFFFF8A80),
             modifier = Modifier.padding(horizontal = (8f * s).dp),
         )
+        if (onRetry != null) {
+            Spacer(modifier = Modifier.height((18f * s).dp))
+            RetryChip(s = s, onRetry = onRetry)
+        }
     }
 }
 
 @Composable
-private fun EmptyBlock(s: Float, modifier: Modifier = Modifier) {
+private fun EmptyBlock(
+    s: Float,
+    onRetry: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.Center,
@@ -451,21 +420,59 @@ private fun EmptyBlock(s: Float, modifier: Modifier = Modifier) {
             fontWeight = FontWeight.SemiBold,
             fontFamily = MontserratFamily,
             textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = TextPrimary,
         )
-        Spacer(Modifier.height((8f * s).dp))
+        Spacer(modifier = Modifier.height((8f * s).dp))
         Text(
-            text = "Попробуйте позже или обратитесь к администратору",
+            text = "Попробуйте ещё раз или обратитесь к администратору",
             fontSize = (14f * s).sp,
             fontFamily = MontserratFamily,
             textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = TextMuted,
+        )
+        if (onRetry != null) {
+            Spacer(modifier = Modifier.height((18f * s).dp))
+            RetryChip(s = s, onRetry = onRetry)
+        }
+    }
+}
+
+@Composable
+private fun RetryChip(s: Float, onRetry: () -> Unit) {
+    Box(
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape((12f * s).dp))
+                .background(VioletAccent)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onRetry,
+                )
+                .padding(horizontal = (22f * s).dp, vertical = (12f * s).dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "Повторить",
+            fontSize = (15f * s).sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = MontserratFamily,
+            color = Color.White,
         )
     }
 }
 
+/** `volume` с бэка — мл/мес (12000 → «12 л / мес»). */
+private fun formatVolumeMonthlyLiters(volumeMl: Int?): String {
+    if (volumeMl == null || volumeMl <= 0) return "Объём / мес"
+    val liters = volumeMl / 1000.0
+    val whole = abs(liters % 1.0) < 1e-6
+    val label = if (whole) liters.toInt().toString() else liters.toString()
+    return "$label л / мес"
+}
+
 private fun formatPriceRub(price: Double): String {
-    val whole = kotlin.math.abs(price % 1.0) < 1e-6
+    val whole = abs(price % 1.0) < 1e-6
     return if (whole) "${price.toInt()} ₽" else "$price ₽"
 }
 

@@ -59,7 +59,7 @@ object JsonStoreKeys {
  /** JSON [com.viwa.android.domain.model.TelemetryCellsSnapshot] — MVP flat cells + products catalog. */
     const val TELEMETRY_CELLS_SNAPSHOT = "telemetryCellsSnapshot"
 
- /** "true" = тёмная тема, "false"/"отсутствует" = светлая (по умолчанию). */
+ /** "true"/отсутствует = тёмная (по умолчанию), "false" = светлая. */
     const val THEME_IS_DARK = "themeIsDark"
 
  /**

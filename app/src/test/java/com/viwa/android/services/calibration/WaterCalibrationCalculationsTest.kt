@@ -46,4 +46,30 @@ class WaterCalibrationCalculationsTest {
             ),
         )
     }
+
+    @Test
+    fun resolveEffectiveFlowRate_prefersLocalThenTelemetryBaseline() {
+        assertEquals(
+            27.5,
+            WaterCalibrationCalculations.resolveEffectiveFlowRateMlPerSec(
+                localFlowRateMlPerSec = 27.5,
+                telemetryWaterPumpTenths = 180,
+            )!!,
+            0.001,
+        )
+        assertEquals(
+            20.0,
+            WaterCalibrationCalculations.resolveEffectiveFlowRateMlPerSec(
+                localFlowRateMlPerSec = null,
+                telemetryWaterPumpTenths = 180,
+            )!!,
+            0.001,
+        )
+        assertNull(
+            WaterCalibrationCalculations.resolveEffectiveFlowRateMlPerSec(
+                localFlowRateMlPerSec = null,
+                telemetryWaterPumpTenths = null,
+            ),
+        )
+    }
 }

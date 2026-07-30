@@ -105,7 +105,6 @@ import coil.request.ImageRequest
 import com.viwa.android.domain.model.customer.DrinkConcentration
 import com.viwa.android.domain.model.customer.DrinkContainer
 import com.viwa.android.domain.model.customer.DrinkWaterOption
-import com.viwa.android.domain.model.customer.FlowWaterPourType
 import com.viwa.android.R
 import com.viwa.android.domain.model.customer.isUnavailable
 import androidx.compose.foundation.layout.Spacer
@@ -172,58 +171,6 @@ private fun DrinkConcentration.ruStateDescription(): String =
         DrinkConcentration.Standard -> "Стандартная концентрация"
         DrinkConcentration.Strong -> "Крепкая концентрация"
     }
-
-@Composable
-private fun FlowWaterPourTypeSelectorRow(
-    selected: FlowWaterPourType,
-    onSelect: (FlowWaterPourType) -> Unit,
-    s: Float,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy((6f * s).dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        FlowWaterPourType.entries.forEach { type ->
-            val isSelected = type == selected
-            Surface(
-                modifier = Modifier.weight(1f),
-                onClick = { onSelect(type) },
-                shape = RoundedCornerShape((10f * s).dp),
-                color =
-                    if (isSelected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
-                    },
-                contentColor =
-                    if (isSelected) {
-                        MaterialTheme.colorScheme.onPrimary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-            ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height((34f * s).dp)
-                            .padding(horizontal = (4f * s).dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = type.shortLabel,
-                        fontSize = (11f * s).sp,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        lineHeight = (12f * s).sp,
-                    )
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun DrinkListScreen(
@@ -350,7 +297,12 @@ fun DrinkListScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 HeaderActionStrip(
-                    headerEnabled = state.activeContainer != null,
+                    // Вода (холодная/стандарт/газ) — после выбора напитка или скана карты.
+                    // Объём 300/700 — только для выбранного напитка.
+                    waterEnabled =
+                        state.activeContainer != null ||
+                            state.scannedSubscriptionClientId != null,
+                    volumeEnabled = state.activeContainer != null,
                     selectedVolumeMl = state.selectedVolumeMl,
                     waterOption = state.waterOption,
                     onVolume = viewModel::setVolume,
@@ -358,7 +310,10 @@ fun DrinkListScreen(
                     s = s,
                 )
                 androidx.compose.animation.AnimatedVisibility(
-                    visible = state.activeContainer == null,
+                    // Не перекрываем верхнюю панель после скана карты — тип воды выбирается там.
+                    visible =
+                        state.activeContainer == null &&
+                            state.scannedSubscriptionClientId == null,
                     enter = fadeIn(tween(200)),
                     exit = fadeOut(tween(200)),
                     modifier = Modifier.align(Alignment.Center),
@@ -480,17 +435,7 @@ fun DrinkListScreen(
                             ViwaPromoCard(s = s, onClick = onOpenFreeDrinkOffer)
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            if (!hasSelection && state.scannedSubscriptionClientId != null) {
-                                FlowWaterPourTypeSelectorRow(
-                                    selected = state.flowWaterPourType,
-                                    onSelect = viewModel::setFlowWaterPourType,
-                                    s = s,
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .padding(bottom = 10f.epx()),
-                                )
-                            }
+                            // Тип воды после скана карты выбирается в верхней панели (HeaderActionStrip).
                             Box(
                                 modifier =
                                     Modifier.then(
@@ -712,6 +657,7 @@ fun DrinkListScreen(
                 tariffsError = state.subscriptionTariffsError,
                 onDismiss = { viewModel.dismissSubscriptionLevelPicker() },
                 onSelectLevel = { viewModel.selectSubscriptionLevelAndOpenPayment(it) },
+                onRetry = { viewModel.retrySubscriptionLevels() },
                 modifier =
                     Modifier
                         .fillMaxSize()
@@ -911,7 +857,8 @@ private fun SubscriptionDebugLogsDialog(viewModel: DrinkListViewModel, onDismiss
 
 @Composable
 private fun HeaderActionStrip(
-    headerEnabled: Boolean,
+    waterEnabled: Boolean,
+    volumeEnabled: Boolean,
     selectedVolumeMl: Int?,
     waterOption: DrinkWaterOption,
     onVolume: (Int) -> Unit,
@@ -929,7 +876,7 @@ private fun HeaderActionStrip(
                 modifier = Modifier.weight(1f),
                 label = "Холодная",
                 selected = waterOption == DrinkWaterOption.COLD || waterOption == DrinkWaterOption.SPARK,
-                enabled = headerEnabled,
+                enabled = waterEnabled,
                 iconRes = R.drawable.ic_cold_water,
                 onClick = { onWater(DrinkWaterOption.COLD) },
                 s = s,
@@ -939,7 +886,7 @@ private fun HeaderActionStrip(
                 modifier = Modifier.weight(1f),
                 label = "Стандартная",
                 selected = waterOption == DrinkWaterOption.STANDARD,
-                enabled = headerEnabled,
+                enabled = waterEnabled,
                 iconRes = R.drawable.ic_standard_water,
                 onClick = { onWater(DrinkWaterOption.STANDARD) },
                 s = s,
@@ -950,7 +897,7 @@ private fun HeaderActionStrip(
                 modifier = Modifier.fillMaxWidth(),
                 label = "Газированная",
                 selected = waterOption == DrinkWaterOption.SPARK,
-                enabled = headerEnabled,
+                enabled = waterEnabled,
                 iconRes = R.drawable.ic_sparkling_water,
                 onClick = { onWater(DrinkWaterOption.SPARK) },
                 s = s,
@@ -961,7 +908,7 @@ private fun HeaderActionStrip(
                 modifier = Modifier.weight(1f),
                 label = "300 мл",
                 selected = selectedVolumeMl == 300,
-                enabled = headerEnabled,
+                enabled = volumeEnabled,
                 iconRes = R.drawable.ic_small_cup,
                 onClick = { onVolume(300) },
                 s = s,
@@ -971,7 +918,7 @@ private fun HeaderActionStrip(
                 modifier = Modifier.weight(1f),
                 label = "700 мл",
                 selected = selectedVolumeMl == 700,
-                enabled = headerEnabled,
+                enabled = volumeEnabled,
                 iconRes = R.drawable.ic_big_cup,
                 onClick = { onVolume(700) },
                 s = s,

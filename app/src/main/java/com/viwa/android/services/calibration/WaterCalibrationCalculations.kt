@@ -12,6 +12,11 @@ object WaterCalibrationCalculations {
     const val MAX_ADAPTIVE_WINDOW_SIZE = 20
     const val MIN_VALID_FLOW_RATE_ML_PER_SEC = 5.0
     const val MAX_VALID_FLOW_RATE_ML_PER_SEC = 80.0
+    /**
+     * Базовая скорость из эталонного FLOW. Используется только когда telemetry snapshot
+     * подтверждает машинную калибровку waterPumpTenths; после готовки уточняется по факту.
+     */
+    const val TELEMETRY_BASELINE_FLOW_RATE_ML_PER_SEC = 20.0
 
     fun computeNewTenths(
         currentTenths: Int,
@@ -56,4 +61,13 @@ object WaterCalibrationCalculations {
         }
         return value
     }
+
+    fun resolveEffectiveFlowRateMlPerSec(
+        localFlowRateMlPerSec: Double?,
+        telemetryWaterPumpTenths: Int?,
+    ): Double? =
+        sanitizeFlowRate(localFlowRateMlPerSec)
+            ?: TELEMETRY_BASELINE_FLOW_RATE_ML_PER_SEC.takeIf {
+                telemetryWaterPumpTenths != null && telemetryWaterPumpTenths in 1..255
+            }
 }

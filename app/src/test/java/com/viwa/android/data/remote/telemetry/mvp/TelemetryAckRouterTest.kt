@@ -13,6 +13,7 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
@@ -139,6 +140,83 @@ class TelemetryAckRouterTest {
             )
         assertEquals(AckRouteOutcome.HANDLED, outcome)
         assertTrue(cellsCalled)
+    }
+
+    @Test
+    fun `routes subscription levels ack to loyalty handler`() = runTest {
+        var receivedCorrelation: String? = null
+        var receivedPayload: JsonObject? = null
+        val payload =
+            buildJsonObject {
+                put(
+                    "levels",
+                    buildJsonArray {
+                        add(
+                            buildJsonObject {
+                                put("id", "level-1")
+                                put("name", "Старт")
+                                put("dailyVolumeMl", 12000)
+                                put("priceKopecks", 49900)
+                            },
+                        )
+                    },
+                )
+            }
+        val envelope =
+            MvpWsEnvelopeDto(
+                type = "ack",
+                messageId = "ack-levels",
+                sentAt = "2026-07-30T13:39:28.000Z",
+                payload = payload,
+                correlationId = "levels-corr",
+            )
+
+        val outcome =
+            router.routeAck(
+                envelope = envelope,
+                sessionGeneration = 2L,
+                cellsHandler = null,
+                loyaltyHandler = { correlation, routedPayload ->
+                    receivedCorrelation = correlation
+                    receivedPayload = routedPayload
+                },
+            )
+
+        assertEquals(AckRouteOutcome.HANDLED, outcome)
+        assertEquals("levels-corr", receivedCorrelation)
+        assertEquals(payload, receivedPayload)
+    }
+
+    @Test
+    fun `routes subscription payment ack to loyalty handler`() = runTest {
+        var loyaltyCalled = false
+        val payload =
+            buildJsonObject {
+                put("paymentId", "550e8400-e29b-41d4-a716-446655440001")
+                put("status", "PENDING")
+                put("amountKopecks", 49900)
+            }
+        val envelope =
+            MvpWsEnvelopeDto(
+                type = "ack",
+                messageId = "ack-payment",
+                sentAt = "2026-07-30T13:39:29.000Z",
+                payload = payload,
+                correlationId = "payment-corr",
+            )
+
+        val outcome =
+            router.routeAck(
+                envelope = envelope,
+                sessionGeneration = 2L,
+                cellsHandler = null,
+                loyaltyHandler = { correlation, routedPayload ->
+                    loyaltyCalled = correlation == "payment-corr" && routedPayload == payload
+                },
+            )
+
+        assertEquals(AckRouteOutcome.HANDLED, outcome)
+        assertTrue(loyaltyCalled)
     }
 
     @Test

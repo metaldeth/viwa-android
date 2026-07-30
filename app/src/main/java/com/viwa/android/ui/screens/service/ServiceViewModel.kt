@@ -163,7 +163,7 @@ data class ServiceUiState(
     val integrationsBannerIsError: Boolean = false,
  /** Последняя успешная verify Нанокассы (настройки → сохранить). */
     val nanoLastIntegrationVerifyOk: Boolean = false,
-    val isDarkTheme: Boolean = false,
+    val isDarkTheme: Boolean = true,
  /** ARGB бренда — светлая тема (сохраняется отдельно от тёмной). */
     val customerPrimaryLightArgb: Int = ViwaCustomerUiTokens.DefaultBrandPrimaryArgb,
  /** ARGB бренда — тёмная тема. */

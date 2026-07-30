@@ -46,15 +46,31 @@ data class LoyaltyWaterUseRequest(
     val priceKopecks: Int,
 )
 
-fun LoyaltyStatusAckPayload.toSubscribeInformationState(): SubscribeInformationState =
-    SubscribeInformationState(
+fun LoyaltyStatusAckPayload.toSubscribeInformationState(): SubscribeInformationState {
+    // Подписка: шкала = monthly/daily pool (dailyRemainingMl).
+    // Trial / без пула: шкала = кошелёк клиента volumeMl (бесплатный литр), иначе dailyRemaining=0.
+    val usePoolRemaining = active && dailyLimitMl > 0
+    val displayVolumeMl =
+        if (usePoolRemaining) {
+            dailyRemainingMl.coerceAtLeast(0)
+        } else {
+            volumeMl.coerceAtLeast(0)
+        }
+    val displayMaxMl =
+        if (usePoolRemaining) {
+            dailyLimitMl.coerceAtLeast(0)
+        } else {
+            volumeMl.coerceAtLeast(0)
+        }
+    return SubscribeInformationState(
         isStatusRequest = true,
         isActiveSubscribe = active && !limitExhausted,
         clientId = clientId,
         subscribeDateEnd = subscriptionEndsAt,
-        volumeMl = dailyRemainingMl.coerceAtLeast(0),
-        maxVolumeMl = dailyLimitMl.coerceAtLeast(0),
+        volumeMl = displayVolumeMl,
+        maxVolumeMl = displayMaxMl,
     )
+}
 
 fun LoyaltyLevelDto.toSubscriptionLevelItem(): SubscriptionLevelItem =
     SubscriptionLevelItem(

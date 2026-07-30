@@ -22,6 +22,8 @@ import com.viwa.android.domain.model.customer.DrinkWaterOption
 import com.viwa.android.domain.model.customer.FlowWaterPourType
 import com.viwa.android.domain.model.customer.PrimaryButtonPulseStyle
 import com.viwa.android.domain.model.customer.isUnavailable
+import com.viwa.android.domain.model.customer.toFlowWaterPourType
+import com.viwa.android.domain.model.customer.toDrinkWaterOption
 import com.viwa.android.domain.model.customer.toRatio
 import com.viwa.android.domain.repository.NanoKassaRepository
 import com.viwa.android.domain.repository.SBPRepository
@@ -217,6 +219,7 @@ constructor(
     private var waterPourDebounceJob: Job? = null
     private var waterPourMaxHoldJob: Job? = null
     private var waterPourLimitHideJob: Job? = null
+    private var tariffsLoadTimeoutJob: Job? = null
     private var waterPourStarted: Boolean = false
     private var holdPourRequestUuid: String? = null
     private var pendingSubscriptionPourRequestUuid: String? = null
@@ -285,6 +288,7 @@ constructor(
                             subscriptionLevelPickerVisible = false,
                             subscriptionPurchaseFlowActive = false,
                             subscriptionTariffsError = null,
+                            waterOption = DrinkWaterOption.STANDARD,
                             flowWaterPourType = FlowWaterPourType.Filtered,
                         )
                     }
@@ -317,6 +321,8 @@ constructor(
                     }
                     return@collect
                 }
+                tariffsLoadTimeoutJob?.cancel()
+                tariffsLoadTimeoutJob = null
                 _state.update {
                     it.copy(
                         subscriptionLevelsLoading = false,
@@ -340,6 +346,8 @@ constructor(
     private fun observeLoyaltyCardScansForDrinkListUi() {
         viewModelScope.launch {
             telemetryService.loyaltyCardClientScans.collect {
+                tariffsLoadTimeoutJob?.cancel()
+                tariffsLoadTimeoutJob = null
                 _state.update {
                     it.copy(
                         subscriptionLevelsLoading = true,
@@ -351,6 +359,7 @@ constructor(
                         subscriptionPurchaseFlowActive = false,
                         subscriptionTariffsError = null,
                         invalidSubscriptionCardVisible = false,
+                        waterOption = DrinkWaterOption.STANDARD,
                         flowWaterPourType = FlowWaterPourType.Filtered,
                     )
                 }
@@ -532,7 +541,12 @@ constructor(
     }
 
     fun setWater(option: DrinkWaterOption) {
-        _state.update { it.copy(waterOption = option) }
+        _state.update {
+            it.copy(
+                waterOption = option,
+                flowWaterPourType = option.toFlowWaterPourType(),
+            )
+        }
     }
 
     fun setConcentration(c: DrinkConcentration) {
@@ -544,7 +558,12 @@ constructor(
     }
 
     fun setFlowWaterPourType(type: FlowWaterPourType) {
-        _state.update { it.copy(flowWaterPourType = type) }
+        _state.update {
+            it.copy(
+                flowWaterPourType = type,
+                waterOption = type.toDrinkWaterOption(),
+            )
+        }
     }
 
  /**
@@ -792,18 +811,84 @@ constructor(
  /** Как переход на `/subscribe-now`. */
     fun openSubscriptionOfferSheet() {
         if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) return
+        val needReload =
+            _state.value.subscriptionLevelsList.isNullOrEmpty() ||
+                !_state.value.subscriptionTariffsError.isNullOrBlank()
         _state.update {
             it.copy(
                 subscriptionLevelPickerVisible = true,
                 subscriptionPurchaseFlowActive = true,
                 paymentError = null,
                 subscriptionTariffsError = null,
+                subscriptionLevelsLoading = needReload,
             )
         }
-        clearTariffsLoadingIfWsOffline()
+        if (needReload) {
+            requestSubscriptionLevels()
+        } else {
+            clearTariffsLoadingIfWsOffline()
+        }
+    }
+
+    /** Повторный запрос `loyalty.levels.list` с экрана выбора тарифа. */
+    fun retrySubscriptionLevels() {
+        if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) return
+        requestSubscriptionLevels()
+    }
+
+    private fun requestSubscriptionLevels() {
+        tariffsLoadTimeoutJob?.cancel()
+        viewModelScope.launch {
+            if (telemetryService.connectionState.value !is ConnectionState.Connected) {
+                _state.update {
+                    it.copy(
+                        subscriptionLevelsLoading = false,
+                        subscriptionTariffsError = TARIFFS_WS_OFFLINE_MESSAGE,
+                    )
+                }
+                return@launch
+            }
+            _state.update {
+                it.copy(
+                    subscriptionLevelsLoading = true,
+                    subscriptionTariffsError = null,
+                )
+            }
+            telemetryService
+                .sendSubscriptionLevelRequest()
+                .onFailure {
+                    _state.update { s ->
+                        s.copy(
+                            subscriptionLevelsLoading = false,
+                            subscriptionTariffsError = TARIFFS_REQUEST_FAILED_MESSAGE,
+                        )
+                    }
+                    return@launch
+                }
+            tariffsLoadTimeoutJob =
+                viewModelScope.launch {
+                    delay(TARIFFS_LOAD_TIMEOUT_MS)
+                    _state.update { s ->
+                        if (
+                            s.subscriptionLevelPickerVisible &&
+                                s.subscriptionLevelsLoading &&
+                                s.subscriptionLevelsList == null
+                        ) {
+                            s.copy(
+                                subscriptionLevelsLoading = false,
+                                subscriptionTariffsError = TARIFFS_LOAD_TIMEOUT_MESSAGE,
+                            )
+                        } else {
+                            s
+                        }
+                    }
+                }
+        }
     }
 
     fun dismissSubscriptionLevelPicker() {
+        tariffsLoadTimeoutJob?.cancel()
+        tariffsLoadTimeoutJob = null
         _state.update {
             it.copy(
                 subscriptionLevelPickerVisible = false,
@@ -903,6 +988,17 @@ constructor(
             if (container.isUnavailable()) {
                 _state.update {
                     it.copy(flowBanner = "Напиток временно недоступен", flowBannerIsError = true)
+                }
+                return@launch
+            }
+            preparingManager.validateDrinkPreparation(container.product.taste.id)?.let { error ->
+                val message = error.message ?: "Автомат не готов к приготовлению"
+                _state.update {
+                    it.copy(
+                        flowBanner = message,
+                        flowBannerIsError = true,
+                        paymentError = message,
+                    )
                 }
                 return@launch
             }
@@ -1195,7 +1291,6 @@ constructor(
         sbpPollingJob =
             viewModelScope.launch {
                 while (isActive) {
-                    delay(5_000)
                     checkSBPStatusUseCase(orderId).fold(
                         onSuccess = { status ->
                             _state.update { it.copy(sbpStatus = status) }
@@ -1239,8 +1334,11 @@ constructor(
                                 SBPStatus.Pending -> Unit
                             }
                         },
-                        onFailure = { /* продолжаем polling */ },
+                        onFailure = { error ->
+                            Timber.w(error, "SBP status poll failed orderId=%s", orderId)
+                        },
                     )
+                    delay(5_000)
                 }
             }
     }
@@ -1253,7 +1351,11 @@ constructor(
                     delay(1_000)
                     _state.update { it.copy(sbpRemainingSeconds = it.sbpRemainingSeconds - 1) }
                 }
-                backToPaymentMethods()
+                // Не отменяем polling на границе таймера: платёж может подтверждаться банком с задержкой.
+                // Пользователь может вернуться вручную, а поздний SUCCESS всё ещё запустит приготовление.
+                _state.update {
+                    it.copy(paymentError = "QR истёк. Если вы уже оплатили, дождитесь подтверждения.")
+                }
             }
     }
 
@@ -1263,8 +1365,19 @@ constructor(
             viewModelScope.launch {
                 finishPaymentJobForReplacement(previousPaymentJob)
                 val s = _state.value
-                val container = s.activeContainer ?: return@launch
-                val volume = s.selectedVolumeMl ?: return@launch
+                val container = s.activeContainer
+                val volume = s.selectedVolumeMl
+                if (container == null || volume == null) {
+                    Timber.e("SBP paid, but drink selection is missing")
+                    _state.update {
+                        it.copy(
+                            paymentError = "Оплата прошла, но выбор напитка потерян. Обратитесь к администратору.",
+                            paymentSheetStep = PaymentSheetStep.Sbp,
+                            isSbpLoading = false,
+                        )
+                    }
+                    return@launch
+                }
                 _state.update { it.copy(isProcessingPay = true, paymentError = null) }
                 try {
                     paidTerminalThenPour(container, volume, s, sbp = true, onNavigateToPreparing)
@@ -1858,6 +1971,11 @@ constructor(
 
         private const val TARIFFS_WS_OFFLINE_MESSAGE =
             "Нет подключения к телеметрии (WebSocket). Тарифы не загружаются — проверьте сеть и авторизацию."
+        private const val TARIFFS_REQUEST_FAILED_MESSAGE =
+            "Не удалось запросить тарифы. Попробуйте ещё раз."
+        private const val TARIFFS_LOAD_TIMEOUT_MESSAGE =
+            "Тарифы не получены. Проверьте связь и повторите."
+        private const val TARIFFS_LOAD_TIMEOUT_MS = 12_000L
 
  /** UUID для кнопки «Эмуляция QR подписки» (контракт statusSubscribeTopic.body). */
         const val EMULATED_SUBSCRIPTION_CLIENT_UUID = "2caaf0b2-2b7f-4c09-9bef-dafd984c9a66"

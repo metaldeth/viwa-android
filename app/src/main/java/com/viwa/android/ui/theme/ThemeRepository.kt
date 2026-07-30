@@ -15,7 +15,7 @@ class ThemeRepository
 constructor(
     private val configRepository: ConfigRepository,
 ) {
-    private val _isDark = MutableStateFlow(false)
+    private val _isDark = MutableStateFlow(true)
     val isDark: StateFlow<Boolean> = _isDark.asStateFlow()
 
     private val _customerPrimaryLightArgb =
@@ -27,7 +27,8 @@ constructor(
     val customerPrimaryDarkArgb: StateFlow<Int> = _customerPrimaryDarkArgb.asStateFlow()
 
     suspend fun init() {
-        _isDark.value = configRepository.get(JsonStoreKeys.THEME_IS_DARK) == "true"
+        // Нет ключа → тёмная (дефолт автомата). Явный "false" → светлая (выбор в сервисе).
+        _isDark.value = configRepository.get(JsonStoreKeys.THEME_IS_DARK) != "false"
         loadCustomerPrimaryArgbFromStore()
     }
 

@@ -53,6 +53,29 @@ class LoyaltyWsCodecTest {
     }
 
     @Test
+    fun decodeStatusAck_trialUsesClientVolumeMlWhenPoolEmpty() {
+        // given — trial: volumeMl=1000, monthly pool dailyRemainingMl=0, active=false
+        val payload =
+            buildJsonObject {
+                put("clientId", "660e8400-e29b-41d4-a716-446655440010")
+                put("active", false)
+                put("volumeMl", 1000)
+                put("dailyLimitMl", 0)
+                put("dailyUsedMl", 0)
+                put("dailyRemainingMl", 0)
+                put("limitExhausted", false)
+            }
+
+        // when
+        val state = LoyaltyWsCodec.decodeStatusAck(payload)
+
+        // then
+        assertEquals(1000, state.volumeMl)
+        assertEquals(1000, state.maxVolumeMl)
+        assertFalse(state.isActiveSubscribe)
+    }
+
+    @Test
     fun parseClientIdFromScan_acceptsValidUuid() {
         // given
         val uuid = "660e8400-e29b-41d4-a716-446655440010"

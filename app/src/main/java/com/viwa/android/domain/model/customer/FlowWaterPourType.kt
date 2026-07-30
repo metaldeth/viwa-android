@@ -18,3 +18,18 @@ enum class FlowWaterPourType(val selByte: Int) {
                 Sparkling -> "Газированная"
             }
 }
+
+/** Синхронизация верхней панели (DrinkWaterOption) ↔ тип налива 0xD0. */
+fun DrinkWaterOption.toFlowWaterPourType(): FlowWaterPourType =
+    when (this) {
+        DrinkWaterOption.STANDARD -> FlowWaterPourType.Filtered
+        DrinkWaterOption.COLD -> FlowWaterPourType.Cold
+        DrinkWaterOption.SPARK -> FlowWaterPourType.Sparkling
+    }
+
+fun FlowWaterPourType.toDrinkWaterOption(): DrinkWaterOption =
+    when (this) {
+        FlowWaterPourType.Filtered -> DrinkWaterOption.STANDARD
+        FlowWaterPourType.Cold -> DrinkWaterOption.COLD
+        FlowWaterPourType.Sparkling -> DrinkWaterOption.SPARK
+    }

@@ -97,7 +97,14 @@ constructor(
 
         val dailyRemaining = payload["dailyRemainingMl"]
         val volumeAfter = payload["volumeAfterMl"]
-        if (dailyRemaining != null || volumeAfter != null) {
+        val subscriptionLevels = payload["levels"]
+        val subscriptionPayment = payload["paymentId"]
+        if (
+            dailyRemaining != null ||
+                volumeAfter != null ||
+                subscriptionLevels != null ||
+                subscriptionPayment != null
+        ) {
             if (!correlation.isNullOrBlank() && loyaltyHandler != null) {
                 loyaltyHandler(correlation, payload)
                 return AckRouteOutcome.HANDLED

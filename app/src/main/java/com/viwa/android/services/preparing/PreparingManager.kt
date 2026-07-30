@@ -9,6 +9,7 @@ import com.viwa.android.hardware.controller.ResponseCommand
 import com.viwa.android.domain.repository.TelemetryCellsRepository
 import com.viwa.android.domain.customer.TelemetryCellsSnapshotAdapter
 import com.viwa.android.services.calibration.WaterCalibrationService
+import com.viwa.android.services.calibration.WaterCalibrationCalculations
 import com.viwa.android.services.inventory.InventoryService
 import com.viwa.android.services.controller.ViwaControllerStateService
 import com.viwa.android.services.drink.DrinkPreparationCalculations
@@ -75,6 +76,37 @@ constructor(
         _customerPhase.value = CustomerPreparingPhase.Idle
     }
 
+    /**
+     * Проверка до открытия оплаты: автомат не должен принимать деньги, если готовка заведомо невозможна.
+     * Контроллер и auto-mode проверяются непосредственно перед командой, здесь — стабильные локальные условия.
+     */
+    suspend fun validateDrinkPreparation(tasteId: Int): PrepareDrinkResult.Error? {
+        val snapshot = cellsRepository.getSnapshot()
+        val hasContainer =
+            snapshot?.let {
+                TelemetryCellsSnapshotAdapter.toDrinkContainers(it)
+                    .any { container -> container.product.taste.id == tasteId }
+            } == true
+        if (!hasContainer) {
+            return PrepareDrinkResult.Error(
+                PreparingErrorCodes.CONTAINER_NOT_FOUND,
+                "Контейнер для вкуса $tasteId не найден",
+            )
+        }
+        val flowRate =
+            WaterCalibrationCalculations.resolveEffectiveFlowRateMlPerSec(
+                localFlowRateMlPerSec = waterCalibrationService.loadCalibration().flowRateMlPerSec,
+                telemetryWaterPumpTenths = snapshot?.machineCalibration?.waterPumpTenths,
+            )
+        if (flowRate == null || flowRate <= 0) {
+            return PrepareDrinkResult.Error(
+                PreparingErrorCodes.WATER_NOT_CALIBRATED,
+                "Выполните калибровку воды в сервисном меню",
+            )
+        }
+        return null
+    }
+
  /**
  * Полный флоу: ensureAutoMode → контейнер → калибровка воды → ChooseDrink → 200 ms → StartDrinkPreparing.
  * @param tasteId [com.viwa.android.domain.model.customer.DrinkTaste.id].
@@ -112,8 +144,9 @@ constructor(
                 return@withLock PrepareDrinkResult.Error(PreparingErrorCodes.AUTO_MODE_SWITCH_FAILED, msg)
             }
 
+            val snapshot = cellsRepository.getSnapshot()
             val container =
-                cellsRepository.getSnapshot()?.let { snapshot ->
+                snapshot?.let {
                     TelemetryCellsSnapshotAdapter.toDrinkContainers(snapshot)
                         .find { it.product.taste.id == tasteId }
                 }
@@ -123,7 +156,11 @@ constructor(
                         return@withLock PrepareDrinkResult.Error(PreparingErrorCodes.CONTAINER_NOT_FOUND, msg)
                     }
 
-            val flowRate = waterCalibrationService.loadCalibration().flowRateMlPerSec
+            val flowRate =
+                WaterCalibrationCalculations.resolveEffectiveFlowRateMlPerSec(
+                    localFlowRateMlPerSec = waterCalibrationService.loadCalibration().flowRateMlPerSec,
+                    telemetryWaterPumpTenths = snapshot?.machineCalibration?.waterPumpTenths,
+                )
             if (flowRate == null || flowRate <= 0) {
                 val msg = "Выполните калибровку воды в сервисном меню"
                 emit(PreparingState.Fail(PreparingErrorCodes.WATER_NOT_CALIBRATED, msg))
@@ -180,7 +217,7 @@ constructor(
                     transactionId = transactionId,
                 )
 
-            if (subscriptionPourContext != null) {
+            if (subscriptionPourContext?.offlineMode == true) {
                 val reserve =
                     offlinePourCoordinator.reservePour(
                         clientId = subscriptionPourContext.clientId,
@@ -206,7 +243,9 @@ constructor(
 
             _customerPhase.value = CustomerPreparingPhase.AwaitingDrinkReady(preparingTime)
 
-            subscriptionPourContext?.let { ctx ->
+            subscriptionPourContext
+                ?.takeIf { it.offlineMode }
+                ?.let { ctx ->
                 offlinePourCoordinator.markPouring(ctx.requestUuid)
             }
 
@@ -270,7 +309,6 @@ constructor(
             }
             context.subscriptionPourContext != null -> {
                 val sub = context.subscriptionPourContext
-                offlinePourCoordinator.finalizePour(sub.requestUuid, dispensedVolumeMl)
                 if (!sub.offlineMode) {
                     val pour =
                         DispenseTelemetryFactory.flavoredPourEvent(
@@ -286,6 +324,7 @@ constructor(
                         dispenseSyncCoordinator.enqueuePourReport(pour)
                     }.onFailure { Timber.tag(TAG).e(it, "enqueue telemetry.pour.report failed") }
                 } else {
+                    offlinePourCoordinator.finalizePour(sub.requestUuid, dispensedVolumeMl)
                     offlinePourCoordinator.enqueueForSync(sub.requestUuid, sub.clientId, isFree = true)
                     outboxDrainCoordinator.onEnqueue()
                 }
