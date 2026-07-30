@@ -17,6 +17,7 @@ object ServiceMenuTestTags {
     const val TELEMETRY_SERIAL_INPUT = "telemetry_serial_input"
     const val TELEMETRY_RESERVE_SERIAL = "telemetry_reserve_serial"
     const val TELEMETRY_REGISTER = "telemetry_register"
+    const val TELEMETRY_AUTO_PROVISION = "telemetry_auto_provision"
     const val TELEMETRY_CONNECT_WS = "telemetry_connect_ws"
     const val TELEMETRY_DISCONNECT_WS = "telemetry_disconnect_ws"
     const val TELEMETRY_REBIND_CARD = "telemetry_rebind_card"
@@ -100,6 +101,7 @@ object ServiceMenuTestTags {
             TELEMETRY_SERIAL_INPUT,
             TELEMETRY_RESERVE_SERIAL,
             TELEMETRY_REGISTER,
+            TELEMETRY_AUTO_PROVISION,
             TELEMETRY_CONNECT_WS,
             TELEMETRY_DISCONNECT_WS,
             TELEMETRY_REBIND_CARD,

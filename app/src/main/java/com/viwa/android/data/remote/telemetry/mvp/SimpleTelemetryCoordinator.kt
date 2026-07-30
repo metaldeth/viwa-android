@@ -254,6 +254,73 @@ constructor(
             }
     }
 
+    suspend fun provisionMachine(): Result<Unit> {
+        val config = loadTelemetryConfig()
+        val regLoaded = loadMachineRegistration()
+        if (MachineRegistration.isEnrolled(regLoaded)) {
+            return Result.success(Unit)
+        }
+        val reg = ensureIdentity(regLoaded)
+        val previousSerial = SerialNumberUtils.normalize(reg.serialNumber)
+        val request =
+            ProvisionRequestDto(
+                installationId = reg.installationId,
+                device =
+                    EnrollDeviceDto(
+                        manufacturer = Build.MANUFACTURER.orEmpty(),
+                        model = Build.MODEL.orEmpty(),
+                        androidVersion = Build.VERSION.RELEASE.orEmpty(),
+                    ),
+                app =
+                    EnrollAppDto(
+                        versionName = BuildConfig.VERSION_NAME,
+                        versionCode = BuildConfig.VERSION_CODE,
+                        packageName = BuildConfig.APPLICATION_ID,
+                    ),
+            )
+        return apiClient
+            .provision(config.apiUrl, request)
+            .map { response ->
+                val enrolledSerial =
+                    SerialNumberUtils.normalize(
+                        response.serialNumber.ifBlank { previousSerial },
+                    )
+                if (previousSerial.isNotBlank() && previousSerial != enrolledSerial) {
+                    machineSecretStore.clearSecret(previousSerial)
+                }
+                machineSecretStore.saveSecret(enrolledSerial, response.machineSecret)
+                val wsUrl =
+                    MvpTelemetryUrlResolver.resolveWsUrl(
+                        apiBaseUrl = config.apiUrl,
+                        enrolledWsUrl = response.wsUrl,
+                        configuredWsUrl = config.wsUrl,
+                    )
+                val regKey =
+                    response.registrationKey
+                        ?.let { RegistrationKeyUtils.normalize(it) }
+                        .orEmpty()
+                val updated =
+                    reg.copy(
+                        serialNumber = enrolledSerial,
+                        machineId = response.machineId.ifBlank { response.id },
+                        installationId = response.installationId.ifBlank { reg.installationId },
+                        wsProtocolUrl = wsUrl,
+                        tokenEndpoint = response.tokenEndpoint,
+                        regKey = regKey,
+                        authScheme = MachineRegistration.AUTH_SCHEME_STABLE_SECRET,
+                        machineCredential = "",
+                        machineKey = "",
+                        isRegistered = true,
+                        enrolled = true,
+                        reservationToken = "",
+                        reservationExpiresAt = "",
+                    )
+                jwtCache.invalidate()
+                persistRegistrationMetadata(updated)
+                Timber.i("SimpleTelemetry: provisioned serial=${updated.serialNumber}, auth=stable_secret")
+            }
+    }
+
     suspend fun applyUiSerialChange(uiSerial: String): Boolean {
         val reg = loadMachineRegistration()
         val normUi = SerialNumberUtils.normalize(uiSerial)

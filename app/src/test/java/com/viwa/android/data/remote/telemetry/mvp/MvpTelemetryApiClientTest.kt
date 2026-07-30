@@ -289,6 +289,61 @@ class MvpTelemetryApiClientTest {
     }
 
     @Test
+    fun `provision sends X-Factory-Provision-Key and parses response`() {
+        // given
+        val provisionClient =
+            MvpTelemetryApiClient(
+                httpClient = OkHttpClient(),
+                json = json,
+                enrollmentKeyProvider = { "test-enrollment-key" },
+                factoryProvisionKeyProvider = { "factory-key-test" },
+            )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(201)
+                .setBody(
+                    """
+                    {
+                      "id":"id-prov",
+                      "machineId":"m-prov",
+                      "serialNumber":"VIWA-000099",
+                      "installationId":"inst-prov",
+                      "machineSecret":"sec_prov",
+                      "tokenEndpoint":"/api/v1/machines/token",
+                      "wsUrl":"wss://tl.vitamin-water.ru/api/v1/machines/ws",
+                      "protocolVersion":1,
+                      "heartbeatIntervalSeconds":30,
+                      "registrationKey":"REG-0123456789AB"
+                    }
+                    """.trimIndent(),
+                ),
+        )
+        val request =
+            ProvisionRequestDto(
+                installationId = "inst-prov",
+                device = EnrollDeviceDto("A", "B", "7"),
+                app = EnrollAppDto("1", 1),
+            )
+        // when
+        val result =
+            kotlinx.coroutines.runBlocking {
+                provisionClient.provision(server.url("/").toString().removeSuffix("/"), request)
+            }
+        // then
+        assertTrue(result.isSuccess)
+        val recorded = server.takeRequest()
+        assertEquals("factory-key-test", recorded.getHeader("X-Factory-Provision-Key"))
+        assertEquals(null, recorded.getHeader("X-Enrollment-Key"))
+        assertTrue(recorded.path!!.endsWith("/api/v1/machines/provision"))
+        val body = recorded.body.readUtf8()
+        assertTrue(body.contains("\"installationId\":\"inst-prov\""))
+        assertFalse(body.contains("serialNumber"))
+        assertFalse(body.contains("registrationKey"))
+        assertEquals("VIWA-000099", result.getOrThrow().serialNumber)
+        assertEquals("REG-0123456789AB", result.getOrThrow().registrationKey)
+    }
+
+    @Test
     fun `register conflict 403 REBIND_NOT_ALLOWED throws typed exception`() {
         server.enqueue(
             MockResponse()

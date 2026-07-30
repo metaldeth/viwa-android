@@ -148,6 +148,26 @@ CMD (legacy): `set VIWA_TELEMETRY_ENROLLMENT_KEY=...`
 
 
 
+### Provision (авторегистрация)
+
+
+
+`POST /api/v1/machines/provision`
+
+
+
+- Заголовок: `X-Factory-Provision-Key: <factory key>` — ключ обфусцирован в APK (`FactoryProvisionKey`), должен совпадать с `MACHINE_FACTORY_PROVISION_KEY` на сервере.
+
+- Тело: `{ installationId, device?, app }` — **без** `serialNumber` и `registrationKey`.
+
+- Ответ `201`: тот же контракт, что у `/register`, плюс опционально `registrationKey` (REG для веб-панели).
+
+- UI: сервисное меню «Телеметрия → Подключение» — кнопка **«Авторегистрация»** (`telemetry_auto_provision`); enabled когда машина ещё не enrolled. После успеха сохраняются serial, `machineSecret`, `registrationKey`, подключается WS.
+
+- Старый путь с REG-ключом (`POST /register`) сохранён без изменений.
+
+
+
 ### Reserve serial (legacy)
 
 

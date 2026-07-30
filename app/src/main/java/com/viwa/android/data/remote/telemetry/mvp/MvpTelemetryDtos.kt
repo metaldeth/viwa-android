@@ -54,6 +54,13 @@ data class EnrollResponseDto(
 )
 
 @Serializable
+data class ProvisionRequestDto(
+    val installationId: String,
+    val device: EnrollDeviceDto? = null,
+    val app: EnrollAppDto,
+)
+
+@Serializable
 data class RegisterRequestDto(
     val registrationKey: String,
     val serialNumber: String,
@@ -73,6 +80,7 @@ data class RegisterResponseDto(
     val wsUrl: String,
     val protocolVersion: Int,
     val heartbeatIntervalSeconds: Int,
+    val registrationKey: String? = null,
 )
 
 @Serializable

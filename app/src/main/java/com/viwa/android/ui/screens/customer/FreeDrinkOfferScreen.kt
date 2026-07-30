@@ -1,49 +1,38 @@
 package com.viwa.android.ui.screens.customer
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Spa
 import androidx.compose.material.icons.rounded.WaterDrop
-import androidx.compose.material.icons.rounded.Bolt
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -64,25 +53,30 @@ import com.viwa.android.R
 import com.viwa.android.ui.components.QRCodeView
 import com.viwa.android.ui.theme.MontserratFamily
 
-private val FlowBg       = Color(0xFF121212)
-private val FlowBgCard   = Color(0xFF1D1D1D)
-private val FlowAccent   = Color(0xFF7F5AF0)
-private val FlowAccentBg = Color(0xFF2D2257)
-private val FlowWhite    = Color(0xFFF5F5F7)
-private val FlowGray     = Color(0xFFB0B0B0)
+private val OfferBackground = Color(0xFF09090C)
+private val OfferSurface = Color(0xE617171C)
+private val OfferAccent = Color(0xFFC600FF)
+private val OfferAccentMuted = Color(0xFF422050)
+private val OfferText = Color(0xFFF7F5F8)
+private val OfferTextMuted = Color(0xFFB7B1BA)
+private val OfferQrPlaceholder = Color(0xFF3B3440)
 
-private data class Benefit(val icon: ImageVector, val label: String)
-
-private val benefits = listOf(
-    Benefit(Icons.Rounded.WaterDrop, "1 литр каждый день"),
-    Benefit(Icons.Rounded.Bolt,      "Витамины B — фокус и энергия"),
-    Benefit(Icons.Rounded.Favorite,  "Без сахара и калорий"),
-    Benefit(Icons.Rounded.Spa,       "Натуральный вкус"),
+private data class Benefit(
+    val icon: ImageVector,
+    val label: String,
 )
 
+private val benefits =
+    listOf(
+        Benefit(Icons.Rounded.WaterDrop, "1 литр каждый день"),
+        Benefit(Icons.Rounded.Bolt, "Витамины B — фокус и энергия"),
+        Benefit(Icons.Rounded.Favorite, "Без сахара и калорий"),
+        Benefit(Icons.Rounded.Spa, "Натуральный вкус"),
+    )
+
 /**
- * Экран предложения бесплатного напитка — стиль FLOW Dark Premium.
- * Тёмный фон #121212, фиолетовый акцент #7F5AF0, лайм/вода как hero-визуал.
+ * Промо бесплатной воды. QR открывает web-авторизацию:
+ * `https://cabinet.vitamin-water.ru/m/{serial}/auth`.
  */
 @Composable
 fun FreeDrinkOfferScreen(
@@ -91,331 +85,280 @@ fun FreeDrinkOfferScreen(
 ) {
     val qrUrl by viewModel.qrUrl.collectAsStateWithLifecycle()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(FlowBg)
-            .drawBehind {
-                drawIntoCanvas { canvas ->
-                    val paint = Paint().apply {
-                        asFrameworkPaint().shader = android.graphics.RadialGradient(
-                            size.width * 0.72f, size.height * 0.45f,
-                            size.width * 0.48f,
-                            intArrayOf(0x44_7F5AF0.toInt(), 0x00_000000),
-                            floatArrayOf(0f, 1f),
-                            android.graphics.Shader.TileMode.CLAMP,
-                        )
-                    }
-                    canvas.drawRect(0f, 0f, size.width, size.height, paint)
-                }
-            },
-    ) {
-        Row(
-            modifier = Modifier
+    BoxWithConstraints(
+        modifier =
+            Modifier
                 .fillMaxSize()
-                .padding(horizontal = 32.dp, vertical = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-        ) {
-            LeftPanel(
-                qrUrl = qrUrl,
-                modifier = Modifier.fillMaxHeight().weight(0.43f),
-            )
-            RightPanel(
-                modifier = Modifier.fillMaxHeight().weight(0.57f),
-            )
-        }
+                .background(OfferBackground),
+    ) {
+        val scale = minOf(maxWidth / 1024.dp, maxHeight / 768.dp)
 
- // Кнопка закрытия — правый верхний угол
+        Image(
+            painter = painterResource(R.drawable.viwa_water_promo_dark),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.CenterEnd,
+        )
+
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            0f to Color.Black.copy(alpha = 0.98f),
+                            0.48f to Color.Black.copy(alpha = 0.88f),
+                            0.72f to Color.Black.copy(alpha = 0.32f),
+                            1f to Color.Black.copy(alpha = 0.10f),
+                        ),
+                    ),
+        )
+
+        OfferContent(
+            qrUrl = qrUrl,
+            scale = scale,
+            modifier =
+                Modifier
+                    .fillMaxHeight()
+                    .width(600.dp * scale)
+                    .padding(
+                        start = 48.dp * scale,
+                        top = 38.dp * scale,
+                        bottom = 38.dp * scale,
+                    ),
+        )
+
+        DailyWaterBadge(
+            scale = scale,
+            modifier =
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 40.dp * scale, bottom = 36.dp * scale),
+        )
+
         IconButton(
             onClick = onClose,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp)
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.18f))
-                .semantics { contentDescription = "Закрыть"; role = Role.Button },
+            modifier =
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(18.dp * scale)
+                    .size(48.dp * scale)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.52f))
+                    .semantics {
+                        contentDescription = "Закрыть"
+                        role = Role.Button
+                    },
         ) {
             Icon(
                 imageVector = Icons.Rounded.Close,
                 contentDescription = null,
-                tint = FlowWhite,
-                modifier = Modifier.size(20.dp),
+                tint = OfferText,
+                modifier = Modifier.size(22.dp * scale),
             )
         }
     }
 }
 
 @Composable
-private fun LeftPanel(qrUrl: String?, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(FlowBgCard)
-            .padding(horizontal = 30.dp, vertical = 28.dp),
-    ) {
- // Заголовок
+private fun OfferContent(
+    qrUrl: String?,
+    scale: Float,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
         Text(
-            text = buildAnnotatedString {
-                withStyle(SpanStyle(color = FlowWhite)) { append("Попробуй ") }
-                withStyle(SpanStyle(color = FlowAccent)) { append("бесплатно") }
-            },
-            style = TextStyle(
-                fontFamily = MontserratFamily,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 36.sp,
-                lineHeight = 42.sp,
-            ),
+            text =
+                buildAnnotatedString {
+                    append("Попробуй вкусную\nводу ")
+                    withStyle(SpanStyle(color = OfferAccent)) { append("бесплатно") }
+                },
+            style =
+                TextStyle(
+                    fontFamily = MontserratFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = (42f * scale).sp,
+                    lineHeight = (47f * scale).sp,
+                    color = OfferText,
+                ),
         )
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(10.dp * scale))
 
         Text(
-            text = "Чистый вкус фруктов и быстрое восстановление",
-            modifier = Modifier.fillMaxWidth(0.80f),
-            style = TextStyle(
-                fontFamily = MontserratFamily,
-                fontWeight = FontWeight.Normal,
-                fontSize = 18.sp,
-                lineHeight = 24.sp,
-                color = FlowGray,
-            ),
+            text = "Наведи камеру, войди в кабинет и получи свой ежедневный литр воды",
+            modifier = Modifier.fillMaxWidth(0.88f),
+            style =
+                TextStyle(
+                    fontFamily = MontserratFamily,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = (16f * scale).sp,
+                    lineHeight = (22f * scale).sp,
+                    color = OfferTextMuted,
+                ),
         )
 
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(22.dp * scale))
 
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            benefits.forEach { BenefitRow(it.icon, it.label) }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp * scale)) {
+            benefits.forEach { benefit ->
+                BenefitRow(
+                    benefit = benefit,
+                    scale = scale,
+                )
+            }
         }
 
         Spacer(Modifier.weight(1f))
 
-        BoxWithConstraints(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center,
-        ) {
-            val qrBoxSize = minOf(maxWidth * 0.62f, 220.dp)
-            Box(
-                modifier = Modifier
-                    .size(qrBoxSize)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color.White)
-                    .padding(9.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (qrUrl != null) {
-                    QRCodeView(data = qrUrl, modifier = Modifier.size(qrBoxSize - 18.dp))
-                } else {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(48.dp),
-                        color = FlowAccent,
-                        strokeWidth = 3.dp,
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        Text(
-            text = "Наведи камеру на QR-код",
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-            style = TextStyle(
-                fontFamily = MontserratFamily,
-                fontWeight = FontWeight.Normal,
-                fontSize = 11.sp,
-                color = FlowGray.copy(alpha = 0.7f),
-            ),
+        QrOfferCard(
+            qrUrl = qrUrl,
+            scale = scale,
         )
     }
 }
 
 @Composable
-private fun BenefitRow(icon: ImageVector, label: String) {
+private fun BenefitRow(
+    benefit: Benefit,
+    scale: Float,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp * scale),
     ) {
         Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(FlowAccentBg),
+            modifier =
+                Modifier
+                    .size(34.dp * scale)
+                    .clip(RoundedCornerShape(10.dp * scale))
+                    .background(OfferAccentMuted),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = icon,
+                imageVector = benefit.icon,
                 contentDescription = null,
-                tint = FlowAccent,
-                modifier = Modifier.size(18.dp),
+                tint = OfferAccent,
+                modifier = Modifier.size(17.dp * scale),
             )
         }
         Text(
-            text = label,
-            style = TextStyle(
-                fontFamily = MontserratFamily,
-                fontWeight = FontWeight.Medium,
-                fontSize = 18.sp,
-                lineHeight = 22.sp,
-                color = FlowWhite,
-            ),
+            text = benefit.label,
+            style =
+                TextStyle(
+                    fontFamily = MontserratFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = (15f * scale).sp,
+                    lineHeight = (19f * scale).sp,
+                    color = OfferText,
+                ),
         )
     }
 }
 
 @Composable
-private fun RightPanel(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.clip(RoundedCornerShape(20.dp)),
+private fun QrOfferCard(
+    qrUrl: String?,
+    scale: Float,
+) {
+    Row(
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(22.dp * scale))
+                .background(OfferSurface)
+                .padding(14.dp * scale),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(18.dp * scale),
     ) {
-        Image(
-            painter = painterResource(R.drawable.flow_ingredients_hero),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-        )
-
- // Верхнее холодное свечение
+        val qrSize = 168.dp * scale
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(FlowAccent.copy(alpha = 0.22f), Color.Transparent),
-                        center = Offset(860f, 140f),
-                        radius = 1100f,
-                    ),
-                ),
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            FlowAccent.copy(alpha = 0.10f),
-                            Color.Transparent,
-                            Color.Transparent,
-                            Color(0xFF120F1E).copy(alpha = 0.45f),
-                        ),
-                    ),
-                ),
-        )
-
-        FloatingBubblesOverlay()
-
- // Нижний градиент
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.44f)
-                .align(Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color(0xAA121212), Color(0xF2121212)),
-                    ),
-                ),
-        )
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth(0.72f)
-                .padding(start = 18.dp, end = 18.dp, bottom = 16.dp),
+            modifier =
+                Modifier
+                    .size(qrSize)
+                    .clip(RoundedCornerShape(14.dp * scale))
+                    .background(Color.White)
+                    .padding(8.dp * scale),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                Color.White.copy(alpha = 0.20f),
-                                Color(0xFF232328).copy(alpha = 0.90f),
-                                Color(0xFF17171A).copy(alpha = 0.94f),
-                            ),
-                        ),
-                    )
-                    .padding(horizontal = 20.dp, vertical = 18.dp),
-            ) {
-                Column {
-                    Text(
-                        text = "Твой ежедневный литр",
-                        style = TextStyle(
-                            fontFamily = MontserratFamily,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 27.sp,
-                            lineHeight = 31.sp,
-                            color = FlowWhite,
-                        ),
-                    )
-                    Text(
-                        text = "чистой пользы",
-                        style = TextStyle(
-                            fontFamily = MontserratFamily,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 27.sp,
-                            lineHeight = 31.sp,
-                            color = FlowAccent,
-                        ),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "100% натуральный продукт",
-                        style = TextStyle(
-                            fontFamily = MontserratFamily,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp,
-                            color = FlowWhite.copy(alpha = 0.72f),
-                        ),
-                    )
-                }
+            if (qrUrl != null) {
+                QRCodeView(
+                    data = qrUrl,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(
+                    text = "QR\nнедоступен",
+                    fontFamily = MontserratFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = (13f * scale).sp,
+                    lineHeight = (16f * scale).sp,
+                    color = OfferQrPlaceholder,
+                )
             }
         }
-    }
-}
 
-@Composable
-private fun FloatingBubblesOverlay() {
-    val transition = rememberInfiniteTransition(label = "flow-bubbles")
-    val drift by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 9000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "bubble-drift",
-    )
-
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val bubbles = listOf(
-            BubbleSpec(0.16f, 0.18f, 0.020f, 0.012f, 0.010f, 0.10f),
-            BubbleSpec(0.30f, 0.12f, 0.015f, -0.010f, 0.008f, 0.08f),
-            BubbleSpec(0.56f, 0.23f, 0.024f, 0.014f, 0.012f, 0.12f),
-            BubbleSpec(0.75f, 0.14f, 0.018f, -0.012f, 0.009f, 0.09f),
-            BubbleSpec(0.84f, 0.28f, 0.013f, 0.010f, 0.008f, 0.08f),
-        )
-
-        bubbles.forEach { bubble ->
-            drawCircle(
-                color = Color.White.copy(alpha = bubble.alpha),
-                radius = size.minDimension * bubble.radiusFraction,
-                center = Offset(
-                    x = size.width * (bubble.x + bubble.dx * drift),
-                    y = size.height * (bubble.y + bubble.dy * drift),
-                ),
+        Column(
+            modifier = Modifier.width(250.dp * scale),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = if (qrUrl != null) "Сканируй и авторизуйся" else "Автомат ещё не зарегистрирован",
+                style =
+                    TextStyle(
+                        fontFamily = MontserratFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = (18f * scale).sp,
+                        lineHeight = (22f * scale).sp,
+                        color = OfferText,
+                    ),
+            )
+            Spacer(Modifier.height(6.dp * scale))
+            Text(
+                text =
+                    if (qrUrl != null) {
+                        "QR-код уже содержит серийный номер этого автомата"
+                    } else {
+                        "Выполни авторегистрацию в сервисном меню"
+                    },
+                style =
+                    TextStyle(
+                        fontFamily = MontserratFamily,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = (12f * scale).sp,
+                        lineHeight = (16f * scale).sp,
+                        color = OfferTextMuted,
+                    ),
             )
         }
     }
 }
 
-private data class BubbleSpec(
-    val x: Float,
-    val y: Float,
-    val radiusFraction: Float,
-    val dx: Float,
-    val dy: Float,
-    val alpha: Float,
-)
+@Composable
+private fun DailyWaterBadge(
+    scale: Float,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(18.dp * scale))
+                .background(Color.Black.copy(alpha = 0.62f))
+                .padding(horizontal = 20.dp * scale, vertical = 14.dp * scale),
+    ) {
+        Text(
+            text = "Твой ежедневный литр",
+            fontFamily = MontserratFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = (18f * scale).sp,
+            color = OfferText,
+        )
+        Text(
+            text = "чистой пользы",
+            fontFamily = MontserratFamily,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = (19f * scale).sp,
+            color = OfferAccent,
+        )
+    }
+}

@@ -477,7 +477,7 @@ fun DrinkListScreen(
                                 onOpenSubscriptionPurchase = { viewModel.openSubscriptionOfferSheet() },
                             )
                         } else {
-                            ViwaPromoVideoCard(s = s, onClick = onOpenFreeDrinkOffer)
+                            ViwaPromoCard(s = s, onClick = onOpenFreeDrinkOffer)
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             if (!hasSelection && state.scannedSubscriptionClientId != null) {

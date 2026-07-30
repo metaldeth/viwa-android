@@ -28,21 +28,6 @@ val IDLE_VIDEO_IDS_ALL: List<String> = IDLE_VIDEOS.map { it.id }
 object ViwaElectronAssets {
     const val ASSET_URI_PREFIX = "file:///android_asset/viwa_electron"
 
-    val PROMO_VIDEO_FILES: List<String> =
-        listOf(
-            "blackberryLime.mp4",
-            "blackCherry.mp4",
-            "coconut.mp4",
-            "cucumber.mp4",
-            "grapefruit.mp4",
-            "lemon.mp4",
-            "lime.mp4",
-            "limeMint.mp4",
-            "orange.mp4",
-            "strawberryLemongrass.mp4",
-            "watermelon.mp4",
-        )
-
     /** Все 14 видео для фонового idle-скринсейвера. */
     val IDLE_VIDEO_FILES: List<String> =
         listOf(

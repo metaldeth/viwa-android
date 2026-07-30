@@ -1384,6 +1384,43 @@ constructor(
         registerTelemetryMachine(rebind = true)
     }
 
+    fun provisionTelemetryMachine() {
+        viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    telemetryBusy = true,
+                    telemetryBanner = null,
+                    telemetrySerialConflict = false,
+                    telemetryRebindConfirmVisible = false,
+                )
+            }
+            runCatching {
+                telemetryService.provisionMachine().getOrThrow()
+                loadTelemetryForm()
+                telemetryService.connect()
+                val serial = SerialNumberUtils.normalize(_state.value.telemetrySerial)
+                _state.update {
+                    it.copy(
+                        telemetryBusy = false,
+                        telemetryEnrolled = true,
+                        telemetrySerialNeedsRegistration = false,
+                        telemetryBanner = "Авторегистрация OK: $serial; WS…",
+                        telemetryBannerIsError = false,
+                    )
+                }
+            }.onFailure { e ->
+                Timber.e(e, "provisionTelemetryMachine")
+                _state.update {
+                    it.copy(
+                        telemetryBusy = false,
+                        telemetryBanner = e.message ?: "Ошибка авторегистрации",
+                        telemetryBannerIsError = true,
+                    )
+                }
+            }
+        }
+    }
+
     fun registerTelemetryMachine(rebind: Boolean = false) {
         val current = _state.value
         val validationMessage = SerialNumberUtils.validationMessage(current.telemetrySerial)

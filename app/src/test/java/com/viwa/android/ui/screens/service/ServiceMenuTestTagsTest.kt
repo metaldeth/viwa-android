@@ -26,6 +26,7 @@ class ServiceMenuTestTagsTest {
         assertEquals("telemetry_serial_input", ServiceMenuTestTags.TELEMETRY_SERIAL_INPUT)
         assertEquals("telemetry_reserve_serial", ServiceMenuTestTags.TELEMETRY_RESERVE_SERIAL)
         assertEquals("telemetry_register", ServiceMenuTestTags.TELEMETRY_REGISTER)
+        assertEquals("telemetry_auto_provision", ServiceMenuTestTags.TELEMETRY_AUTO_PROVISION)
         assertEquals("telemetry_connect_ws", ServiceMenuTestTags.TELEMETRY_CONNECT_WS)
         assertEquals("telemetry_api_url_input", ServiceMenuTestTags.TELEMETRY_API_URL_INPUT)
         assertEquals("telemetry_ws_url_input", ServiceMenuTestTags.TELEMETRY_WS_URL_INPUT)

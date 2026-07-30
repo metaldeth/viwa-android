@@ -262,6 +262,8 @@ constructor(
         }
     }
 
+    suspend fun provisionMachine(): Result<Unit> = mvpCoordinator.provisionMachine()
+
     suspend fun reserveFreeSerial(): Result<String> = mvpCoordinator.reserveFreeSerial()
 
     suspend fun applyUiSerialChange(uiSerial: String): Boolean = mvpCoordinator.applyUiSerialChange(uiSerial)

@@ -65,8 +65,27 @@ class MvpTelemetryApiClient(
     private val httpClient: OkHttpClient,
     private val json: Json,
     private val enrollmentKeyProvider: () -> String,
+    private val factoryProvisionKeyProvider: () -> String = { FactoryProvisionKey.reveal() },
 ) {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+
+    suspend fun provision(
+        baseUrl: String,
+        requestBody: ProvisionRequestDto,
+    ): Result<RegisterResponseDto> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val body = json.encodeToString(ProvisionRequestDto.serializer(), requestBody)
+                val request =
+                    Request.Builder()
+                        .url("${baseUrl.trimEnd('/')}/api/v1/machines/provision")
+                        .post(body.toRequestBody(jsonMediaType))
+                        .header("Content-Type", "application/json")
+                        .header("X-Factory-Provision-Key", factoryProvisionKeyProvider())
+                        .build()
+                executeRegister(request, requestBody.installationId)
+            }
+        }
 
     suspend fun register(
         baseUrl: String,

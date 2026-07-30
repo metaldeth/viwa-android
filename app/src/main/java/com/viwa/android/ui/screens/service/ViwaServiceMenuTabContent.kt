@@ -327,6 +327,22 @@ private fun ViwaTelemetryConnectionTab(
                 color = MaterialTheme.colorScheme.primary,
             )
         }
+        OutlinedButton(
+            onClick = { viewModel.provisionTelemetryMachine() },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .testTag(ServiceMenuTestTags.TELEMETRY_AUTO_PROVISION),
+            enabled = !state.telemetryBusy && !state.telemetryEnrolled,
+        ) {
+            Text(
+                if (state.telemetryEnrolled) {
+                    "Уже зарегистрирован"
+                } else {
+                    "Авторегистрация"
+                },
+            )
+        }
         Row(modifier = Modifier.fillMaxWidth()) {
             if (state.telemetryEnrolled && !state.telemetrySerialNeedsRegistration) {
                 OutlinedButton(

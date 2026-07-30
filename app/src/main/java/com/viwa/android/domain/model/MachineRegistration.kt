@@ -14,7 +14,7 @@ data class MachineRegistration(
     val reservationToken: String = "",
     val reservationExpiresAt: String = "",
     val wsProtocolUrl: String = "",
-    val tokenEndpoint: String = "/api/v1/machines/token",
+    val tokenEndpoint: String = TelemetryConfig.DEFAULT_TOKEN_ENDPOINT,
     val regKey: String = "",
  /** `stable_secret` после REG; `legacy_credential` до REG; пусто — не зарегистрирован. */
     val authScheme: String = "",
@@ -69,8 +69,8 @@ data class MachineRegistration(
                 isRegistered = registered,
                 enrolled = registered,
                 serialNumber = serial,
-                tokenEndpoint = reg.tokenEndpoint.ifBlank { "/api/v1/machines/token" },
-                wsProtocolUrl = TelemetryConfig.sanitizeWsUrl(reg.wsProtocolUrl),
+                tokenEndpoint = TelemetryConfig.migrateTokenEndpoint(reg.tokenEndpoint),
+                wsProtocolUrl = TelemetryConfig.migrateWsProtocolUrl(reg.wsProtocolUrl),
             )
         }
 

@@ -285,4 +285,70 @@ class SimpleTelemetryCoordinatorTest {
         assertTrue(result.exceptionOrNull() is MissingEnrollmentKeyException)
         assertEquals(0, server.requestCount)
     }
+
+    @Test
+    fun `provisionMachine persists serial secret and registration key`() = runTest {
+        // given
+        val base = server.url("/").toString().removeSuffix("/")
+        coordinator.saveTelemetryConfig(TelemetryConfig(apiUrl = base))
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(201)
+                .setBody(
+                    """
+                    {
+                      "id":"id-prov",
+                      "machineId":"m-prov",
+                      "serialNumber":"VIWA-000099",
+                      "installationId":"inst-1",
+                      "machineSecret":"sec_prov",
+                      "tokenEndpoint":"/api/v1/machines/token",
+                      "wsUrl":"ws://localhost/ws",
+                      "protocolVersion":1,
+                      "heartbeatIntervalSeconds":30,
+                      "registrationKey":"REG-0123456789AB"
+                    }
+                    """.trimIndent(),
+                ),
+        )
+        // when
+        coordinator.provisionMachine().getOrThrow()
+        val reg = coordinator.loadMachineRegistration()
+        // then
+        assertEquals("VIWA-000099", reg.serialNumber)
+        assertEquals("REG-0123456789AB", reg.regKey)
+        assertTrue(reg.enrolled)
+        assertTrue(machineSecretStore.hasSecret("VIWA-000099"))
+    }
+
+    @Test
+    fun `provisionMachine when already enrolled is no-op success`() = runTest {
+        // given
+        val jsonEncoder =
+            Json {
+                ignoreUnknownKeys = true
+                encodeDefaults = true
+                explicitNulls = false
+            }
+        configRepository.setJson(
+            JsonStoreKeys.MACHINE_REGISTRATION,
+            jsonEncoder.encodeToString(
+                com.viwa.android.domain.model.MachineRegistration.serializer(),
+                com.viwa.android.domain.model.MachineRegistration(
+                    serialNumber = "VIWA-000001",
+                    machineId = "m1",
+                    isRegistered = true,
+                    enrolled = true,
+                    installationId = "inst-1",
+                    authScheme = com.viwa.android.domain.model.MachineRegistration.AUTH_SCHEME_STABLE_SECRET,
+                ),
+            ),
+        )
+        machineSecretStore.saveSecret("VIWA-000001", "existing-secret")
+        // when
+        val result = coordinator.provisionMachine()
+        // then
+        assertTrue(result.isSuccess)
+        assertEquals(0, server.requestCount)
+    }
 }
