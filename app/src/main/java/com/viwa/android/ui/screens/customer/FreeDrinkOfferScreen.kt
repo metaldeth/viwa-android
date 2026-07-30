@@ -68,10 +68,10 @@ private data class Benefit(
 
 private val benefits =
     listOf(
-        Benefit(Icons.Rounded.WaterDrop, "1 литр каждый день"),
-        Benefit(Icons.Rounded.Bolt, "Витамины B — фокус и энергия"),
+        Benefit(Icons.Rounded.Spa, "Лёгкий вкус"),
+        Benefit(Icons.Rounded.Bolt, "Витамины B3, B6 и B12"),
+        Benefit(Icons.Rounded.WaterDrop, "Минералы Mg и Zn"),
         Benefit(Icons.Rounded.Favorite, "Без сахара и калорий"),
-        Benefit(Icons.Rounded.Spa, "Натуральный вкус"),
     )
 
 /**
@@ -129,7 +129,7 @@ fun FreeDrinkOfferScreen(
                     ),
         )
 
-        DailyWaterBadge(
+        BrandTaglineBadge(
             scale = scale,
             modifier =
                 Modifier
@@ -171,7 +171,7 @@ private fun OfferContent(
         Text(
             text =
                 buildAnnotatedString {
-                    append("Попробуй вкусную\nводу ")
+                    append("Попробуй VIWA\n")
                     withStyle(SpanStyle(color = OfferAccent)) { append("бесплатно") }
                 },
             style =
@@ -187,7 +187,7 @@ private fun OfferContent(
         Spacer(Modifier.height(10.dp * scale))
 
         Text(
-            text = "Наведи камеру, войди в кабинет и получи свой ежедневный литр воды",
+            text = "Лёгкая витаминная вода из умной станции",
             modifier = Modifier.fillMaxWidth(0.88f),
             style =
                 TextStyle(
@@ -298,44 +298,23 @@ private fun QrOfferCard(
             }
         }
 
-        Column(
+        Text(
+            text = if (qrUrl != null) "Сканируй и авторизуйся" else "QR временно недоступен",
             modifier = Modifier.width(250.dp * scale),
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(
-                text = if (qrUrl != null) "Сканируй и авторизуйся" else "Автомат ещё не зарегистрирован",
-                style =
-                    TextStyle(
-                        fontFamily = MontserratFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = (18f * scale).sp,
-                        lineHeight = (22f * scale).sp,
-                        color = OfferText,
-                    ),
-            )
-            Spacer(Modifier.height(6.dp * scale))
-            Text(
-                text =
-                    if (qrUrl != null) {
-                        "QR-код уже содержит серийный номер этого автомата"
-                    } else {
-                        "Выполни авторегистрацию в сервисном меню"
-                    },
-                style =
-                    TextStyle(
-                        fontFamily = MontserratFamily,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = (12f * scale).sp,
-                        lineHeight = (16f * scale).sp,
-                        color = OfferTextMuted,
-                    ),
-            )
-        }
+            style =
+                TextStyle(
+                    fontFamily = MontserratFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = (18f * scale).sp,
+                    lineHeight = (22f * scale).sp,
+                    color = OfferText,
+                ),
+        )
     }
 }
 
 @Composable
-private fun DailyWaterBadge(
+private fun BrandTaglineBadge(
     scale: Float,
     modifier: Modifier = Modifier,
 ) {
@@ -347,14 +326,14 @@ private fun DailyWaterBadge(
                 .padding(horizontal = 20.dp * scale, vertical = 14.dp * scale),
     ) {
         Text(
-            text = "Твой ежедневный литр",
+            text = "Вкус",
             fontFamily = MontserratFamily,
             fontWeight = FontWeight.Bold,
             fontSize = (18f * scale).sp,
             color = OfferText,
         )
         Text(
-            text = "чистой пользы",
+            text = "в точной дозе",
             fontFamily = MontserratFamily,
             fontWeight = FontWeight.ExtraBold,
             fontSize = (19f * scale).sp,

@@ -6,7 +6,7 @@
 
 | ID | Severity | Summary | Status |
 |----|----------|---------|--------|
-| BT-001 | high | Concurrent Gradle owners / `gradlew --stop` / file-lock contention — full `:app:testDebugUnitTest` не завершился | `open` |
+| BT-001 | high | Full `:app:testDebugUnitTest` зависает без CPU и вывода даже с одним worker | `open` |
 | BT-002 | medium | `TechnicianAllowlistSyncCoordinatorDisconnectTest` — `UncompletedCoroutinesError` | `open` |
 | BT-003 | medium | `OfflineGrantVerifierTest` — OOM при параллельных workers | `open` |
 | BT-004 | high | `assembleRelease` падает до R8 — signing env / keystore не настроены | `open` |
@@ -27,3 +27,13 @@
 - **Workaround / fix:** **Требуется (не workaround):** сериализовать Gradle ownership (один owner, без параллельных `gradlew` / агентных retry; `--stop` только после подтверждения завершения процессов). Стабилизировать coroutine test (`TechnicianAllowlistSyncCoordinatorDisconnectTest`). Перезапустить OOM-тест с `--max-workers=1` и достаточным `-Xmx` для test JVM. Настроить release signing безопасно (env / local.properties / CI secrets — не коммитить keystore). Затем повторить full `:app:testDebugUnitTest` и `assembleRelease`.
 - **Статус:** `open`
 - **Связи:** [docs/sessions/2026-07-28-overnight-ws-offline-soak.md](../sessions/2026-07-28-overnight-ws-offline-soak.md) (ws-offline soak; partial `assembleDebug` OK, full verification отложена из-за блокеров выше)
+
+### 2026-07-30 — full unit suite hangs with a single Gradle owner
+
+- **Repo:** `viwa-android` (`c:\wiva\viwa-android`)
+- **Команда:** `gradlew.bat :app:testDebugUnitTest --no-daemon`; retry: `gradlew.bat :app:testDebugUnitTest --no-daemon --max-workers=1`
+- **Симптом:** оба запуска дошли до `:app:testDebugUnitTest` и зависли без новых строк. Во втором запуске через ~11 минут CPU delta Gradle-процессов оставался `0` более 30 секунд; JUnit XML не сформирован.
+- **Причина:** не установлена. Параллельных Gradle owners не было; `--max-workers=1` hang не устранил.
+- **Workaround / fix:** процессы конкретного запуска остановлены, затем выполнен `gradlew.bat --stop`. Для диагностики локализовать зависший test-класс через разбиение suite или JUnit launcher logging; полный suite не считать пройденным.
+- **Статус:** `open`
+- **Связи:** локальная верификация Android `26.07.30.02`.
