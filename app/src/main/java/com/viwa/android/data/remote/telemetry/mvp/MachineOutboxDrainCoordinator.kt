@@ -67,6 +67,15 @@ constructor(
         outboxStore.markServerError(entry, code, message)
     }
 
+    suspend fun handleUnprovenPourDedupAck(entry: MachineOutboxEntryEntity) {
+        val rotated = outboxStore.rotateMessageIdForRetry(entry)
+        Timber.w(
+            "MachineOutboxDrain: unproven pour dedup ack — rotated messageId to ${rotated.messageId} " +
+                "idempotencyKey=${rotated.idempotencyKey}",
+        )
+        drain("unproven-pour-dedup", wsManager.currentSessionGeneration())
+    }
+
     fun stopPeriodicFlush() {
         periodicFlushJob?.cancel()
         periodicFlushJob = null

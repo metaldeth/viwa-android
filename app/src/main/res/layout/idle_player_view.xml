@@ -12,4 +12,6 @@
     app:surface_type="texture_view"
     app:resize_mode="fixed_height"
     app:use_controller="false"
-    app:show_buffering="never" />
+    app:show_buffering="never"
+    app:shutter_background_color="@android:color/black"
+    android:background="@android:color/black" />

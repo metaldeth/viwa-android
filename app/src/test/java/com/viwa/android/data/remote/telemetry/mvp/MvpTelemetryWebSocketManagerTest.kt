@@ -239,4 +239,28 @@ class MvpTelemetryWebSocketManagerTest {
             assertFalse(manager.shouldInitiateConnectOnNetworkValidated())
             manager.disconnect()
         }
+
+    @Test
+    fun `missing JWT keeps retrying without network transition`() =
+        runTest {
+            manager = createWsManagerForTests(trafficLogger)
+            var tokenRequests = 0
+            var authInvalidations = 0
+
+            manager.connect(
+                wsUrl = "ws://127.0.0.1:1",
+                tokenProvider = {
+                    tokenRequests += 1
+                    null
+                },
+                onAuthFailure = { authInvalidations += 1 },
+            )
+
+            advanceTimeBy(120_000L)
+
+            assertTrue(tokenRequests >= 2)
+            assertEquals(tokenRequests, authInvalidations)
+            assertTrue(manager.hasActiveConnectLifecycle())
+            manager.disconnect()
+        }
 }

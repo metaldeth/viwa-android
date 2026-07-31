@@ -8,6 +8,7 @@ import com.viwa.android.data.local.outbox.MachineOutboxStore
 import com.viwa.android.data.local.outbox.OutboxFeatureFlags
 import com.viwa.android.data.local.outbox.OutboxRetryPolicy
 import com.viwa.android.data.local.outbox.PendingSalesOutboxMigrator
+import com.viwa.android.data.local.outbox.PourOutboxStore
 import com.viwa.android.data.local.outbox.TestOutboxFixtures
 import com.viwa.android.data.repository.ConfigRepository
 import io.mockk.coEvery
@@ -133,6 +134,21 @@ class MachineOutboxDrainCoordinatorTest {
         assertEquals(1, purged)
         assertEquals(1, persistence.allRows().size)
         assertEquals(MachineOutboxStatus.REJECTED.name, persistence.allRows().single().status)
+    }
+
+    @Test
+    fun `handleUnprovenPourDedupAck rotates messageId and keeps idempotencyKey`() = runTest {
+        val pourOutboxStore = PourOutboxStore(outboxStore)
+        TestOutboxFixtures.enqueueTestPour(pourOutboxStore, requestUuid = "pour-dedup-rotate")
+        val row = persistence.allRows().single()
+        outboxStore.markInFlight(row, sessionGeneration = 1L)
+        coEvery { wsManager.sendEnvelope(any(), any(), any()) } returns Result.success("msg")
+        coordinator.handleUnprovenPourDedupAck(row)
+        val after = persistence.allRows().single()
+        assertEquals("pour-dedup-rotate", after.idempotencyKey)
+        assertEquals(row.payloadJson, after.payloadJson)
+        assertTrue(after.messageId != row.messageId)
+        assertEquals(MachineOutboxStatus.IN_FLIGHT.name, after.status)
     }
 
     @Test

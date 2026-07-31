@@ -132,7 +132,7 @@ constructor(
                     authFailure = false
                     fsm.resetBackoff()
                     var attempt = 0
-                    while (isActive && !authFailure) {
+                    while (isActive) {
                         helloReceived = false
                         cancelLivenessJobs()
                         resetHeartbeatAckTracking()
@@ -166,7 +166,11 @@ constructor(
                             if (_connectionState.value !is ConnectionState.Error) {
                                 _connectionState.value = ConnectionState.Error("Не удалось получить JWT")
                             }
-                            break
+                            onAuthFailure()
+                            fsm.incrementBackoff()
+                            attempt = fsm.backoffAttempt
+                            authFailure = false
+                            continue
                         }
 
                         try {
@@ -269,8 +273,13 @@ constructor(
                         heartbeatJob?.cancel()
                         cancelLivenessJobs()
 
-                        if (authFailure) break
-                        if (helloReceived) {
+                        if (authFailure) {
+                            // Auth/JWT может восстановиться без смены сети. Инвалидируем токен через
+                            // callback и остаёмся в пожизненном reconnect-loop с capped backoff.
+                            authFailure = false
+                            fsm.incrementBackoff()
+                            attempt = fsm.backoffAttempt
+                        } else if (helloReceived) {
                             fsm.resetBackoff()
                             attempt = 0
                         } else {
@@ -278,15 +287,13 @@ constructor(
                             attempt = fsm.backoffAttempt
                         }
 
-                        if (!authFailure) {
-                            val nextDelay =
-                                TelemetryReconnectBackoff.delayMs(
-                                    attempt = attempt,
-                                    random = reconnectRandom,
-                                )
-                            transitionFsm(TelemetryConnectionPhase.Backoff, "await reconnect")
-                            _connectionState.value = ConnectionState.Disconnected(nextDelay)
-                        }
+                        val nextDelay =
+                            TelemetryReconnectBackoff.delayMs(
+                                attempt = attempt,
+                                random = reconnectRandom,
+                            )
+                        transitionFsm(TelemetryConnectionPhase.Backoff, "await reconnect")
+                        _connectionState.value = ConnectionState.Disconnected(nextDelay)
                     }
                 }
             }
@@ -340,6 +347,8 @@ constructor(
             TelemetryConnectionPhase.Connecting,
             TelemetryConnectionPhase.AwaitingHello,
             TelemetryConnectionPhase.Backoff,
+            TelemetryConnectionPhase.AwaitingNetwork,
+            TelemetryConnectionPhase.AuthError,
             -> true
             else -> false
         }
@@ -561,19 +570,31 @@ constructor(
         val payload = envelope.payload?.jsonObject ?: return
         appScope.launch {
             runCatching {
-                ackRouter.routeAck(
-                    envelope = envelope,
-                    sessionGeneration = sessionGeneration,
-                    cellsHandler = { ackPayload ->
-                        cellsSyncHandler?.onSchemaAck(ackPayload)
-                    },
-                    loyaltyHandler = { corr, ackPayload ->
-                        loyaltySyncHandler?.onLoyaltyAck(corr, ackPayload)
-                    },
-                    technicianHandler = { corr, ackPayload ->
-                        technicianKeySyncHandler?.onValidateAck(corr, ackPayload)
-                    },
-                )
+                val outcome =
+                    ackRouter.routeAck(
+                        envelope = envelope,
+                        sessionGeneration = sessionGeneration,
+                        cellsHandler = { ackPayload ->
+                            cellsSyncHandler?.onSchemaAck(ackPayload)
+                        },
+                        loyaltyHandler = { corr, ackPayload ->
+                            loyaltySyncHandler?.onLoyaltyAck(corr, ackPayload)
+                        },
+                        technicianHandler = { corr, ackPayload ->
+                            technicianKeySyncHandler?.onValidateAck(corr, ackPayload)
+                        },
+                        pourBalanceHandler = { ackPayload ->
+                            loyaltySyncHandler?.onPourReportBalanceAck(ackPayload)
+                        },
+                        onUnprovenPourDedupAck = { entry ->
+                            outboxDrainCoordinator.handleUnprovenPourDedupAck(entry)
+                        },
+                    )
+                if (outcome == AckRouteOutcome.UNPROVEN_POUR_DEDUP) {
+                    Timber.w(
+                        "MvpTelemetry WS: unproven pour dedup ack correlationId=$correlation gen=$sessionGeneration",
+                    )
+                }
             }.onFailure { Timber.w(it, "MvpTelemetry WS: ack router failed") }
         }
     }
@@ -590,19 +611,26 @@ constructor(
         val message = payload["message"]?.jsonPrimitive?.content ?: code
         appScope.launch {
             runCatching {
-                ackRouter.routeError(
-                    envelope = envelope,
-                    sessionGeneration = sessionGeneration,
-                    outboxErrorHandler = { entry, errCode, errMessage ->
-                        outboxDrainCoordinator.handleOutboxError(entry, errCode, errMessage)
-                    },
-                    loyaltyErrorHandler = { corr, errCode, errMessage ->
-                        loyaltySyncHandler?.onLoyaltyError(corr, errCode, errMessage)
-                    },
-                    technicianErrorHandler = { corr, errCode, errMessage ->
-                        technicianKeySyncHandler?.onValidateError(corr, errCode, errMessage)
-                    },
-                )
+                val outcome =
+                    ackRouter.routeError(
+                        envelope = envelope,
+                        sessionGeneration = sessionGeneration,
+                        outboxErrorHandler = { entry, errCode, errMessage ->
+                            outboxDrainCoordinator.handleOutboxError(entry, errCode, errMessage)
+                        },
+                        loyaltyErrorHandler = { corr, errCode, errMessage ->
+                            loyaltySyncHandler?.onLoyaltyError(corr, errCode, errMessage)
+                        },
+                        technicianErrorHandler = { corr, errCode, errMessage ->
+                            technicianKeySyncHandler?.onValidateError(corr, errCode, errMessage)
+                        },
+                    )
+                if (outcome == AckRouteOutcome.ORPHAN) {
+                    Timber.w(
+                        "MvpTelemetry WS: unhandled error frame correlationId=$correlation " +
+                            "code=$code message=$message gen=$sessionGeneration",
+                    )
+                }
             }.onFailure { Timber.w(it, "MvpTelemetry WS: error router failed") }
         }
     }

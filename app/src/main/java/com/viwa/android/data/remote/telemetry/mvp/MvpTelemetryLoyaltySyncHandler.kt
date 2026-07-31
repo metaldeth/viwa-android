@@ -8,5 +8,8 @@ interface MvpTelemetryLoyaltySyncHandler {
 
     suspend fun onStatusChanged(payload: JsonObject)
 
+    /** Balance fields from telemetry.pour.report outbox ACK (partial merge into subscribeInfo). */
+    suspend fun onPourReportBalanceAck(payload: JsonObject)
+
     suspend fun onLoyaltyError(correlationId: String?, code: String, message: String)
 }

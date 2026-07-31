@@ -18,6 +18,13 @@ import javax.inject.Inject
 
 private const val IDLE_TIMEOUT_MS = 60_000L
 
+/**
+ * Attract idle overlay (полноэкранное видео ожидания).
+ * На k3568 после ExoPlayer/TextureView киоск залипал на белом экране без UI —
+ * пока выключено жёстко. Настройки idle в сервисном меню сохраняются, но оверлей не показывается.
+ */
+private const val IDLE_OVERLAY_ENABLED = false
+
 @HiltViewModel
 class IdleVideoViewModel @Inject constructor(
     private val configRepository: ConfigRepository,
@@ -50,6 +57,10 @@ class IdleVideoViewModel @Inject constructor(
         runCatching {
             val ids = Json.decodeFromString<List<String>>(saved)
             _enabledVideoIds.value = ids
+            if (ids.isEmpty()) {
+                idleJob?.cancel()
+                _isVisible.value = false
+            }
         }
     }
 
@@ -85,10 +96,14 @@ class IdleVideoViewModel @Inject constructor(
 
     private fun scheduleIdle() {
         idleJob?.cancel()
+        _isVisible.value = false
+        if (!IDLE_OVERLAY_ENABLED) return
         if (!screenActive || _enabledVideoIds.value.isEmpty()) return
         idleJob = viewModelScope.launch {
             delay(IDLE_TIMEOUT_MS)
-            if (screenActive) _isVisible.value = true
+            if (screenActive && _enabledVideoIds.value.isNotEmpty()) {
+                _isVisible.value = true
+            }
         }
     }
 

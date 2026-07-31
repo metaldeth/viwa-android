@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -139,6 +140,10 @@ constructor(
                     }.onFailure { Timber.w(it, "ViwaTelemetry: loyalty.status.changed decode failed") }
                 }
 
+                override suspend fun onPourReportBalanceAck(payload: JsonObject) {
+                    mergePourBalanceIntoSubscribeInfo(payload)
+                }
+
                 override suspend fun onLoyaltyError(correlationId: String?, code: String, message: String) {
                     Timber.w("ViwaTelemetry: loyalty WS error correlationId=$correlationId code=$code message=$message")
                     if (correlationId != null) {
@@ -173,6 +178,30 @@ constructor(
                     scheduledAutoConnect = null
                     startTelemetryIfRegistered("холодный старт")
                 }
+        }
+    }
+
+    private fun mergePourBalanceIntoSubscribeInfo(payload: JsonObject) {
+        _subscribeInfo.update { current ->
+            LoyaltyWsCodec.mergePourBalanceAck(current, payload) ?: current
+        }
+    }
+
+    /** Optimistic UI debit until pour-report ACK reconciles with server balance. */
+    fun applyOptimisticSubscriptionPourDeduction(pouredMl: Int) {
+        if (pouredMl <= 0) return
+        _subscribeInfo.update { current ->
+            if (current == null) return@update null
+            val remaining = (current.volumeMl - pouredMl).coerceAtLeast(0)
+            Timber.d(
+                "ViwaTelemetry: optimistic subscription pour -%d ml remainingMl=%d",
+                pouredMl,
+                remaining,
+            )
+            current.copy(
+                volumeMl = remaining,
+                isActiveSubscribe = remaining > 0 && current.isActiveSubscribe,
+            )
         }
     }
 

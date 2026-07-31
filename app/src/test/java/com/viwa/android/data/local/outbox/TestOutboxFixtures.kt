@@ -7,6 +7,7 @@ import com.viwa.android.domain.model.customer.DrinkConcentration
 import com.viwa.android.domain.model.customer.DrinkDosage
 
 import com.viwa.android.domain.telemetry.DispenseTelemetryFactory
+import com.viwa.android.domain.telemetry.PlainWaterType
 
 
 
@@ -81,6 +82,40 @@ internal object TestOutboxFixtures {
                 dosage = dosage,
 
                 clientId = "client-1",
+
+            ),
+
+        )
+
+    }
+
+
+
+    suspend fun enqueueTestPlainWaterPour(
+
+        pourOutboxStore: PourOutboxStore,
+
+        requestUuid: String = "plain-pour-1",
+
+        volumeMl: Int = 150,
+
+        clientId: String? = "client-1",
+
+        plainWaterType: PlainWaterType = PlainWaterType.FILTERED,
+
+    ) {
+
+        pourOutboxStore.enqueuePourReport(
+
+            DispenseTelemetryFactory.plainPourEvent(
+
+                requestUuid = requestUuid,
+
+                volumeMl = volumeMl,
+
+                clientId = clientId,
+
+                plainWaterType = plainWaterType,
 
             ),
 

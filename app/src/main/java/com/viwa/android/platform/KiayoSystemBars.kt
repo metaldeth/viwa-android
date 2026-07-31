@@ -10,27 +10,37 @@ object KiayoSystemBars {
     const val ACTION_HIDE_NAVIGATION_BAR = "com.kiayo.hide.navigationBar"
     const val ACTION_SHOW_NAVIGATION_BAR = "com.kiayo.show.navigationBar"
 
+    @Volatile
+    private var broadcastDenied = false
+
     fun isAvailable(context: Context): Boolean =
-        runCatching {
-            context.packageManager.getPackageInfo(PACKAGE_EXTERN_SERVICE, 0)
-            true
-        }.getOrDefault(false)
+        !broadcastDenied &&
+            runCatching {
+                context.packageManager.getPackageInfo(PACKAGE_EXTERN_SERVICE, 0)
+                true
+            }.getOrDefault(false)
 
     fun hideNavigationBar(context: Context) {
-        if (!isAvailable(context)) return
-        runCatching {
-            context.sendBroadcast(Intent(ACTION_HIDE_NAVIGATION_BAR))
-        }.onFailure { e ->
-            Timber.w(e, "Kiayo hide navigation bar failed")
-        }
+        sendNavBarBroadcast(context, ACTION_HIDE_NAVIGATION_BAR, "hide")
     }
 
     fun showNavigationBar(context: Context) {
+        sendNavBarBroadcast(context, ACTION_SHOW_NAVIGATION_BAR, "show")
+    }
+
+    private fun sendNavBarBroadcast(
+        context: Context,
+        action: String,
+        label: String,
+    ) {
         if (!isAvailable(context)) return
         runCatching {
-            context.sendBroadcast(Intent(ACTION_SHOW_NAVIGATION_BAR))
+            context.sendBroadcast(Intent(action))
         }.onFailure { e ->
-            Timber.w(e, "Kiayo show navigation bar failed")
+            if (e is SecurityException) {
+                broadcastDenied = true
+            }
+            Timber.w(e, "Kiayo %s navigation bar failed", label)
         }
     }
 }

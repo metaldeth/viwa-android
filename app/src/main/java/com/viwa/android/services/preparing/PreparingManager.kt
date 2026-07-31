@@ -11,6 +11,7 @@ import com.viwa.android.domain.customer.TelemetryCellsSnapshotAdapter
 import com.viwa.android.services.calibration.WaterCalibrationService
 import com.viwa.android.services.calibration.WaterCalibrationCalculations
 import com.viwa.android.services.inventory.InventoryService
+import com.viwa.android.services.telemetry.ViwaTelemetryService
 import com.viwa.android.services.controller.ViwaControllerStateService
 import com.viwa.android.services.drink.DrinkPreparationCalculations
 import com.viwa.android.services.drink.ViwaDrinkPreparingService
@@ -57,6 +58,7 @@ constructor(
     private val dispenseSyncCoordinator: TelemetryDispenseSyncCoordinator,
     private val offlinePourCoordinator: OfflinePourTransactionCoordinator,
     private val outboxDrainCoordinator: MachineOutboxDrainCoordinator,
+    private val telemetryService: ViwaTelemetryService,
     @AppIoScope private val scope: CoroutineScope,
 ) {
     private val mutex = Mutex()
@@ -328,6 +330,7 @@ constructor(
                     offlinePourCoordinator.enqueueForSync(sub.requestUuid, sub.clientId, isFree = true)
                     outboxDrainCoordinator.onEnqueue()
                 }
+                telemetryService.applyOptimisticSubscriptionPourDeduction(dispensedVolumeMl)
             }
         }
     }

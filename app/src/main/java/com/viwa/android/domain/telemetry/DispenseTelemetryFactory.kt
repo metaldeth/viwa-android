@@ -43,7 +43,7 @@ object DispenseTelemetryFactory {
     fun plainPourEvent(
         requestUuid: String,
         volumeMl: Int,
-        clientId: String,
+        clientId: String?,
         plainWaterType: PlainWaterType,
         pouredAt: String = TelemetryIsoTimestamps.nowUtc(),
     ): PourEventSnapshot =

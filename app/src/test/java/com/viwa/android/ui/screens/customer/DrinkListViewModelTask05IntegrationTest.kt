@@ -50,6 +50,7 @@ import com.viwa.android.services.preparing.CustomerPreparingPhase
 import com.viwa.android.services.preparing.PrepareDrinkResult
 import com.viwa.android.services.preparing.PreparingManager
 import com.viwa.android.domain.telemetry.HoldPourTelemetryCoordinator
+import com.viwa.android.services.telemetry.SubscribeInformationState
 import com.viwa.android.services.telemetry.ViwaTelemetryService
 import com.viwa.android.data.payment.aqsi.AqsiDiagnosticOutcome
 import io.mockk.coEvery
@@ -755,5 +756,85 @@ class DrinkListViewModelTask05IntegrationTest {
                     salePayMethod = "CARD",
                 )
             }
+        }
+
+    @Test
+    fun subscriptionFixedVolumePour_navigatesWithSubscribePayMethod() =
+        runBlocking {
+            val tel = mockk<ViwaTelemetryService>(relaxUnitFun = true)
+            every { tel.connectionState } returns
+                MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
+            every { tel.subscribeInfo } returns
+                MutableStateFlow(
+                    SubscribeInformationState(
+                        isStatusRequest = true,
+                        isActiveSubscribe = true,
+                        clientId = "client-uuid",
+                        subscribeDateEnd = "2026-08-31T00:00:00.000Z",
+                        volumeMl = 500,
+                        maxVolumeMl = 2_000,
+                    ),
+                ).asStateFlow()
+            every { tel.subscriptionLevels } returns MutableStateFlow(null).asStateFlow()
+            every { tel.loyaltyCardClientScans } returns
+                MutableSharedFlow<String>(extraBufferCapacity = 16).asSharedFlow()
+            every { tel.invalidLoyaltyCardScans } returns
+                MutableSharedFlow<Unit>(extraBufferCapacity = 16).asSharedFlow()
+            every { tel.offlineLoyaltyDenyReason } returns
+                MutableSharedFlow<OfflineAuthorizationReason>(extraBufferCapacity = 16).asSharedFlow()
+            coEvery { tel.loadMachineRegistration() } returns
+                MachineRegistration(machineId = "machine-1", serialNumber = "SN-1")
+            val preparing = mockk<PreparingManager>(relaxed = true)
+            every { preparing.customerPhase } returns
+                MutableStateFlow(CustomerPreparingPhase.Idle).asStateFlow()
+            coEvery {
+                preparing.prepareDrink(
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                )
+            } returns PrepareDrinkResult.Ok(estSeconds = 30)
+            coEvery { preparing.validateDrinkPreparation(any()) } returns null
+            val orch = mockk<CardPaymentOrchestrator>(relaxUnitFun = true)
+            val getSbp = mockk<GetSBPLinkUseCase>(relaxUnitFun = true)
+            val vm = createViewModel(orch, preparing, tel, getSbp).first
+            vm.setUiStateForUnitTests(
+                DrinkListUiState(
+                    activeContainer = sampleContainer(),
+                    selectedVolumeMl = 300,
+                    scannedSubscriptionClientId = "client-uuid",
+                    subscriptionVolumeMl = 500,
+                    subscriptionMaxVolumeMl = 2000,
+                ),
+            )
+            var capturedPayMethod: String? = null
+            vm.primaryAction { _, _, _, _, payMethod, _ ->
+                capturedPayMethod = payMethod
+            }
+            assertTrue(
+                awaitCondition {
+                    vm.state.value.activeContainer == null && vm.state.value.selectedVolumeMl == null
+                },
+            )
+            flushMain()
+            assertEquals("subscribe", capturedPayMethod)
+            coVerify(exactly = 1) {
+                preparing.prepareDrink(
+                    tasteId = any(),
+                    volumeMl = 300,
+                    waterOption = any(),
+                    concentrationRatio = any(),
+                    concentration = any(),
+                    saleTotalPriceRub = 0.0,
+                    salePayMethod = "SUBSCRIBE",
+                    subscriptionPourContext = match { it?.clientId == "client-uuid" },
+                )
+            }
+            coVerify(exactly = 0) { tel.clearSubscribeUiState() }
         }
 }

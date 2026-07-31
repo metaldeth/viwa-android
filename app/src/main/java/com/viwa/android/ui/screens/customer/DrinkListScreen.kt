@@ -302,6 +302,7 @@ fun DrinkListScreen(
                     waterEnabled =
                         state.activeContainer != null ||
                             state.scannedSubscriptionClientId != null,
+                    premiumWaterEnabled = state.isSubscriptionActive,
                     volumeEnabled = state.activeContainer != null,
                     selectedVolumeMl = state.selectedVolumeMl,
                     waterOption = state.waterOption,
@@ -858,6 +859,7 @@ private fun SubscriptionDebugLogsDialog(viewModel: DrinkListViewModel, onDismiss
 @Composable
 private fun HeaderActionStrip(
     waterEnabled: Boolean,
+    premiumWaterEnabled: Boolean,
     volumeEnabled: Boolean,
     selectedVolumeMl: Int?,
     waterOption: DrinkWaterOption,
@@ -875,8 +877,8 @@ private fun HeaderActionStrip(
             HeaderOptionChip(
                 modifier = Modifier.weight(1f),
                 label = "Холодная",
-                selected = waterOption == DrinkWaterOption.COLD || waterOption == DrinkWaterOption.SPARK,
-                enabled = waterEnabled,
+                selected = waterOption == DrinkWaterOption.COLD,
+                enabled = waterEnabled && premiumWaterEnabled,
                 iconRes = R.drawable.ic_cold_water,
                 onClick = { onWater(DrinkWaterOption.COLD) },
                 s = s,
@@ -897,7 +899,7 @@ private fun HeaderActionStrip(
                 modifier = Modifier.fillMaxWidth(),
                 label = "Газированная",
                 selected = waterOption == DrinkWaterOption.SPARK,
-                enabled = waterEnabled,
+                enabled = waterEnabled && premiumWaterEnabled,
                 iconRes = R.drawable.ic_sparkling_water,
                 onClick = { onWater(DrinkWaterOption.SPARK) },
                 s = s,

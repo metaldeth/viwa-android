@@ -10,6 +10,7 @@ import com.viwa.android.domain.model.ReceiptItem
 import com.viwa.android.domain.repository.NanoKassaRepository
 import com.viwa.android.services.preparing.CustomerPreparingPhase
 import com.viwa.android.services.preparing.PreparingManager
+import com.viwa.android.services.telemetry.ViwaTelemetryService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +43,7 @@ constructor(
     val preparingManager: PreparingManager,
     private val nanoKassaRepository: NanoKassaRepository,
     private val configRepository: ConfigRepository,
+    private val telemetryService: ViwaTelemetryService,
 ) : ViewModel() {
     val customerPhase: StateFlow<CustomerPreparingPhase> = preparingManager.customerPhase
 
@@ -67,7 +69,8 @@ constructor(
         val payMethodKey = savedStateHandle.get<String>("payMethod") ?: "none"
         val priceRub = savedStateHandle.get<Int>("priceRub") ?: 0
         val productNameArg = savedStateHandle.get<String>("productName").orEmpty()
-        val needsPaidReceipt = payMethodKey != "none" && priceRub > 0
+        val needsPaidReceipt =
+            payMethodKey.lowercase() !in NO_RECEIPT_PAY_METHODS && priceRub > 0
 
         Timber.d(
             "Preparing receipt: payMethod=%s priceRub=%d productLen=%d needsPaid=%s",
@@ -142,6 +145,9 @@ constructor(
     }
 
     fun resetSession() {
+        if (savedStateHandle.get<String>("payMethod") == "subscribe") {
+            telemetryService.clearSubscribeUiState()
+        }
         drinkReadyHandled = false
         _receiptAfterReady.value = ReceiptAfterReadyState.Idle
         preparingManager.resetSession()
@@ -165,6 +171,8 @@ constructor(
         }
 
     companion object {
+        private val NO_RECEIPT_PAY_METHODS = setOf("none", "subscribe", "free")
+
         private const val DEFAULT_PREPARING_AUTO_EXIT_MINUTES = 5
         private const val MAX_PREPARING_AUTO_EXIT_MINUTES = 240
     }

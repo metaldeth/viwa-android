@@ -77,7 +77,7 @@ private val CardVisuals =
         ),
         SubscriptionCardVisual(
             photoRes = R.drawable.viwa_tier_card_03,
-            audienceLine = "Максимум запаса воды",
+            audienceLine = "Максимум напитков + вода безлимитно",
         ),
     )
 
@@ -462,13 +462,13 @@ private fun RetryChip(s: Float, onRetry: () -> Unit) {
     }
 }
 
-/** `volume` с бэка — мл/мес (12000 → «12 л / мес»). */
+/** `volume` с бэка — мл/мес для вкусовых напитков (12000 → «12 л напитков / мес»). */
 private fun formatVolumeMonthlyLiters(volumeMl: Int?): String {
-    if (volumeMl == null || volumeMl <= 0) return "Объём / мес"
+    if (volumeMl == null || volumeMl <= 0) return "Напитки / мес"
     val liters = volumeMl / 1000.0
     val whole = abs(liters % 1.0) < 1e-6
     val label = if (whole) liters.toInt().toString() else liters.toString()
-    return "$label л / мес"
+    return "$label л напитков / мес · вода безлимитно"
 }
 
 private fun formatPriceRub(price: Double): String {

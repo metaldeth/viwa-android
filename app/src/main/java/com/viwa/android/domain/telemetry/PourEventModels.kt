@@ -10,10 +10,11 @@ enum class PourKind(val wireValue: String) {
     PLAIN_WATER("PLAIN_WATER"),
 }
 
-/** Wire `plainWaterType` — backend accepts FILTERED or COLD only. */
+/** Wire `plainWaterType` for unlimited plain-water analytics. */
 enum class PlainWaterType(val wireValue: String) {
     FILTERED("FILTERED"),
     COLD("COLD"),
+    SPARKLING("SPARKLING"),
     ;
 
     companion object {
@@ -21,8 +22,7 @@ enum class PlainWaterType(val wireValue: String) {
             when (type) {
                 FlowWaterPourType.Filtered -> FILTERED
                 FlowWaterPourType.Cold -> COLD
-                // Backend contract has no SPARKLING; map hardware sparkling to COLD.
-                FlowWaterPourType.Sparkling -> COLD
+                FlowWaterPourType.Sparkling -> SPARKLING
             }
     }
 }

@@ -81,35 +81,47 @@ class TelemetryPourMessageCodecTest {
 
 
     @Test
-
-    fun `encodePayload plain hold omits product`() {
-
+    fun `encodePayload plain hold includes SPARKLING wire type`() {
         val pour =
-
             DispenseTelemetryFactory.plainPourEvent(
-
-                requestUuid = "req-plain",
-
-                volumeMl = 142,
-
+                requestUuid = "req-sparkling",
+                volumeMl = 120,
                 clientId = "client-1",
-
-                plainWaterType = PlainWaterType.COLD,
-
+                plainWaterType = PlainWaterType.SPARKLING,
             )
-
         val payload = TelemetryPourMessageCodec.encodePayload(pour)
-
-        assertEquals("PLAIN_WATER", payload["pourKind"]!!.jsonPrimitive.content)
-
-        assertEquals("COLD", payload["plainWaterType"]!!.jsonPrimitive.content)
-
-        assertNull(payload["productId"])
-
-        assertNull(payload["productNameSnapshot"])
-
+        assertEquals("SPARKLING", payload["plainWaterType"]!!.jsonPrimitive.content)
     }
 
+    @Test
+    fun `encodePayload anonymous plain hold allows null clientId`() {
+        val pour =
+            DispenseTelemetryFactory.plainPourEvent(
+                requestUuid = "req-anon",
+                volumeMl = 90,
+                clientId = null,
+                plainWaterType = PlainWaterType.FILTERED,
+            )
+        val payload = TelemetryPourMessageCodec.encodePayload(pour)
+        assertEquals("PLAIN_WATER", payload["pourKind"]!!.jsonPrimitive.content)
+        assertNull(payload["clientId"])
+    }
+
+    @Test
+    fun `encodePayload plain hold omits product`() {
+        val pour =
+            DispenseTelemetryFactory.plainPourEvent(
+                requestUuid = "req-plain",
+                volumeMl = 142,
+                clientId = "client-1",
+                plainWaterType = PlainWaterType.COLD,
+            )
+        val payload = TelemetryPourMessageCodec.encodePayload(pour)
+        assertEquals("PLAIN_WATER", payload["pourKind"]!!.jsonPrimitive.content)
+        assertEquals("COLD", payload["plainWaterType"]!!.jsonPrimitive.content)
+        assertNull(payload["productId"])
+        assertNull(payload["productNameSnapshot"])
+    }
 }
 
 

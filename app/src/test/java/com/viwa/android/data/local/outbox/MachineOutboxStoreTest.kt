@@ -71,6 +71,34 @@ class MachineOutboxStoreTest {
     }
 
     @Test
+    fun `re-sending in-flight entry preserves original ack timeout clock`() = runTest {
+        persistence.insert(
+            MachineOutboxEntryEntity(
+                localId = "local-in-flight",
+                kind = MachineOutboxKind.TELEMETRY_POUR_REPORT.wireValue,
+                idempotencyKey = "pour-in-flight",
+                messageId = "message-in-flight",
+                payloadJson = "{}",
+                status = MachineOutboxStatus.IN_FLIGHT.name,
+                attempts = 0,
+                wsAckFailures = 0,
+                nextRetryAtMs = 0L,
+                lastError = null,
+                sessionGenerationAtSend = 1L,
+                createdAtMs = 1L,
+                ackedAtMs = null,
+                inFlightSinceMs = 123L,
+            ),
+        )
+
+        store.markInFlight(persistence.allRows().single(), sessionGeneration = 2L)
+
+        val updated = persistence.allRows().single()
+        assertEquals(123L, updated.inFlightSinceMs)
+        assertEquals(2L, updated.sessionGenerationAtSend)
+    }
+
+    @Test
     fun `ws send success does not mark acked`() = runTest {
         TestOutboxFixtures.enqueueTestPaidComplete(commerceOutboxStore)
         val row = persistence.allRows().single()
@@ -161,6 +189,32 @@ class MachineOutboxStoreTest {
         val updated = store.markWsAckTimeout(row)
         assertEquals(1, updated.wsAckFailures)
         assertEquals(MachineOutboxStatus.PENDING.name, updated.status)
+    }
+
+    @Test
+    fun `rotateMessageIdForRetry preserves idempotencyKey and payloadJson`() = runTest {
+        TestOutboxFixtures.enqueueTestPaidComplete(commerceOutboxStore, "sale-rotate")
+        val row = persistence.allRows().single()
+        store.markInFlight(row, sessionGeneration = 1L)
+        val rotated = store.rotateMessageIdForRetry(persistence.allRows().single())
+        assertEquals("sale-rotate", rotated.idempotencyKey)
+        assertEquals(row.payloadJson, rotated.payloadJson)
+        assertTrue(rotated.messageId != row.messageId)
+        assertEquals(MachineOutboxStatus.PENDING.name, rotated.status)
+        assertNull(rotated.inFlightSinceMs)
+    }
+
+    @Test
+    fun `ws ack timeout rotates messageId for pour report`() = runTest {
+        val pourStore = PourOutboxStore(store)
+        TestOutboxFixtures.enqueueTestPour(pourStore, requestUuid = "pour-timeout-rotate")
+        val row = persistence.allRows().single()
+        store.markInFlight(row, sessionGeneration = 1L)
+        val updated = store.markWsAckTimeout(row)
+        assertTrue(updated.messageId != row.messageId)
+        assertEquals("pour-timeout-rotate", updated.idempotencyKey)
+        assertEquals(row.payloadJson, updated.payloadJson)
+        assertEquals(1, updated.wsAckFailures)
     }
 
     private class FakeConfigRepository : ConfigRepository {

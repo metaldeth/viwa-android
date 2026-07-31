@@ -2,9 +2,12 @@ package com.viwa.android.data.remote.telemetry.mvp
 
 import com.viwa.android.data.local.outbox.MachineOutboxEntryEntity
 import com.viwa.android.data.local.outbox.MachineOutboxKind
+import com.viwa.android.data.local.outbox.MachineOutboxStatus
 import com.viwa.android.data.local.outbox.MachineOutboxStore
+import com.viwa.android.domain.telemetry.PourKind
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -13,6 +16,8 @@ import timber.log.Timber
 enum class AckRouteOutcome {
     HANDLED,
     ORPHAN,
+    /** Pour dedup ack without domain persistence proof — transport messageId must rotate. */
+    UNPROVEN_POUR_DEDUP,
 }
 
 /**
@@ -31,6 +36,8 @@ constructor(
         cellsHandler: (suspend (JsonObject) -> Unit)?,
         loyaltyHandler: (suspend (String, JsonObject) -> Unit)?,
         technicianHandler: (suspend (String, JsonObject) -> Unit)? = null,
+        pourBalanceHandler: (suspend (JsonObject) -> Unit)? = null,
+        onUnprovenPourDedupAck: (suspend (MachineOutboxEntryEntity) -> Unit)? = null,
     ): AckRouteOutcome {
         val payload = envelope.payload?.jsonObject ?: return AckRouteOutcome.ORPHAN
         val correlation =
@@ -41,12 +48,16 @@ constructor(
             val byMessage = outboxStore.findByMessageId(correlation)
             if (byMessage != null) {
                 val kind = MachineOutboxKind.fromWire(byMessage.kind) ?: return AckRouteOutcome.ORPHAN
-                return if (byMessage.sessionGenerationAtSend == sessionGeneration) {
-                    outboxStore.markAcked(messageId = correlation, kind = kind)
-                    AckRouteOutcome.HANDLED
-                } else {
-                    staleOutboxAck(correlation, sessionGeneration)
-                }
+                return routeMatchedOutboxAck(
+                    entry = byMessage,
+                    kind = kind,
+                    sessionGeneration = sessionGeneration,
+                    payload = payload,
+                    ackKey = correlation,
+                    markAcked = { outboxStore.markAcked(messageId = correlation, kind = kind) },
+                    pourBalanceHandler = pourBalanceHandler,
+                    onUnprovenPourDedupAck = onUnprovenPourDedupAck,
+                )
             }
         }
 
@@ -58,15 +69,21 @@ constructor(
                     requestUuid,
                 )
             if (entry != null) {
-                return if (entry.sessionGenerationAtSend == sessionGeneration) {
-                    outboxStore.markAcked(
-                        idempotencyKey = requestUuid,
-                        kind = MachineOutboxKind.TELEMETRY_POUR_REPORT,
-                    )
-                    AckRouteOutcome.HANDLED
-                } else {
-                    staleOutboxAck("requestUuid=$requestUuid", sessionGeneration)
-                }
+                return routeMatchedOutboxAck(
+                    entry = entry,
+                    kind = MachineOutboxKind.TELEMETRY_POUR_REPORT,
+                    sessionGeneration = sessionGeneration,
+                    payload = payload,
+                    ackKey = "requestUuid=$requestUuid",
+                    markAcked = {
+                        outboxStore.markAcked(
+                            idempotencyKey = requestUuid,
+                            kind = MachineOutboxKind.TELEMETRY_POUR_REPORT,
+                        )
+                    },
+                    pourBalanceHandler = pourBalanceHandler,
+                    onUnprovenPourDedupAck = onUnprovenPourDedupAck,
+                )
             }
         }
 
@@ -97,14 +114,16 @@ constructor(
 
         val dailyRemaining = payload["dailyRemainingMl"]
         val volumeAfter = payload["volumeAfterMl"]
+        if (dailyRemaining != null || volumeAfter != null) {
+            if (pourBalanceHandler != null && !isUnlimitedPlainWaterAck(payload)) {
+                pourBalanceHandler(payload)
+                return AckRouteOutcome.HANDLED
+            }
+        }
+
         val subscriptionLevels = payload["levels"]
         val subscriptionPayment = payload["paymentId"]
-        if (
-            dailyRemaining != null ||
-                volumeAfter != null ||
-                subscriptionLevels != null ||
-                subscriptionPayment != null
-        ) {
+        if (subscriptionLevels != null || subscriptionPayment != null) {
             if (!correlation.isNullOrBlank() && loyaltyHandler != null) {
                 loyaltyHandler(correlation, payload)
                 return AckRouteOutcome.HANDLED
@@ -149,6 +168,96 @@ constructor(
         return AckRouteOutcome.ORPHAN
     }
 
+    private suspend fun routeMatchedOutboxAck(
+        entry: MachineOutboxEntryEntity,
+        kind: MachineOutboxKind,
+        sessionGeneration: Long,
+        payload: JsonObject,
+        ackKey: String,
+        markAcked: suspend () -> Unit,
+        pourBalanceHandler: (suspend (JsonObject) -> Unit)?,
+        onUnprovenPourDedupAck: (suspend (MachineOutboxEntryEntity) -> Unit)? = null,
+    ): AckRouteOutcome {
+        if (entry.sessionGenerationAtSend != sessionGeneration) {
+            return staleOutboxAck(ackKey, sessionGeneration)
+        }
+        if (kind == MachineOutboxKind.TELEMETRY_POUR_REPORT && isUnprovenPourDedupAck(payload, entry)) {
+            onUnprovenPourDedupAck?.invoke(entry)
+            return rejectUnprovenPourDedupAck(ackKey, payload)
+        }
+        val isFirstAck = entry.status != MachineOutboxStatus.ACKED.name
+        markAcked()
+        if (isFirstAck && kind == MachineOutboxKind.TELEMETRY_POUR_REPORT && shouldMergePourBalance(entry, payload)) {
+            pourBalanceHandler?.invoke(payload)
+        }
+        return AckRouteOutcome.HANDLED
+    }
+
+    internal fun shouldMergePourBalance(
+        outboxEntry: MachineOutboxEntryEntity,
+        ackPayload: JsonObject,
+    ): Boolean {
+        if (isPlainWaterPourOutbox(outboxEntry)) return false
+        if (isUnlimitedPlainWaterAck(ackPayload)) return false
+        return true
+    }
+
+    internal fun isPlainWaterPourOutbox(entry: MachineOutboxEntryEntity): Boolean {
+        if (MachineOutboxKind.fromWire(entry.kind) != MachineOutboxKind.TELEMETRY_POUR_REPORT) return false
+        return runCatching {
+            val obj = outboxJson.parseToJsonElement(entry.payloadJson).jsonObject
+            obj["pourKind"]?.jsonPrimitive?.content == PourKind.PLAIN_WATER.wireValue
+        }.getOrDefault(false)
+    }
+
+    internal fun isUnlimitedPlainWaterAck(payload: JsonObject): Boolean {
+        val billingMode = payload["billingMode"]?.jsonPrimitive?.content
+        if (billingMode == "UNLIMITED") return true
+        val pourKind = payload["pourKind"]?.jsonPrimitive?.content
+        return pourKind == PourKind.PLAIN_WATER.wireValue
+    }
+
+    /**
+     * WS messageId dedup can ack `{ ok, deduplicated: true }` without proving loyalty_pours persistence.
+     * Require requestUuid (payload or matched outbox idempotency key) plus a domain field before ACK.
+     */
+    internal fun isUnprovenPourDedupAck(
+        payload: JsonObject,
+        outboxEntry: MachineOutboxEntryEntity?,
+    ): Boolean {
+        if (payload["deduplicated"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() != true) {
+            return false
+        }
+        return !hasPourReportPersistenceProof(payload, outboxEntry)
+    }
+
+    internal fun hasPourReportPersistenceProof(
+        payload: JsonObject,
+        outboxEntry: MachineOutboxEntryEntity?,
+    ): Boolean {
+        val requestUuid =
+            payload["requestUuid"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                ?: outboxEntry?.idempotencyKey?.takeIf { it.isNotBlank() }
+        if (requestUuid.isNullOrBlank()) return false
+
+        val hasPourId = !payload["pourId"]?.jsonPrimitive?.content.isNullOrBlank()
+        val hasIdempotent = payload["idempotent"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() == true
+        val hasBalanceField =
+            payload["dailyRemainingMl"] != null ||
+                payload["volumeAfterMl"] != null ||
+                payload["volumeMl"] != null
+
+        return hasPourId || hasIdempotent || hasBalanceField
+    }
+
+    private fun rejectUnprovenPourDedupAck(key: String, payload: JsonObject): AckRouteOutcome {
+        Timber.w(
+            "TelemetryAckRouter: rejecting unproven pour dedup ack key=$key " +
+                "payloadKeys=${payload.keys}; rotating transport messageId for retry",
+        )
+        return AckRouteOutcome.UNPROVEN_POUR_DEDUP
+    }
+
     private fun staleOutboxAck(key: String, sessionGeneration: Long): AckRouteOutcome {
         Timber.d("TelemetryAckRouter: stale outbox ack key=$key gen=$sessionGeneration")
         return AckRouteOutcome.ORPHAN
@@ -174,6 +283,11 @@ constructor(
                 "KEY_MACHINE_DENIED",
                 "KEY_SCOPE_DENIED",
             )
+
+        private val outboxJson =
+            Json {
+                ignoreUnknownKeys = true
+            }
     }
 }
 

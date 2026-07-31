@@ -51,11 +51,17 @@ constructor(
             return null
         }
         val now = clock()
+        val inFlightSinceMs =
+            if (entry.status == MachineOutboxStatus.IN_FLIGHT.name) {
+                entry.inFlightSinceMs ?: now
+            } else {
+                now
+            }
         val updated =
             entry.copy(
                 status = MachineOutboxStatus.IN_FLIGHT.name,
                 sessionGenerationAtSend = sessionGeneration,
-                inFlightSinceMs = now,
+                inFlightSinceMs = inFlightSinceMs,
             )
         dao.update(updated)
         return updated
@@ -114,14 +120,38 @@ constructor(
         return updated
     }
 
+    suspend fun rotateMessageIdForRetry(entry: MachineOutboxEntryEntity): MachineOutboxEntryEntity {
+        val now = clock()
+        val updated =
+            entry.copy(
+                messageId = UUID.randomUUID().toString(),
+                status = MachineOutboxStatus.PENDING.name,
+                inFlightSinceMs = null,
+                sessionGenerationAtSend = null,
+                nextRetryAtMs = now,
+            )
+        dao.update(updated)
+        Timber.d(
+            "MachineOutboxStore: rotated messageId for retry idempotencyKey=${entry.idempotencyKey} " +
+                "oldMessageId=${entry.messageId} newMessageId=${updated.messageId}",
+        )
+        return updated
+    }
+
     suspend fun markWsAckTimeout(entry: MachineOutboxEntryEntity): MachineOutboxEntryEntity {
-        val attempts = entry.attempts + 1
-        val wsAckFailures = entry.wsAckFailures + 1
+        val entryForTimeout =
+            if (MachineOutboxKind.fromWire(entry.kind) == MachineOutboxKind.TELEMETRY_POUR_REPORT) {
+                rotateMessageIdForRetry(entry)
+            } else {
+                entry
+            }
+        val attempts = entryForTimeout.attempts + 1
+        val wsAckFailures = entryForTimeout.wsAckFailures + 1
         val now = clock()
         val nextRetry = now + OutboxRetryPolicy.nextRetryDelayMs(attempts, random)
         val updated =
             if (OutboxRetryPolicy.shouldMarkDead(attempts)) {
-                entry.copy(
+                entryForTimeout.copy(
                     status = MachineOutboxStatus.DEAD.name,
                     attempts = attempts,
                     wsAckFailures = wsAckFailures,
@@ -131,7 +161,7 @@ constructor(
                     sessionGenerationAtSend = null,
                 )
             } else {
-                entry.copy(
+                entryForTimeout.copy(
                     status = MachineOutboxStatus.PENDING.name,
                     attempts = attempts,
                     wsAckFailures = wsAckFailures,

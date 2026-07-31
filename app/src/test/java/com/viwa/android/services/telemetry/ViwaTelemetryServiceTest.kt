@@ -332,4 +332,70 @@ class ViwaTelemetryServiceTest {
         )
         assertEquals("990e8400-e29b-41d4-a716-446655440040", result!!.getOrThrow().paymentId)
     }
+
+    @Test
+    fun inboundPourReportBalanceAck_mergesPartialRemainingWithoutClearingClient() = runTest {
+        // given
+        val wsManager = mockk<MvpTelemetryWebSocketManager>(relaxed = true)
+        val messageIdSlot = slot<String>()
+        coEvery {
+            wsManager.sendEnvelope(LoyaltyWsCodec.TYPE_STATUS_GET, any(), capture(messageIdSlot))
+        } returns Result.success("unused")
+        val (service, handler) = createService(wsManager)
+        advanceUntilIdle()
+        service.sendStatusGet("660e8400-e29b-41d4-a716-446655440010")
+        val statusPayload =
+            buildJsonObject {
+                put("clientId", "660e8400-e29b-41d4-a716-446655440010")
+                put("active", true)
+                put("dailyLimitMl", 2000)
+                put("dailyRemainingMl", 450)
+                put("subscriptionEndsAt", "2026-08-31T00:00:00.000Z")
+                put("limitExhausted", false)
+            }
+        handler.onLoyaltyAck(messageIdSlot.captured, statusPayload)
+        advanceUntilIdle()
+
+        val pourAckPayload = buildJsonObject { put("dailyRemainingMl", 220) }
+
+        // when
+        handler.onPourReportBalanceAck(pourAckPayload)
+        advanceUntilIdle()
+
+        // then
+        val info = service.subscribeInfo.value
+        assertNotNull(info)
+        assertEquals(220, info!!.volumeMl)
+        assertEquals(2000, info.maxVolumeMl)
+        assertEquals("660e8400-e29b-41d4-a716-446655440010", info.clientId)
+        assertEquals("2026-08-31T00:00:00.000Z", info.subscribeDateEnd)
+    }
+
+    @Test
+    fun applyOptimisticSubscriptionPourDeduction_reducesRemainingMl() = runTest {
+        val wsManager = mockk<MvpTelemetryWebSocketManager>(relaxed = true)
+        val messageIdSlot = slot<String>()
+        coEvery {
+            wsManager.sendEnvelope(LoyaltyWsCodec.TYPE_STATUS_GET, any(), capture(messageIdSlot))
+        } returns Result.success("unused")
+        val (service, handler) = createService(wsManager)
+        advanceUntilIdle()
+        service.sendStatusGet("660e8400-e29b-41d4-a716-446655440010")
+        handler.onLoyaltyAck(
+            messageIdSlot.captured,
+            buildJsonObject {
+                put("clientId", "660e8400-e29b-41d4-a716-446655440010")
+                put("active", true)
+                put("dailyLimitMl", 2000)
+                put("dailyRemainingMl", 500)
+                put("subscriptionEndsAt", "2026-08-31T00:00:00.000Z")
+                put("limitExhausted", false)
+            },
+        )
+        advanceUntilIdle()
+
+        service.applyOptimisticSubscriptionPourDeduction(92)
+
+        assertEquals(408, service.subscribeInfo.value?.volumeMl)
+    }
 }

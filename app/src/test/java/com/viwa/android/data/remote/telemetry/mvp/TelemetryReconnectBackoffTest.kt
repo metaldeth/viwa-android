@@ -24,7 +24,7 @@ class TelemetryReconnectBackoffTest {
         // when
         repeat(50) {
             val delay = TelemetryReconnectBackoff.delayMs(attempt = 2, random = random)
-            assertTrue(delay in 0..5_000L)
+            assertTrue(delay in TelemetryReconnectBackoff.MIN_RECONNECT_DELAY_MS..5_000L)
         }
     }
 
@@ -37,6 +37,6 @@ class TelemetryReconnectBackoffTest {
         val delay = TelemetryReconnectBackoff.delayMs(attempt = 99, random = random)
 
         // then
-        assertTrue(delay in 0..30_000L)
+        assertTrue(delay in TelemetryReconnectBackoff.MIN_RECONNECT_DELAY_MS..30_000L)
     }
 }

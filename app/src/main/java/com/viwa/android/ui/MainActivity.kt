@@ -238,21 +238,22 @@ class MainActivity : ComponentActivity() {
                             idleVideoViewModel.setActive(route == Routes.Home)
                         }
 
+                        // Idle overlay отключён (IdleVideoViewModel.IDLE_OVERLAY_ENABLED=false):
+                        // на плате давал белый экран после видео. NavGraph всегда смонтирован.
                         Box(modifier = Modifier.fillMaxSize()) {
+                            ViwaNavGraph(
+                                navController = navController,
+                                onOpenService = {
+                                    // Password "studio" only — KEY scan uses navigateIfAuthorized above.
+                                    serviceMenuNavigationGate.navigateAfterLocalStudioPassword {
+                                        navController.navigate(Routes.Service)
+                                    }
+                                },
+                            )
                             if (isIdleVisible) {
                                 IdleVideoOverlay(
                                     enabledVideoIds = enabledVideoIds,
                                     onDismiss = { idleVideoViewModel.resetTimer() },
-                                )
-                            } else {
-                                ViwaNavGraph(
-                                    navController = navController,
-                                    onOpenService = {
-                                        // Password "studio" only — KEY scan uses navigateIfAuthorized above.
-                                        serviceMenuNavigationGate.navigateAfterLocalStudioPassword {
-                                            navController.navigate(Routes.Service)
-                                        }
-                                    },
                                 )
                             }
                         }

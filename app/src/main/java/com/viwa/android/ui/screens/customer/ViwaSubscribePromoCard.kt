@@ -186,7 +186,6 @@ fun ViwaSubscribePromoCard(
                     SubscribePromoScenario.Trial -> {
                         Text(
                             text = "Вам доступен бесплатный напиток!",
- // size="2xl" в Consta = 24px
                             fontSize = (24f * s).sp,
                             lineHeight = (30f * s).sp,
                             fontWeight = FontWeight.SemiBold,
@@ -194,6 +193,12 @@ fun ViwaSubscribePromoCard(
                             color = palette.title,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "Стандартная вода — безлимитно",
+                            fontSize = (14f * s).sp,
+                            fontFamily = MontserratFamily,
+                            color = palette.subtitle,
                         )
                         PromoActionRow(
                             s = s,
@@ -216,12 +221,17 @@ fun ViwaSubscribePromoCard(
                             state.subscriptionEndDate?.let { end ->
                                 Text(
                                     text = "Действует до ${formatEndDate(end)}",
- // size="s" в Consta = 14px
                                     fontSize = (14f * s).sp,
                                     fontFamily = MontserratFamily,
                                     color = palette.subtitle,
                                 )
                             }
+                            Text(
+                                text = "Вода безлимитно · остаток — для напитков",
+                                fontSize = (14f * s).sp,
+                                fontFamily = MontserratFamily,
+                                color = palette.subtitle,
+                            )
                         }
                         PromoActionRow(
                             s = s,
@@ -241,7 +251,13 @@ fun ViwaSubscribePromoCard(
                                 color = palette.title,
                             )
                             Text(
-                                text = "Лимит израсходован, обновиться завтра",
+                                text = "Лимит напитков исчерпан, обновится завтра",
+                                fontSize = (14f * s).sp,
+                                fontFamily = MontserratFamily,
+                                color = palette.subtitle,
+                            )
+                            Text(
+                                text = "Вода — безлимитно",
                                 fontSize = (14f * s).sp,
                                 fontFamily = MontserratFamily,
                                 color = palette.subtitle,
@@ -273,6 +289,12 @@ fun ViwaSubscribePromoCard(
                                     color = MaterialTheme.colorScheme.error,
                                 )
                             }
+                            Text(
+                                text = "Стандартная вода — безлимитно",
+                                fontSize = (14f * s).sp,
+                                fontFamily = MontserratFamily,
+                                color = palette.subtitle,
+                            )
                         }
                         PromoActionRow(
                             s = s,

@@ -24,6 +24,7 @@ import com.viwa.android.domain.model.customer.PrimaryButtonPulseStyle
 import com.viwa.android.domain.model.customer.isUnavailable
 import com.viwa.android.domain.model.customer.toFlowWaterPourType
 import com.viwa.android.domain.model.customer.toDrinkWaterOption
+import com.viwa.android.domain.model.customer.WaterPourByTouchPayload
 import com.viwa.android.domain.model.customer.toRatio
 import com.viwa.android.domain.repository.NanoKassaRepository
 import com.viwa.android.domain.repository.SBPRepository
@@ -44,6 +45,7 @@ import com.viwa.android.hardware.controller.decodeFlowTemperatureByte
 import com.viwa.android.hardware.controller.RequestCommand
 import com.viwa.android.hardware.controller.ResponseCommand
 import com.viwa.android.domain.telemetry.HoldPourTelemetryCoordinator
+import com.viwa.android.domain.telemetry.PlainWaterEntitlement
 import com.viwa.android.domain.offline.OfflineAuthorizationReason
 import com.viwa.android.domain.offline.SubscriptionPourContext
 import com.viwa.android.services.telemetry.SubscriptionLevelItem
@@ -276,6 +278,8 @@ constructor(
         viewModelScope.launch {
             telemetryService.subscribeInfo.collect { info ->
                 if (info == null) {
+                    val pourSessionActive =
+                        waterPourStarted || holdPourRequestUuid != null || _state.value.isWaterPourActive
                     _state.update { st ->
                         st.copy(
                             scannedSubscriptionClientId = null,
@@ -292,19 +296,30 @@ constructor(
                             flowWaterPourType = FlowWaterPourType.Filtered,
                         )
                     }
+                    reactToSubscriptionEntitlementLoss(pourSessionActive)
                     return@collect
                 }
+                val subscriptionActive = info.isActiveSubscribe
+                val pourSessionActive =
+                    waterPourStarted || holdPourRequestUuid != null || _state.value.isWaterPourActive
                 _state.update {
+                    val effectiveType =
+                        PlainWaterEntitlement.effectivePourType(it.flowWaterPourType, subscriptionActive)
                     it.copy(
                         scannedSubscriptionClientId = info.clientId,
-                        isSubscriptionActive = info.isActiveSubscribe,
+                        isSubscriptionActive = subscriptionActive,
                         subscriptionVolumeMl = info.volumeMl,
                         subscriptionMaxVolumeMl = info.maxVolumeMl,
                         subscriptionEndDate = info.subscribeDateEnd,
+                        flowWaterPourType = effectiveType,
+                        waterOption = effectiveType.toDrinkWaterOption(),
  // Не сбрасываем subscriptionLevelsLoading: тарифы приходят отдельным subscriptionLevelTopic
  // сразу после скана (см. onLoyaltyCardScanned); иначе «Загрузка тарифов» гаснет раньше ответа.
                         invalidSubscriptionCardVisible = false,
                     )
+                }
+                if (!subscriptionActive) {
+                    reactToSubscriptionEntitlementLoss(pourSessionActive)
                 }
             }
         }
@@ -541,10 +556,11 @@ constructor(
     }
 
     fun setWater(option: DrinkWaterOption) {
+        val coerced = PlainWaterEntitlement.coerceWaterOption(option, _state.value.isSubscriptionActive)
         _state.update {
             it.copy(
-                waterOption = option,
-                flowWaterPourType = option.toFlowWaterPourType(),
+                waterOption = coerced,
+                flowWaterPourType = coerced.toFlowWaterPourType(),
             )
         }
     }
@@ -558,10 +574,11 @@ constructor(
     }
 
     fun setFlowWaterPourType(type: FlowWaterPourType) {
+        val coerced = PlainWaterEntitlement.effectivePourType(type, _state.value.isSubscriptionActive)
         _state.update {
             it.copy(
-                flowWaterPourType = type,
-                waterOption = type.toDrinkWaterOption(),
+                flowWaterPourType = coerced,
+                waterOption = coerced.toDrinkWaterOption(),
             )
         }
     }
@@ -600,15 +617,14 @@ constructor(
                     viewModelScope.launch {
                         delay(WATER_POUR_MAX_MS)
                         if (!waterPourStarted) return@launch
-                        waterPourStarted = false
                         runCatching {
                             controllerGateway.sendCommand(
                                 RequestCommand.WaterPourByTouch,
-                                WATER_POUR_STOP_BODY,
+                                WaterPourByTouchPayload.stopBody,
                             )
                         }.onFailure { Timber.w(it, "waterPour stop (max hold)") }
-                        finalizeHoldPourTelemetry()
-                        _state.update { it.copy(isWaterPourActive = false, waterPourLimitBanner = true) }
+                        abortActiveWaterPour(finalizeTelemetry = true, sendHardwareStop = false)
+                        _state.update { it.copy(waterPourLimitBanner = true) }
                         waterPourLimitHideJob?.cancel()
                         waterPourLimitHideJob =
                             viewModelScope.launch {
@@ -624,20 +640,21 @@ constructor(
         waterPourDebounceJob = null
         waterPourMaxHoldJob?.cancel()
         waterPourMaxHoldJob = null
-        if (!waterPourStarted) return
-        waterPourStarted = false
+        if (!waterPourStarted && holdPourRequestUuid == null) return
         viewModelScope.launch {
             runCatching {
-                controllerGateway.sendCommand(RequestCommand.WaterPourByTouch, WATER_POUR_STOP_BODY)
+                controllerGateway.sendCommand(
+                    RequestCommand.WaterPourByTouch,
+                    WaterPourByTouchPayload.stopBody,
+                )
             }.onFailure { e ->
                 Timber.w(e, "waterPour stop")
                 _state.update {
                     it.copy(waterPourError = e.message ?: "Ошибка остановки налива воды")
                 }
             }
-            finalizeHoldPourTelemetry()
+            abortActiveWaterPour(finalizeTelemetry = true, sendHardwareStop = false)
         }
-        _state.update { it.copy(isWaterPourActive = false) }
     }
 
     private fun cancelWaterPourGestures() {
@@ -647,14 +664,52 @@ constructor(
         waterPourMaxHoldJob = null
         waterPourLimitHideJob?.cancel()
         waterPourLimitHideJob = null
-        if (waterPourStarted) {
-            waterPourStarted = false
+        if (isWaterPourSessionActive()) {
             viewModelScope.launch {
                 runCatching {
-                    controllerGateway.sendCommand(RequestCommand.WaterPourByTouch, WATER_POUR_STOP_BODY)
+                    controllerGateway.sendCommand(
+                        RequestCommand.WaterPourByTouch,
+                        WaterPourByTouchPayload.stopBody,
+                    )
                 }.onFailure { Timber.w(it, "waterPour stop (cancel selection)") }
-                finalizeHoldPourTelemetry()
+                abortActiveWaterPour(finalizeTelemetry = true, sendHardwareStop = false)
             }
+        } else {
+            holdPourTelemetryCoordinator.cancelHoldPourSession()
+            holdPourRequestUuid = null
+            _state.update {
+                it.copy(isWaterPourActive = false, waterPourLimitBanner = false, waterPourError = null)
+            }
+        }
+    }
+
+    private fun isWaterPourSessionActive(): Boolean =
+        waterPourStarted || holdPourRequestUuid != null || _state.value.isWaterPourActive
+
+    /**
+     * Stops an in-flight hold pour once. Callers that already sent hardware stop set [sendHardwareStop] false.
+     */
+    private suspend fun abortActiveWaterPour(
+        finalizeTelemetry: Boolean,
+        sendHardwareStop: Boolean = true,
+    ) {
+        if (!isWaterPourSessionActive() && holdPourRequestUuid == null) return
+        waterPourDebounceJob?.cancel()
+        waterPourDebounceJob = null
+        waterPourMaxHoldJob?.cancel()
+        waterPourMaxHoldJob = null
+        val hadStartedPour = waterPourStarted || holdPourRequestUuid != null
+        waterPourStarted = false
+        if (sendHardwareStop && hadStartedPour) {
+            runCatching {
+                controllerGateway.sendCommand(
+                    RequestCommand.WaterPourByTouch,
+                    WaterPourByTouchPayload.stopBody,
+                )
+            }.onFailure { Timber.w(it, "waterPour stop (abort)") }
+        }
+        if (finalizeTelemetry) {
+            finalizeHoldPourTelemetry()
         } else {
             holdPourTelemetryCoordinator.cancelHoldPourSession()
             holdPourRequestUuid = null
@@ -664,41 +719,37 @@ constructor(
         }
     }
 
-    private fun currentWaterPourSelByte(): Int {
-        val s = _state.value
-        return if (!s.scannedSubscriptionClientId.isNullOrBlank()) {
-            s.flowWaterPourType.selByte
-        } else {
-            FlowWaterPourType.Filtered.selByte
+    private fun reactToSubscriptionEntitlementLoss(pourSessionActive: Boolean) {
+        waterPourDebounceJob?.cancel()
+        waterPourDebounceJob = null
+        if (pourSessionActive) {
+            viewModelScope.launch { abortActiveWaterPour(finalizeTelemetry = true) }
         }
     }
 
-    private fun waterPourStartPayload(): ByteArray {
-        val sel = currentWaterPourSelByte().coerceIn(0, 2)
-        return byteArrayOf(1, sel.toByte(), 1, sel.toByte(), 0)
-    }
+    private fun waterPourStartPayload(): ByteArray =
+        WaterPourByTouchPayload.startPayload(
+            flowWaterPourType = _state.value.flowWaterPourType,
+            subscriptionActive = _state.value.isSubscriptionActive,
+        )
 
     private suspend fun beginHoldPourTelemetryIfNeeded() {
-        val clientId = _state.value.scannedSubscriptionClientId ?: return
+        val s = _state.value
         val machineId = telemetryService.loadMachineRegistration().machineId
+        val effectiveType = PlainWaterEntitlement.effectivePourType(s.flowWaterPourType, s.isSubscriptionActive)
         holdPourRequestUuid =
             holdPourTelemetryCoordinator.beginHoldPourSession(
-                clientId = clientId,
+                clientId = s.scannedSubscriptionClientId,
                 machineId = machineId,
-                plainWaterType = _state.value.flowWaterPourType,
-                offlineMode = !_state.value.telemetryWsConnected,
+                plainWaterType = effectiveType,
+                offlineMode = !s.telemetryWsConnected,
             )
     }
 
     private suspend fun finalizeHoldPourTelemetry() {
-        if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) {
-            holdPourTelemetryCoordinator.cancelHoldPourSession()
-            holdPourRequestUuid = null
-            return
-        }
         if (holdPourRequestUuid == null) return
-        holdPourTelemetryCoordinator.finalizeHoldPourSession()
         holdPourRequestUuid = null
+        holdPourTelemetryCoordinator.finalizeHoldPourSession()
     }
 
     fun clearSelection() {
@@ -1488,18 +1539,24 @@ constructor(
             is PrepareDrinkResult.Ok -> {
                 val linePriceRub =
                     container.product.dPrices.firstOrNull { it.volume == volume }?.priceRub ?: 0
+                val navPriceRub =
+                    when {
+                        salePayMethod == null ||
+                            salePayMethod.equals("SUBSCRIBE", ignoreCase = true) ||
+                            salePayMethod.equals("FREE", ignoreCase = true) -> 0
+                        saleTotalPriceRub > 0 -> saleTotalPriceRub.toInt()
+                        else -> linePriceRub
+                    }
                 onNavigateToPreparing(
                     container.product.taste.id,
                     container.product.name,
                     result.estSeconds,
                     container.product.taste.mediaKey,
                     payMethodNavKey(salePayMethod),
-                    if (salePayMethod == null) 0 else linePriceRub,
+                    navPriceRub,
                 )
- // Карта подписки больше не нужна: клиент уходит на экран готовки: сброс как «Выход».
                 if (!subClientId.isNullOrBlank()) {
                     pendingSubscriptionPourRequestUuid = null
-                    telemetryService.clearSubscribeUiState()
                 }
                 _state.update {
                     it.copy(
@@ -1946,7 +2003,21 @@ constructor(
         super.onCleared()
     }
 
- /** Только для unit-тестов: начальное состояние без пользовательских сценариев. */
+    /** Unit-test seam: simulate mid-hold subscription/card loss. */
+    internal suspend fun abortActiveWaterPourForUnitTests(finalizeTelemetry: Boolean = true) {
+        abortActiveWaterPour(finalizeTelemetry = finalizeTelemetry, sendHardwareStop = true)
+    }
+
+    /** Unit-test seam: mark pour active without debounce/hardware start. */
+    internal fun markWaterPourActiveForUnitTests(holdRequestUuid: String = "unit-test-hold") {
+        waterPourStarted = true
+        holdPourRequestUuid = holdRequestUuid
+        _state.update { it.copy(isWaterPourActive = true) }
+    }
+
+    internal fun waterPourStartPayloadForUnitTests(): ByteArray = waterPourStartPayload()
+
+    /** Только для unit-тестов: начальное состояние без пользовательских сценариев. */
     internal fun setUiStateForUnitTests(state: DrinkListUiState) {
         _state.value = state
     }
@@ -1961,6 +2032,7 @@ constructor(
         when (salePayMethod) {
             "SBP" -> "sbp"
             "CARD" -> "card"
+            "SUBSCRIBE" -> "subscribe"
             else -> "none"
         }
 
@@ -1991,7 +2063,7 @@ constructor(
             )
 
  /** Стоп WaterPourByTouch (0xD0): все нули. */
-        val WATER_POUR_STOP_BODY = byteArrayOf(0, 0, 0, 0, 0)
+        val WATER_POUR_STOP_BODY: ByteArray = WaterPourByTouchPayload.stopBody
 
  /** ISO-8601 UTC без Date.toInstant (minSdk 25). */
         private fun isoUtcTimestamp(): String {
