@@ -556,11 +556,19 @@ constructor(
     }
 
     fun setWater(option: DrinkWaterOption) {
-        val coerced = PlainWaterEntitlement.coerceWaterOption(option, _state.value.isSubscriptionActive)
+        val s = _state.value
+        // Для выбранного напитка cold/spark — опция рецепта (toTofByte), без gate подписки.
+        // Для hold-to-pour только по карте — premium требует активную подписку.
+        val resolved =
+            if (s.activeContainer != null) {
+                option
+            } else {
+                PlainWaterEntitlement.coerceWaterOption(option, s.isSubscriptionActive)
+            }
         _state.update {
             it.copy(
-                waterOption = coerced,
-                flowWaterPourType = coerced.toFlowWaterPourType(),
+                waterOption = resolved,
+                flowWaterPourType = resolved.toFlowWaterPourType(),
             )
         }
     }

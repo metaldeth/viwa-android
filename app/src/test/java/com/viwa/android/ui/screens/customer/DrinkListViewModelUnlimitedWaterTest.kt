@@ -2,6 +2,11 @@ package com.viwa.android.ui.screens.customer
 
 import com.viwa.android.data.remote.telemetry.ConnectionState
 import com.viwa.android.domain.model.MachineRegistration
+import com.viwa.android.domain.model.customer.DrinkContainer
+import com.viwa.android.domain.model.customer.DrinkDosage
+import com.viwa.android.domain.model.customer.DrinkPrice
+import com.viwa.android.domain.model.customer.DrinkProduct
+import com.viwa.android.domain.model.customer.DrinkTaste
 import com.viwa.android.domain.model.customer.DrinkWaterOption
 import com.viwa.android.domain.model.customer.FlowWaterPourType
 import com.viwa.android.domain.model.customer.WaterPourByTouchPayload
@@ -159,6 +164,46 @@ class DrinkListViewModelUnlimitedWaterTest {
         vm.setWater(DrinkWaterOption.SPARK)
         flushMain()
         assertEquals(FlowWaterPourType.Filtered, vm.state.value.flowWaterPourType)
+    }
+
+    @Test
+    fun setWater_withActiveDrinkAllowsSparkWithoutSubscription() = runBlocking {
+        val telemetry = DrinkListViewModelTestSupport.createTestTelemetry()
+        val (vm, _) = DrinkListViewModelTestSupport.createViewModel(telemetryService = telemetry)
+        val taste = DrinkTaste(1, "Cola", null, null)
+        val product =
+            DrinkProduct(
+                id = 1,
+                name = "Coke",
+                taste = taste,
+                dosage = DrinkDosage(1.0, 300, 1.0, 1.0),
+                dPrices = listOf(DrinkPrice(300, 100)),
+            )
+        vm.setUiStateForUnitTests(
+            DrinkListUiState(
+                isSubscriptionActive = false,
+                activeContainer =
+                    DrinkContainer(
+                        containerNumber = 3,
+                        sodaStatus = null,
+                        product = product,
+                        productUuid = "test-product-uuid",
+                        volumeMl = 1000,
+                        minVolumeMl = 0,
+                        isActive = true,
+                    ),
+            ),
+        )
+        flushMain()
+
+        vm.setWater(DrinkWaterOption.SPARK)
+        flushMain()
+        assertEquals(DrinkWaterOption.SPARK, vm.state.value.waterOption)
+        assertEquals(FlowWaterPourType.Sparkling, vm.state.value.flowWaterPourType)
+
+        vm.setWater(DrinkWaterOption.COLD)
+        flushMain()
+        assertEquals(DrinkWaterOption.COLD, vm.state.value.waterOption)
     }
 
     @Test

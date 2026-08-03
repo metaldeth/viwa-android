@@ -51,8 +51,8 @@ android {
         applicationId = "com.viwa.android"
         minSdk = 25
         targetSdk = 35
-        versionCode = 198
-        versionName = "26.07.31.02"
+        versionCode = 199
+        versionName = "26.08.03.01"
 
         testInstrumentationRunner = "com.viwa.android.ViwaHiltTestRunner"
 

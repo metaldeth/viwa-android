@@ -67,7 +67,15 @@ fun ViwaPromoCard(
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
         ) {
             Text(
-                text = "Попробуй вкусную\nи полезную воду",
+                text = "Попробуй бесплатно",
+                fontSize = (25f * s).sp,
+                lineHeight = (28f * s).sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = MontserratFamily,
+                color = Color.White,
+            )
+            Text(
+                text = "вкусную воду",
                 fontSize = (25f * s).sp,
                 lineHeight = (28f * s).sp,
                 fontWeight = FontWeight.Bold,

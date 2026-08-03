@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -299,10 +298,12 @@ fun DrinkListScreen(
                 HeaderActionStrip(
                     // Вода (холодная/стандарт/газ) — после выбора напитка или скана карты.
                     // Объём 300/700 — только для выбранного напитка.
+                    // Premium (холод/газ): при напитке всегда; при только карте — нужна активная подписка.
                     waterEnabled =
                         state.activeContainer != null ||
                             state.scannedSubscriptionClientId != null,
-                    premiumWaterEnabled = state.isSubscriptionActive,
+                    premiumWaterEnabled =
+                        state.activeContainer != null || state.isSubscriptionActive,
                     volumeEnabled = state.activeContainer != null,
                     selectedVolumeMl = state.selectedVolumeMl,
                     waterOption = state.waterOption,
@@ -867,13 +868,23 @@ private fun HeaderActionStrip(
     onWater: (DrinkWaterOption) -> Unit,
     s: Float,
 ) {
- // Figma `772:2628`: gap 20px между кластерами; вода+стандарт и 300+700 — flex-1; газ — 200px.
+ // Вода: одна группа (стандарт → холодная → газ); объём — отдельный кластер. Выбор взаимоисключающий.
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy((20f * s).dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        HeaderOptionCluster(modifier = Modifier.weight(1f), s = s) {
+        HeaderOptionCluster(modifier = Modifier.weight(1.5f), s = s) {
+            HeaderOptionChip(
+                modifier = Modifier.weight(1f),
+                label = "Стандартная",
+                selected = waterOption == DrinkWaterOption.STANDARD,
+                enabled = waterEnabled,
+                iconRes = R.drawable.ic_standard_water,
+                onClick = { onWater(DrinkWaterOption.STANDARD) },
+                s = s,
+            )
+            HeaderOptionVerticalDivider(s = s)
             HeaderOptionChip(
                 modifier = Modifier.weight(1f),
                 label = "Холодная",
@@ -886,17 +897,6 @@ private fun HeaderActionStrip(
             HeaderOptionVerticalDivider(s = s)
             HeaderOptionChip(
                 modifier = Modifier.weight(1f),
-                label = "Стандартная",
-                selected = waterOption == DrinkWaterOption.STANDARD,
-                enabled = waterEnabled,
-                iconRes = R.drawable.ic_standard_water,
-                onClick = { onWater(DrinkWaterOption.STANDARD) },
-                s = s,
-            )
-        }
-        HeaderOptionCluster(modifier = Modifier.width((200f * s).dp), s = s) {
-            HeaderOptionChip(
-                modifier = Modifier.fillMaxWidth(),
                 label = "Газированная",
                 selected = waterOption == DrinkWaterOption.SPARK,
                 enabled = waterEnabled && premiumWaterEnabled,
@@ -1061,14 +1061,16 @@ private fun HeaderOptionCluster(
     content: @Composable RowScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(bottomStart = (20f * s).dp, bottomEnd = (20f * s).dp)
+    // Фиксированная высота вместо IntrinsicSize.Min: weight()+Intrinsic ломает hit-area у 3+ чипов.
+    // 12+48+4+22+12 = 98 — меньше режет подписи; запас под font padding.
+    val clusterHeight = (104f * s).dp
     Row(
         modifier =
             modifier
-                .height(IntrinsicSize.Min)
+                .height(clusterHeight)
                 .viwaCardShadow(elevation = (4f * s).dp, shape = shape)
                 .background(MaterialTheme.colorScheme.surface, shape)
-                .clip(shape)
-        ,
+                .clip(shape),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -1134,9 +1136,9 @@ private fun RowScope.HeaderOptionChip(
                     enabled = enabled,
                     onClick = onClick,
                 )
-                .padding(vertical = (12f * s).dp),
+                .padding(vertical = (10f * s).dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy((4f * s).dp),
+        verticalArrangement = Arrangement.spacedBy((4f * s).dp, Alignment.CenterVertically),
     ) {
         Box(
             modifier = Modifier.size((48f * s).dp),
@@ -1155,10 +1157,10 @@ private fun RowScope.HeaderOptionChip(
             fontWeight = FontWeight.Medium,
             color = labelColor,
             fontSize = (16f * s).sp,
-            lineHeight = (22f * s).sp,
+            lineHeight = (20f * s).sp,
             textAlign = TextAlign.Center,
             maxLines = 1,
-            overflow = TextOverflow.Clip,
+            overflow = TextOverflow.Ellipsis,
             softWrap = false,
         )
     }

@@ -44,7 +44,7 @@ object JsonStoreKeys {
     /** JSON Map<Int, Double> — conversionFactor по номеру ячейки (калибровка сиропов). */
     const val SYRUP_CONVERSION_FACTORS = "syrupConversionFactors"
 
- /** `"true"` — пользователь нажал «Отключить WS»; автоподключение при холодном старте не выполняется. */
+ /** `"true"` — пользователь нажал «Отключить WS» в текущей сессии; при холодном старте сбрасывается. */
     const val TELEMETRY_PAUSED_BY_USER = "telemetryPausedByUser"
 
  /** Плоская база ингредиентов после baseIngredientRequestExportTopic. */

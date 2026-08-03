@@ -33,6 +33,7 @@ import com.viwa.android.ui.theme.LocalCustomerPrimaryButtonColor
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -49,7 +50,9 @@ import com.viwa.android.ui.screens.idle.IdleVideoViewModel
 import com.viwa.android.domain.technician.ServiceMenuNavigationGate
 import com.viwa.android.services.telemetry.TechnicianKeyServiceMenuCoordinator
 import com.viwa.android.services.telemetry.LoyaltyCardScanCoordinator
+import com.viwa.android.services.telemetry.TelemetryDebugBootstrap
 import com.viwa.android.services.telemetry.TelemetryRegistrationScannerCoordinator
+import com.viwa.android.services.telemetry.ViwaTelemetryService
 import com.viwa.android.domain.repository.NanoKassaRepository
 import com.viwa.android.ui.theme.ThemeViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -112,6 +115,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var nanoKassaRepository: NanoKassaRepository
 
+    @Inject
+    lateinit var telemetryService: ViwaTelemetryService
+
     private val themeViewModel: ThemeViewModel by viewModels()
     private val idleVideoViewModel: IdleVideoViewModel by viewModels()
 
@@ -169,6 +175,7 @@ class MainActivity : ComponentActivity() {
         applyKioskWindowPolicy(forceLegacyNavHide = true)
         scannerManager.startReading()
         telemetryRegistrationScannerCoordinator
+        TelemetryDebugBootstrap.consumeAndRun(intent, telemetryService, lifecycleScope)
         setContent {
             val isDark by themeViewModel.isDark.collectAsStateWithLifecycle()
             val customerPrimaryLightArgb by themeViewModel.customerPrimaryLightArgb.collectAsStateWithLifecycle(
@@ -266,6 +273,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        TelemetryDebugBootstrap.consumeAndRun(intent, telemetryService, lifecycleScope)
         if (intent.getBooleanExtra("open_service_dashboard", false)) {
             intent.removeExtra("open_service_dashboard")
             ServiceScreenLaunch.selectDashboardOnOpen = true

@@ -327,7 +327,19 @@ constructor(
     }
 
     private suspend fun startTelemetryIfRegistered(reason: String) {
-        if (telemetryPausedByUser) {
+        val reg = loadMachineRegistration()
+        if (!MachineRegistration.isEnrolled(reg)) {
+            Timber.d("ViwaTelemetry: автоподключение пропущено ($reason) — машина не зарегистрирована")
+            return
+        }
+        // Cold start / reboot: пауза «Отключить WS» не должна переживать рестарт процесса —
+        // иначе автомат остаётся offline до ручного Connect в сервисном меню.
+        if (reason == "холодный старт") {
+            if (telemetryPausedByUser) {
+                Timber.i("ViwaTelemetry: сброс паузы пользователя при холодном старте")
+            }
+            setTelemetryPausedByUser(false)
+        } else if (telemetryPausedByUser) {
             Timber.d("ViwaTelemetry: автоподключение пропущено ($reason) — пауза по запросу пользователя")
             return
         }
