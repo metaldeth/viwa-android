@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- From viwa-client-web-app/public/assets/viwa/logo/logo-viwa-mark.svg (cabinet/landing). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="277dp"
+    android:height="150dp"
+    android:viewportWidth="277"
+    android:viewportHeight="150">
+    <group android:scaleY="0.617284">
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M0,4L1,0L27,1L30,138L33,191L39,1L65,0L52,221L25,227L12,226ZM13,242L13,229L52,226L51,243ZM100,235L99,243L73,242L73,222L97,214L99,214ZM74,215L74,0L100,1L99,206ZM211,0L202,163L198,166L165,178L164,141L160,96L155,182L122,197L119,197L109,17L109,0L136,0L140,161L142,164L147,1L173,1L179,156L184,0ZM120,216L120,206L154,193L151,243L122,243ZM201,175L196,243L168,242L166,204L167,187ZM238,162L236,242L210,243L213,170ZM214,148L223,0L263,1L271,127L271,143L269,144L236,152L215,160ZM248,161L248,158L250,157L272,151L277,234L277,243L251,243ZM238,145L238,150L248,148L243,37Z" />
+    </group>
+</vector>

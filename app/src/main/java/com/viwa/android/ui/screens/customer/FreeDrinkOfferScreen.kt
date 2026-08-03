@@ -40,11 +40,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -168,20 +165,32 @@ private fun OfferContent(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
+        val titleStyle =
+            TextStyle(
+                fontFamily = MontserratFamily,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = (42f * scale).sp,
+                lineHeight = (47f * scale).sp,
+                color = OfferText,
+            )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp * scale),
+        ) {
+            Text(text = "Попробуй", style = titleStyle)
+            Image(
+                painter = painterResource(R.drawable.logo_viwa_mark),
+                contentDescription = "VIWA",
+                modifier =
+                    Modifier
+                        .height(36.dp * scale)
+                        .width(66.dp * scale),
+                contentScale = ContentScale.Fit,
+            )
+        }
         Text(
-            text =
-                buildAnnotatedString {
-                    append("Попробуй VIWA\n")
-                    withStyle(SpanStyle(color = OfferAccent)) { append("бесплатно") }
-                },
-            style =
-                TextStyle(
-                    fontFamily = MontserratFamily,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = (42f * scale).sp,
-                    lineHeight = (47f * scale).sp,
-                    color = OfferText,
-                ),
+            text = "бесплатно",
+            style = titleStyle.copy(color = OfferAccent),
         )
 
         Spacer(Modifier.height(10.dp * scale))
