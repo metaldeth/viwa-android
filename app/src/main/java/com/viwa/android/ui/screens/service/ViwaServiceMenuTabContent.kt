@@ -48,6 +48,7 @@ import com.viwa.android.ui.screens.service.tabs.ViwaIdleTab
 import com.viwa.android.ui.screens.service.tabs.ViwaInventoryVolumesTab
 import com.viwa.android.ui.screens.service.tabs.ViwaPreparingTimeTab
 import com.viwa.android.ui.screens.service.tabs.ViwaServiceDashboardTab
+import com.viwa.android.ui.screens.service.tabs.ViwaSubscriptionDebugTab
 import com.viwa.android.ui.screens.service.tabs.ViwaSyrupCalibrationTab
 import com.viwa.android.ui.screens.service.tabs.ViwaTelemetryWsLogTab
 import com.viwa.android.ui.screens.service.tabs.ViwaWaterCalibrationTab
@@ -75,6 +76,7 @@ fun ViwaServiceMenuTabContent(
             when (state.selectedServiceSubTabId) {
                 ViwaServiceSubTabId.DebugWsLogs -> ViwaTelemetryWsLogTab(viewModel)
                 ViwaServiceSubTabId.DebugController -> ViwaControllerDebugTab(state, viewModel)
+                ViwaServiceSubTabId.DebugSubscription -> ViwaSubscriptionDebugTab(state, viewModel)
                 else -> ViwaTelemetryWsLogTab(viewModel)
             }
 

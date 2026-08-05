@@ -50,7 +50,7 @@ fun ViwaSubscriptionDebugTab(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Режим отладки подписки", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        "При включении на экране напитков появляется FAB-кнопка для просмотра WS и controller-логов.",
+                        "При включении появляется кнопка «Карта +7922» в левом верхнем углу (эмуляция скана карты клиента +79220389216) и FAB на экране напитков для WS и controller-логов.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

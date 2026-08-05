@@ -6,6 +6,7 @@ import com.viwa.android.data.network.NetworkTrafficLogger
 import com.viwa.android.data.remote.telemetry.ConnectionState
 import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.domain.model.SBPSettings
+import com.viwa.android.domain.offline.OfflineAuthorizationReason
 import com.viwa.android.domain.repository.NanoKassaRepository
 import com.viwa.android.domain.repository.SBPRepository
 import com.viwa.android.domain.repository.TelemetryCellsRepository
@@ -43,6 +44,8 @@ internal object DrinkListViewModelTestSupport {
             MutableSharedFlow<String>(extraBufferCapacity = 16).asSharedFlow()
         every { mock.invalidLoyaltyCardScans } returns
             MutableSharedFlow<Unit>(extraBufferCapacity = 16).asSharedFlow()
+        every { mock.offlineLoyaltyDenyReason } returns
+            MutableSharedFlow<OfflineAuthorizationReason>(extraBufferCapacity = 16).asSharedFlow()
         return mock
     }
 
@@ -76,6 +79,8 @@ internal object DrinkListViewModelTestSupport {
         checkSBPStatusUseCase: CheckSBPStatusUseCase = mockk(relaxed = true),
         subscriptionUseCases: SubscriptionPaymentUseCaseMocks = relaxedSubscriptionPaymentUseCases(),
         cardPaymentOrchestrator: CardPaymentOrchestrator = mockk(relaxed = true),
+        preparingManager: PreparingManager = mockk(relaxed = true),
+        sbpRepository: SBPRepository = mockk(relaxUnitFun = true),
         telemetryService: ViwaTelemetryService = createTestTelemetry(),
         cancelUseCaseOverride: CancelMachineSubscriptionUseCase? = null,
     ): Pair<DrinkListViewModel, SubscriptionPaymentUseCaseMocks> {
@@ -83,14 +88,16 @@ internal object DrinkListViewModelTestSupport {
         val responses = MutableSharedFlow<ControllerResponseEvent>(extraBufferCapacity = 16)
         every { gateway.incomingResponses } returns responses.asSharedFlow()
         every { gateway.isPhysicalControllerConnected } returns MutableStateFlow(true).asStateFlow()
+        coEvery { gateway.simulateResponseForTests(any(), any()) } returns Unit
         val sbpNotify = mockk<ControllerSbpNotifyService>(relaxUnitFun = true)
         val aqsi = mockk<AqsiUsbPaymentManager>(relaxed = true)
         every { aqsi.terminalStatusFlow } returns MutableStateFlow("").asStateFlow()
         val cellsRepo = mockk<TelemetryCellsRepository>(relaxUnitFun = true)
         every { cellsRepo.snapshotFlow } returns MutableStateFlow(null).asStateFlow()
-        val sbpRepository = mockk<SBPRepository>(relaxUnitFun = true)
-        coEvery { sbpRepository.getSettings() } returns SBPSettings(timeoutInSeconds = 120)
-        val preparing = mockk<PreparingManager>(relaxUnitFun = true)
+        val sbpRepository = sbpRepository.also {
+            coEvery { it.getSettings() } returns SBPSettings(timeoutInSeconds = 120)
+        }
+        val preparing = preparingManager
         every { preparing.customerPhase } returns
             MutableStateFlow(CustomerPreparingPhase.Idle).asStateFlow()
         val nano = mockk<NanoKassaRepository>(relaxUnitFun = true)

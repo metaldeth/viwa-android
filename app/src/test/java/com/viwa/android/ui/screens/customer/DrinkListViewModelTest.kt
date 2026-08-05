@@ -10,6 +10,7 @@ import com.viwa.android.domain.model.SBPLink
 import com.viwa.android.domain.model.SBPSettings
 import com.viwa.android.domain.model.SBPStatus
 import com.viwa.android.domain.model.CardPaymentResult
+import com.viwa.android.domain.offline.OfflineAuthorizationReason
 import com.viwa.android.domain.repository.NanoKassaRepository
 import com.viwa.android.domain.repository.SBPRepository
 import com.viwa.android.domain.repository.MachineSubscriptionPaymentRepository
@@ -140,6 +141,8 @@ class DrinkListViewModelTest {
             MutableSharedFlow<String>(extraBufferCapacity = 16).asSharedFlow()
         every { mock.invalidLoyaltyCardScans } returns
             MutableSharedFlow<Unit>(extraBufferCapacity = 16).asSharedFlow()
+        every { mock.offlineLoyaltyDenyReason } returns
+            MutableSharedFlow<OfflineAuthorizationReason>(extraBufferCapacity = 16).asSharedFlow()
         return mock
     }
 

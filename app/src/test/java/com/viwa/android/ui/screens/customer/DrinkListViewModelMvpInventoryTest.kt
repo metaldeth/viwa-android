@@ -9,6 +9,7 @@ import com.viwa.android.domain.customer.TelemetryCellsSnapshotAdapter
 import com.viwa.android.domain.model.TelemetryCell
 import com.viwa.android.domain.model.TelemetryCellsSnapshot
 import com.viwa.android.domain.model.TelemetryProduct
+import com.viwa.android.domain.offline.OfflineAuthorizationReason
 import com.viwa.android.domain.repository.NanoKassaRepository
 import com.viwa.android.domain.repository.SBPRepository
 import com.viwa.android.domain.repository.TelemetryCellsRepository
@@ -119,6 +120,8 @@ class DrinkListViewModelMvpInventoryTest {
             MutableSharedFlow<String>(extraBufferCapacity = 16).asSharedFlow()
         every { mock.invalidLoyaltyCardScans } returns
             MutableSharedFlow<Unit>(extraBufferCapacity = 16).asSharedFlow()
+        every { mock.offlineLoyaltyDenyReason } returns
+            MutableSharedFlow<OfflineAuthorizationReason>(extraBufferCapacity = 16).asSharedFlow()
         return mock
     }
 

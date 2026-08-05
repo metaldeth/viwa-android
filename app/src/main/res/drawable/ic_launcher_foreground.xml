@@ -1,19 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- VIWA wordmark (logo-viwa-mark.svg), sized for adaptive circular safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="127"
-    android:viewportHeight="111">
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Logo 277×150 → ~60×32 in 108 viewport (fits circle mask). -->
     <group
-        android:scaleX="0.72"
-        android:scaleY="0.72"
-        android:translateX="17.78"
-        android:translateY="15.54">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M126.6 55.5C126.6 56.4 126.4 57.2 126 58L125.9 58.2L96.6 108.9C95.8 110 94.5 110.8 93 111H33.9C32.3 110.9 30.9 110.1 30 108.8L22.1 95.1H82.6C82.8 95.1 83.6 95.1 83.7 95.1C85.2 94.9 86.5 94.1 87.4 92.9C87.6 92.6 106.6 59.6 106.6 59.6L106.8 59.2C107.4 58.1 107.8 56.8 107.8 55.4C107.8 54 107.5 52.8 106.8 51.6L106.6 51.2C105.2 48.9 102.7 47.4 99.9 47.4H45C43.5 47.4 42.3 46.2 42.3 44.7C42.3 44.3 42.4 43.8 42.6 43.5L48.1 34C49 32.6 50.6 31.6 52.5 31.6H110.6C112.5 31.6 114.2 32.6 115.1 34.1L126 53C126.3 53.8 126.6 54.6 126.6 55.5Z" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M83.9 67.4C84.1 67 84.2 66.6 84.2 66.1C84.2 64.6 83 63.4 81.5 63.4H26.7C23.8 63.4 21.3 61.9 19.9 59.6C19.8 59.5 18.8 57.5 18.8 55.5C18.8 54.1 19.1 52.9 19.7 51.8C19.8 51.7 39 18.4 39 18.3C39.4 17.6 40 17.1 40.7 16.6C41.5 16.1 42.5 15.8 43 15.8C46.4 15.8 71.8 15.8 71.8 15.8H104.5L96.8 2.5C95.9 1.1 94.4 0.1 92.6 0H34C32.3 0.1 30.8 1 29.9 2.3L29.5 3L0.599998 53C0.199998 53.7 0 54.6 0 55.5C0 56.4 0.199998 57.2 0.599998 58L11.6 77C12.5 78.4 14.1 79.3 15.9 79.3H73.9H74C75.9 79.3 77.6 78.3 78.5 76.8L83.9 67.4Z" />
+        android:translateX="24"
+        android:translateY="38"
+        android:scaleX="0.2166"
+        android:scaleY="0.2166">
+        <group android:scaleY="0.617284">
+            <path
+                android:fillColor="#FFFFFF"
+                android:fillType="evenOdd"
+                android:pathData="M0,4L1,0L27,1L30,138L33,191L39,1L65,0L52,221L25,227L12,226ZM13,242L13,229L52,226L51,243ZM100,235L99,243L73,242L73,222L97,214L99,214ZM74,215L74,0L100,1L99,206ZM211,0L202,163L198,166L165,178L164,141L160,96L155,182L122,197L119,197L109,17L109,0L136,0L140,161L142,164L147,1L173,1L179,156L184,0ZM120,216L120,206L154,193L151,243L122,243ZM201,175L196,243L168,242L166,204L167,187ZM238,162L236,242L210,243L213,170ZM214,148L223,0L263,1L271,127L271,143L269,144L236,152L215,160ZM248,161L248,158L250,157L272,151L277,234L277,243L251,243ZM238,145L238,150L248,148L243,37Z" />
+        </group>
     </group>
 </vector>

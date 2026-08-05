@@ -69,6 +69,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -82,10 +83,13 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.random.Random
 
 enum class PaymentSheetStep {
     MethodChoice,
+    /** Параллельная карта + СБП для напитка (без выбора способа). */
+    Combined,
     Card,
     Sbp,
     Subscription,
@@ -114,6 +118,9 @@ data class DrinkListUiState(
     val paymentSheetVisible: Boolean = false,
     val paymentSheetStep: PaymentSheetStep = PaymentSheetStep.MethodChoice,
     val paymentTerminalBanner: String = "",
+    val cardPaymentUiStatus: CardPaymentUiStatus = CardPaymentUiStatus.AttachCard,
+ /** true после claim combined-оплаты: блокирует cancel/dismiss и повторный pay до явного сброса экрана. */
+    val combinedPaymentConfirmed: Boolean = false,
     val paymentError: String? = null,
     val scannedSubscriptionClientId: String? = null,
     val isSubscriptionActive: Boolean = false,
@@ -160,8 +167,10 @@ data class DrinkListUiState(
     val waterPourError: String? = null,
  /** Тип воды для D0 при отсканированной карте (нижний ряд); без карты — не используется в команде. */
     val flowWaterPourType: FlowWaterPourType = FlowWaterPourType.Filtered,
- /** Показывать FAB отладки подписки (Сервис → Дебаг → Подписка → «Режим отладки»). */
+    /** Показывать FAB отладки подписки (Сервис → Дебаг → Подписка → «Режим отладки»). */
     val subscriptionDebugEnabled: Boolean = false,
+    /** Обратный отсчёт автовыхода из подписки при отсутствии касаний (сек). */
+    val subscriptionExitRemainingSeconds: Int = 0,
 )
 
 @HiltViewModel
@@ -201,9 +210,18 @@ constructor(
     private var sbpPollingJob: Job? = null
     private var sbpTimerJob: Job? = null
     private var sbpRetryJob: Job? = null
+    private var combinedPaymentTimerJob: Job? = null
     private var subscriptionReceiptTimerJob: Job? = null
+    private var subscriptionExitTimerJob: Job? = null
+    private val combinedPaymentSettled = AtomicBoolean(false)
+    private val combinedPaymentSessionLock = Any()
+    private var combinedPaymentClosed = false
+    private var combinedCardFailed = false
+    private var combinedSbpFailed = false
+    private var combinedSbpErrorMessage: String? = null
 
     private fun abandonPaymentJobSlot() {
+        if (combinedPaymentSettled.get()) return
         val j = paymentJob
         paymentJob = null
         viewModelScope.launch {
@@ -242,7 +260,19 @@ constructor(
         }
         viewModelScope.launch {
             aqsiUsbPaymentManager.terminalStatusFlow.collect { text ->
-                _state.update { it.copy(paymentTerminalBanner = text) }
+                _state.update { st ->
+                    val cardStatus =
+                        if (st.paymentSheetStep == PaymentSheetStep.Combined) {
+                            resolveCombinedCardPaymentUiStatus(
+                                terminalBanner = text,
+                                current = st.cardPaymentUiStatus,
+                                paymentConfirmed = st.combinedPaymentConfirmed,
+                            )
+                        } else {
+                            st.cardPaymentUiStatus
+                        }
+                    st.copy(paymentTerminalBanner = text, cardPaymentUiStatus = cardStatus)
+                }
             }
         }
         viewModelScope.launch {
@@ -280,6 +310,7 @@ constructor(
                 if (info == null) {
                     val pourSessionActive =
                         waterPourStarted || holdPourRequestUuid != null || _state.value.isWaterPourActive
+                    stopSubscriptionExitTimer()
                     _state.update { st ->
                         st.copy(
                             scannedSubscriptionClientId = null,
@@ -294,11 +325,13 @@ constructor(
                             subscriptionTariffsError = null,
                             waterOption = DrinkWaterOption.STANDARD,
                             flowWaterPourType = FlowWaterPourType.Filtered,
+                            subscriptionExitRemainingSeconds = 0,
                         )
                     }
                     reactToSubscriptionEntitlementLoss(pourSessionActive)
                     return@collect
                 }
+                val previousClientId = _state.value.scannedSubscriptionClientId
                 val subscriptionActive = info.isActiveSubscribe
                 val pourSessionActive =
                     waterPourStarted || holdPourRequestUuid != null || _state.value.isWaterPourActive
@@ -317,6 +350,9 @@ constructor(
  // сразу после скана (см. onLoyaltyCardScanned); иначе «Загрузка тарифов» гаснет раньше ответа.
                         invalidSubscriptionCardVisible = false,
                     )
+                }
+                if (previousClientId != info.clientId) {
+                    startSubscriptionExitTimer()
                 }
                 if (!subscriptionActive) {
                     reactToSubscriptionEntitlementLoss(pourSessionActive)
@@ -761,9 +797,29 @@ constructor(
     }
 
     fun clearSelection() {
+        if (_state.value.combinedPaymentConfirmed) return
+        viewModelScope.launch { clearSelectionInternal() }
+    }
+
+    private suspend fun clearSelectionInternal() {
         cancelWaterPourGestures()
-        abandonPaymentJobSlot()
-        cancelSbpFlow()
+        val wasCombined = _state.value.paymentSheetStep == PaymentSheetStep.Combined
+        if (wasCombined && !combinedPaymentSettled.get()) {
+            if (!closeCombinedPaymentForCancellation()) return
+            stopCombinedPaymentChannels()
+            finishPaymentJobForReplacement(paymentJob)
+            paymentJob = null
+            if (combinedPaymentSettled.get()) return
+        } else if (!combinedPaymentSettled.get()) {
+            finishPaymentJobForReplacement(paymentJob)
+            paymentJob = null
+            cardPaymentOrchestrator.cancelActivePayment()
+            cancelSbpFlowAwaiting()
+        } else {
+            paymentJob?.cancel()
+            paymentJob = null
+        }
+        releaseCombinedPaymentSession()
         subscriptionReceiptTimerJob?.cancel()
         _state.update {
             it.copy(
@@ -773,6 +829,52 @@ constructor(
                 paymentSheetVisible = false,
                 paymentSheetStep = PaymentSheetStep.MethodChoice,
                 paymentError = null,
+                cardPaymentUiStatus = CardPaymentUiStatus.AttachCard,
+                combinedPaymentConfirmed = false,
+                isProcessingPay = false,
+                sbpLink = null,
+                sbpStatus = SBPStatus.Pending,
+                sbpRemainingSeconds = 0,
+                isSbpLoading = false,
+                subscriptionReceiptUrl = null,
+                subscriptionReceiptLoading = false,
+                subscriptionReceiptError = null,
+                subscriptionReceiptRemainingSeconds = 0,
+                isWaterPourActive = false,
+                waterPourLimitBanner = false,
+                waterPourError = null,
+                subscriptionLevelPickerVisible = false,
+                subscriptionPurchaseFlowActive = false,
+            )
+        }
+    }
+
+    /**
+     * Явный выход в меню после confirmed combined-оплаты и ошибки приготовления.
+     * Единственный путь сброса settled/confirmed без повторного pay.
+     */
+    fun exitCombinedPaymentRecoveryToMenu() {
+        viewModelScope.launch { exitCombinedPaymentRecoveryToMenuInternal() }
+    }
+
+    private suspend fun exitCombinedPaymentRecoveryToMenuInternal() {
+        val s = _state.value
+        if (!s.combinedPaymentConfirmed || s.paymentError.isNullOrBlank()) return
+        paymentJob?.cancel()
+        paymentJob = null
+        cancelWaterPourGestures()
+        subscriptionReceiptTimerJob?.cancel()
+        releaseCombinedPaymentSession()
+        _state.update {
+            it.copy(
+                activeContainer = null,
+                selectedVolumeMl = null,
+                flowBanner = null,
+                paymentSheetVisible = false,
+                paymentSheetStep = PaymentSheetStep.MethodChoice,
+                paymentError = null,
+                cardPaymentUiStatus = CardPaymentUiStatus.AttachCard,
+                combinedPaymentConfirmed = false,
                 isProcessingPay = false,
                 sbpLink = null,
                 sbpStatus = SBPStatus.Pending,
@@ -810,8 +912,26 @@ constructor(
     }
 
     fun dismissPaymentSheet() {
-        abandonPaymentJobSlot()
-        cancelSbpFlow()
+        if (_state.value.combinedPaymentConfirmed) return
+        viewModelScope.launch { dismissPaymentSheetInternal() }
+    }
+
+    private suspend fun dismissPaymentSheetInternal() {
+        val isCombined = _state.value.paymentSheetStep == PaymentSheetStep.Combined
+        if (isCombined) {
+            if (!closeCombinedPaymentForCancellation()) return
+            stopCombinedPaymentChannels()
+            finishPaymentJobForReplacement(paymentJob)
+            paymentJob = null
+            if (combinedPaymentSettled.get()) return
+            releaseCombinedPaymentSession()
+        } else {
+            finishPaymentJobForReplacement(paymentJob)
+            paymentJob = null
+            cardPaymentOrchestrator.cancelActivePayment()
+            cancelSbpFlowAwaiting()
+            resetCombinedPaymentChannelFlags()
+        }
         cancelPendingSubscriptionPaymentIfNeeded()
         subscriptionReceiptTimerJob?.cancel()
         val s = _state.value
@@ -843,6 +963,7 @@ constructor(
                 paymentSheetVisible = false,
                 paymentSheetStep = PaymentSheetStep.MethodChoice,
                 paymentError = null,
+                cardPaymentUiStatus = CardPaymentUiStatus.AttachCard,
                 isProcessingPay = false,
                 sbpLink = null,
                 sbpStatus = SBPStatus.Pending,
@@ -860,7 +981,61 @@ constructor(
 
  /** Как `onExitSubscribe`. */
     fun dismissSubscriptionCard() {
+        stopSubscriptionExitTimer()
         telemetryService.clearSubscribeUiState()
+    }
+
+    /** Сброс idle-таймера выхода из подписки при любом касании экрана. */
+    fun resetSubscriptionExitTimer() {
+        if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) return
+        startSubscriptionExitTimer()
+    }
+
+    private fun stopSubscriptionExitTimer() {
+        subscriptionExitTimerJob?.cancel()
+        subscriptionExitTimerJob = null
+    }
+
+    private fun startSubscriptionExitTimer() {
+        stopSubscriptionExitTimer()
+        if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) {
+            _state.update { it.copy(subscriptionExitRemainingSeconds = 0) }
+            return
+        }
+        _state.update { it.copy(subscriptionExitRemainingSeconds = SUBSCRIPTION_EXIT_TIMEOUT_SECONDS) }
+        subscriptionExitTimerJob =
+            viewModelScope.launch {
+                var remaining = SUBSCRIPTION_EXIT_TIMEOUT_SECONDS
+                while (remaining > 0 && isActive) {
+                    if (!shouldTickSubscriptionExitTimer(_state.value)) {
+                        delay(200)
+                        continue
+                    }
+                    delay(1_000)
+                    if (!isActive) return@launch
+                    if (!shouldTickSubscriptionExitTimer(_state.value)) continue
+                    remaining -= 1
+                    _state.update { it.copy(subscriptionExitRemainingSeconds = remaining) }
+                }
+                if (!isActive) return@launch
+                if (remaining <= 0 && !_state.value.scannedSubscriptionClientId.isNullOrBlank()) {
+                    subscriptionExitTimerJob = null
+                    exitSubscriptionDueToInactivity()
+                }
+            }
+    }
+
+    private fun shouldTickSubscriptionExitTimer(s: DrinkListUiState): Boolean =
+        !s.scannedSubscriptionClientId.isNullOrBlank() &&
+            !s.paymentSheetVisible &&
+            !s.subscriptionLevelPickerVisible &&
+            !s.invalidSubscriptionCardVisible &&
+            s.subscriptionReceiptUrl == null &&
+            !s.isWaterPourActive
+
+    private suspend fun exitSubscriptionDueToInactivity() {
+        clearSelectionInternal()
+        dismissSubscriptionCard()
     }
 
     fun dismissInvalidSubscriptionCardDialog() {
@@ -974,6 +1149,10 @@ constructor(
     }
 
     fun backToPaymentMethods() {
+        if (_state.value.paymentSheetStep == PaymentSheetStep.Combined) {
+            dismissPaymentSheet()
+            return
+        }
         abandonPaymentJobSlot()
         cancelSbpFlow()
         cancelPendingSubscriptionPaymentIfNeeded()
@@ -1019,6 +1198,7 @@ constructor(
             it.copy(
                 paymentSheetStep = PaymentSheetStep.MethodChoice,
                 paymentError = null,
+                cardPaymentUiStatus = CardPaymentUiStatus.AttachCard,
                 isProcessingPay = false,
                 sbpLink = null,
                 sbpStatus = SBPStatus.Pending,
@@ -1071,13 +1251,7 @@ constructor(
  // Раньше при freeMode сразу вызывали налив без оплаты — тогда нельзя было дойти до СБП/карты.
  // Быстрый налив без оплаты: кнопка «Налить без оплаты (разработка)» в модалке ([CustomerPaymentSheet]).
             if (!hasSubCard) {
-                _state.update {
-                    it.copy(
-                        paymentSheetVisible = true,
-                        paymentSheetStep = PaymentSheetStep.MethodChoice,
-                        paymentError = null,
-                    )
-                }
+                openCombinedDrinkPayment(onNavigateToPreparing)
                 return@launch
             }
 
@@ -1107,15 +1281,387 @@ constructor(
                 return@launch
             }
 
- // Подписка есть, но объёма не хватает (или неактивна) — оплата напитка, как модалка в electron.
+ // Подписка есть, но объёма не хватает (или неактивна) — параллельная оплата напитка.
+            openCombinedDrinkPayment(onNavigateToPreparing)
+        }
+    }
+
+    private fun openCombinedDrinkPayment(
+        onNavigateToPreparing: (tasteId: Int, productName: String, estSeconds: Int, mediaKey: String?, payMethod: String, priceRub: Int) -> Unit,
+    ) {
+        if (combinedPaymentSettled.get()) return
+        _state.update {
+            it.copy(
+                paymentSheetVisible = true,
+                paymentSheetStep = PaymentSheetStep.Combined,
+                paymentError = null,
+                cardPaymentUiStatus = CardPaymentUiStatus.AttachCard,
+                combinedPaymentConfirmed = false,
+            )
+        }
+        startCombinedDrinkPayment(onNavigateToPreparing)
+    }
+
+    fun startCombinedDrinkPayment(
+        onNavigateToPreparing: (tasteId: Int, productName: String, estSeconds: Int, mediaKey: String?, payMethod: String, priceRub: Int) -> Unit,
+    ) {
+        if (combinedPaymentSettled.get()) return
+        val previousPaymentJob = paymentJob
+        paymentJob =
+            viewModelScope.launch {
+                if (!closeCombinedPaymentForCancellation()) return@launch
+                cancelSbpFlowAwaiting()
+                finishPaymentJobForReplacement(previousPaymentJob)
+                resetCombinedPaymentChannelFlags()
+                openCombinedPaymentSession()
+                _state.update { it.copy(combinedPaymentConfirmed = false) }
+                val s = _state.value
+                val container = s.activeContainer ?: return@launch
+                val volume = s.selectedVolumeMl ?: return@launch
+                val priceRub =
+                    container.product.dPrices.firstOrNull { it.volume == volume }?.priceRub ?: 0
+                if (priceRub <= 0) {
+                    _state.update {
+                        it.copy(
+                            paymentError = "Некорректная сумма оплаты",
+                            isSbpLoading = false,
+                            isProcessingPay = false,
+                        )
+                    }
+                    return@launch
+                }
+
+                _state.update {
+                    it.copy(
+                        paymentSheetStep = PaymentSheetStep.Combined,
+                        paymentSheetVisible = true,
+                        isProcessingPay = true,
+                        paymentError = null,
+                        sbpLink = null,
+                        sbpStatus = SBPStatus.Pending,
+                        sbpRemainingSeconds = COMBINED_PAYMENT_TIMEOUT_SECONDS,
+                        isSbpLoading = true,
+                        cardPaymentUiStatus = CardPaymentUiStatus.AttachCard,
+                    )
+                }
+
+                startCombinedPaymentTimer()
+
+                coroutineScope {
+                    launch {
+                        runCombinedCardChannel(
+                            container = container,
+                            volume = volume,
+                            onNavigateToPreparing = onNavigateToPreparing,
+                        )
+                    }
+                    launch {
+                        runCombinedSbpChannel(
+                            priceRub = priceRub,
+                            onNavigateToPreparing = onNavigateToPreparing,
+                        )
+                    }
+                }
+            }
+    }
+
+    private suspend fun runCombinedCardChannel(
+        container: DrinkContainer,
+        volume: Int,
+        onNavigateToPreparing: (tasteId: Int, productName: String, estSeconds: Int, mediaKey: String?, payMethod: String, priceRub: Int) -> Unit,
+    ) {
+        val priceRub = container.product.dPrices.firstOrNull { it.volume == volume }?.priceRub ?: 0
+        try {
+            when (
+                val payResult =
+                    cardPaymentOrchestrator.pay(
+                        TerminalProductType.Drink,
+                        priceRub,
+                        container.containerNumber,
+                        sbp = false,
+                    )
+            ) {
+                CardPaymentResult.Success -> {
+                    val current = _state.value
+                    if (current.activeContainer != container ||
+                        current.selectedVolumeMl != volume ||
+                        current.paymentSheetStep != PaymentSheetStep.Combined
+                    ) {
+                        return
+                    }
+                    onCombinedPaymentWon(
+                        winner = CombinedPaymentWinner.Card,
+                        container = container,
+                        volume = volume,
+                        onNavigateToPreparing = onNavigateToPreparing,
+                    )
+                }
+                is CardPaymentResult.Failed -> {
+                    combinedCardFailed = true
+                    maybeFinishCombinedBothFailed()
+                }
+                CardPaymentResult.Cancelled -> {
+                    combinedCardFailed = true
+                    maybeFinishCombinedBothFailed()
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.w(e, "combined card channel")
+            combinedCardFailed = true
+            maybeFinishCombinedBothFailed()
+        }
+    }
+
+    private suspend fun runCombinedSbpChannel(
+        priceRub: Int,
+        onNavigateToPreparing: (tasteId: Int, productName: String, estSeconds: Int, mediaKey: String?, payMethod: String, priceRub: Int) -> Unit,
+    ) {
+        getSbpLinkWithDuplicateRetries(priceRub).fold(
+            onSuccess = { link ->
+                _state.update {
+                    it.copy(
+                        sbpLink = link,
+                        isSbpLoading = false,
+                        sbpStatus = SBPStatus.Pending,
+                    )
+                }
+                startCombinedSbpPolling(
+                    orderId = link.orderId,
+                    priceRub = priceRub,
+                    onNavigateToPreparing = onNavigateToPreparing,
+                )
+            },
+            onFailure = { e ->
+                Timber.w(e, "Combined SBP: не удалось получить QR")
+                combinedSbpFailed = true
+                _state.update { it.copy(isSbpLoading = false) }
+                val message =
+                    if (
+                        e.message?.contains("Unable to resolve host") == true ||
+                            e.message?.contains("timeout", ignoreCase = true) == true
+                    ) {
+                        "СБП недоступен. Проверьте интернет-соединение."
+                    } else {
+                        e.message ?: "Ошибка оплаты СБП"
+                    }
+                noteCombinedSbpTerminalError(message)
+                maybeFinishCombinedBothFailed()
+            },
+        )
+    }
+
+    private fun startCombinedSbpPolling(
+        orderId: String,
+        priceRub: Int,
+        onNavigateToPreparing: (tasteId: Int, productName: String, estSeconds: Int, mediaKey: String?, payMethod: String, priceRub: Int) -> Unit,
+    ) {
+        sbpPollingJob?.cancel()
+        sbpPollingJob =
+            viewModelScope.launch {
+                while (isActive) {
+                    if (combinedPaymentSettled.get()) return@launch
+                    checkSBPStatusUseCase(orderId).fold(
+                        onSuccess = { status ->
+                            _state.update { it.copy(sbpStatus = status) }
+                            when (status) {
+                                SBPStatus.Success -> {
+                                    val s = _state.value
+                                    val container = s.activeContainer
+                                    val volume = s.selectedVolumeMl
+                                    if (s.paymentSheetStep != PaymentSheetStep.Combined ||
+                                        s.sbpLink?.orderId != orderId
+                                    ) {
+                                        return@launch
+                                    }
+                                    if (container == null || volume == null) {
+                                        return@launch
+                                    }
+                                    onCombinedPaymentWon(
+                                        winner = CombinedPaymentWinner.Sbp,
+                                        container = container,
+                                        volume = volume,
+                                        onNavigateToPreparing = onNavigateToPreparing,
+                                    )
+                                    return@launch
+                                }
+                                is SBPStatus.Failed -> {
+                                    combinedSbpFailed = true
+                                    noteCombinedSbpTerminalError(
+                                        status.reason.ifBlank { "Оплата отклонена" },
+                                    )
+                                    maybeFinishCombinedBothFailed()
+                                    return@launch
+                                }
+                                SBPStatus.Cancelled -> {
+                                    combinedSbpFailed = true
+                                    noteCombinedSbpTerminalError("Оплата отменена")
+                                    maybeFinishCombinedBothFailed()
+                                    return@launch
+                                }
+                                SBPStatus.Pending -> Unit
+                            }
+                        },
+                        onFailure = { error ->
+                            Timber.w(error, "Combined SBP status poll failed orderId=%s", orderId)
+                        },
+                    )
+                    delay(5_000)
+                }
+            }
+    }
+
+    private fun startCombinedPaymentTimer() {
+        combinedPaymentTimerJob?.cancel()
+        combinedPaymentTimerJob =
+            viewModelScope.launch {
+                var remaining = COMBINED_PAYMENT_TIMEOUT_SECONDS
+                while (remaining > 0 && isActive && !combinedPaymentSettled.get()) {
+                    delay(1_000)
+                    remaining -= 1
+                    _state.update { it.copy(sbpRemainingSeconds = remaining) }
+                }
+                if (!combinedPaymentSettled.get() && isActive) {
+                    // Не даём cleanup отменить текущую timer-coroutine до сброса UI.
+                    combinedPaymentTimerJob = null
+                    clearSelectionInternal()
+                }
+            }
+    }
+
+    private suspend fun onCombinedPaymentWon(
+        winner: CombinedPaymentWinner,
+        container: DrinkContainer,
+        volume: Int,
+        onNavigateToPreparing: (tasteId: Int, productName: String, estSeconds: Int, mediaKey: String?, payMethod: String, priceRub: Int) -> Unit,
+    ) {
+        if (!claimCombinedPaymentWinner()) {
+            return
+        }
+        _state.update { it.copy(cardPaymentUiStatus = CardPaymentUiStatus.Success) }
+        combinedPaymentTimerJob?.cancel()
+        when (winner) {
+            CombinedPaymentWinner.Card -> {
+                cancelSbpJobs()
+                cancelSbpFlow()
+            }
+            CombinedPaymentWinner.Sbp -> {
+                sbpTimerJob?.cancel()
+                sbpRetryJob?.cancel()
+                cardPaymentOrchestrator.cancelActivePayment()
+            }
+        }
+        val s = _state.value
+        _state.update {
+            it.copy(
+                isProcessingPay = true,
+                paymentError = null,
+                combinedPaymentConfirmed = true,
+                cardPaymentUiStatus = CardPaymentUiStatus.Success,
+            )
+        }
+        try {
+            paidTerminalThenPour(
+                container = container,
+                volume = volume,
+                s = s,
+                sbp = winner == CombinedPaymentWinner.Sbp,
+                cardAlreadyPaid = winner == CombinedPaymentWinner.Card,
+                onNavigateToPreparing = onNavigateToPreparing,
+            )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.e(e, "onCombinedPaymentWon")
             _state.update {
                 it.copy(
-                    paymentSheetVisible = true,
-                    paymentSheetStep = PaymentSheetStep.MethodChoice,
-                    paymentError = null,
+                    paymentError = COMBINED_PAID_PREPARE_FAILED_MESSAGE,
+                    isProcessingPay = false,
+                    isSbpLoading = false,
                 )
             }
         }
+    }
+
+    private fun noteCombinedSbpTerminalError(message: String) {
+        if (combinedPaymentSettled.get()) return
+        combinedSbpErrorMessage = message
+        maybeFinishCombinedBothFailed()
+    }
+
+    private fun maybeFinishCombinedBothFailed() {
+        if (combinedPaymentSettled.get()) return
+        if (!combinedCardFailed || !combinedSbpFailed) return
+        val message =
+            combinedSbpErrorMessage?.takeIf { it.isNotBlank() }
+                ?: "Не удалось оплатить. Попробуйте снова."
+        viewModelScope.launch {
+            stopCombinedPaymentChannels()
+            _state.update {
+                it.copy(
+                    paymentError = message,
+                    isProcessingPay = false,
+                    isSbpLoading = false,
+                )
+            }
+        }
+    }
+
+    private suspend fun stopCombinedPaymentChannels() {
+        if (combinedPaymentSettled.get()) return
+        combinedPaymentTimerJob?.cancel()
+        combinedPaymentTimerJob = null
+        cancelSbpJobs()
+        val orderId = _state.value.sbpLink?.orderId
+        if (!orderId.isNullOrBlank()) {
+            runCatching { sbpRepository.cancelSBPLink(orderId) }
+                .onFailure { Timber.w(it, "Combined SBP cancel failed orderId=%s", orderId) }
+        }
+        cardPaymentOrchestrator.cancelActivePayment()
+    }
+
+    private fun resetCombinedPaymentChannelFlags() {
+        combinedCardFailed = false
+        combinedSbpFailed = false
+        combinedSbpErrorMessage = null
+        combinedPaymentTimerJob?.cancel()
+        combinedPaymentTimerJob = null
+    }
+
+    private fun openCombinedPaymentSession() {
+        synchronized(combinedPaymentSessionLock) {
+            combinedPaymentClosed = false
+            combinedPaymentSettled.set(false)
+        }
+    }
+
+    private fun claimCombinedPaymentWinner(): Boolean =
+        synchronized(combinedPaymentSessionLock) {
+            if (combinedPaymentClosed || combinedPaymentSettled.get()) {
+                false
+            } else {
+                combinedPaymentSettled.set(true)
+                true
+            }
+        }
+
+    private fun closeCombinedPaymentForCancellation(): Boolean =
+        synchronized(combinedPaymentSessionLock) {
+            if (combinedPaymentClosed || combinedPaymentSettled.get()) {
+                false
+            } else {
+                combinedPaymentClosed = true
+                true
+            }
+        }
+
+    private fun releaseCombinedPaymentSession() {
+        synchronized(combinedPaymentSessionLock) {
+            combinedPaymentSettled.set(false)
+            combinedPaymentClosed = false
+        }
+        resetCombinedPaymentChannelFlags()
     }
 
  /**
@@ -1125,9 +1671,15 @@ constructor(
     fun devPourWithoutPayment(
         onNavigateToPreparing: (tasteId: Int, productName: String, estSeconds: Int, mediaKey: String?, payMethod: String, priceRub: Int) -> Unit,
     ) {
+        if (_state.value.combinedPaymentConfirmed || combinedPaymentSettled.get()) return
         viewModelScope.launch {
+            if (_state.value.paymentSheetStep == PaymentSheetStep.Combined) {
+                if (!closeCombinedPaymentForCancellation()) return@launch
+                stopCombinedPaymentChannels()
+            }
             finishPaymentJobForReplacement(paymentJob)
             paymentJob = null
+            releaseCombinedPaymentSession()
             val s = _state.value
             val container = s.activeContainer ?: return@launch
             val volume = s.selectedVolumeMl ?: return@launch
@@ -1470,12 +2022,22 @@ constructor(
         }
     }
 
+    private suspend fun cancelSbpFlowAwaiting() {
+        val orderId = _state.value.sbpLink?.orderId
+        cancelSbpJobs()
+        if (!orderId.isNullOrBlank()) {
+            runCatching { sbpRepository.cancelSBPLink(orderId) }
+                .onFailure { Timber.w(it, "SBP cancel failed orderId=%s", orderId) }
+        }
+    }
+
     private suspend fun paidTerminalThenPour(
         container: DrinkContainer,
         volume: Int,
         s: DrinkListUiState,
         sbp: Boolean,
         onNavigateToPreparing: (tasteId: Int, productName: String, estSeconds: Int, mediaKey: String?, payMethod: String, priceRub: Int) -> Unit,
+        cardAlreadyPaid: Boolean = false,
     ) {
         val priceRub =
             container.product.dPrices.firstOrNull { it.volume == volume }?.priceRub ?: 0
@@ -1485,6 +2047,7 @@ constructor(
             sbp = sbp,
             cardPaymentOrchestrator = cardPaymentOrchestrator,
             controllerSbpNotifyService = controllerSbpNotifyService,
+            cardAlreadyPaid = cardAlreadyPaid,
         )
         val mock = configRepository.get(JsonStoreKeys.USE_MOCK_CONTROLLER) == "true"
         if (sbp && mock) {
@@ -1574,26 +2137,33 @@ constructor(
                         paymentSheetVisible = false,
                         paymentSheetStep = PaymentSheetStep.MethodChoice,
                         paymentError = null,
+                        cardPaymentUiStatus = CardPaymentUiStatus.AttachCard,
+                        combinedPaymentConfirmed = false,
+                        isProcessingPay = false,
                         sbpLink = null,
                         sbpStatus = SBPStatus.Pending,
                         sbpRemainingSeconds = 0,
                         isSbpLoading = false,
                     )
                 }
+                releaseCombinedPaymentSession()
             }
             is PrepareDrinkResult.Error -> {
-                val msg = result.message ?: result.errorCode ?: "Ошибка готовки"
+                val genericMsg = result.message ?: result.errorCode ?: "Ошибка готовки"
                 _state.update { prev ->
+                    val overlayMsg =
+                        if (prev.combinedPaymentConfirmed) {
+                            COMBINED_PAID_PREPARE_FAILED_MESSAGE
+                        } else if (prev.paymentSheetVisible) {
+                            genericMsg
+                        } else {
+                            prev.paymentError
+                        }
                     prev.copy(
-                        flowBanner = msg,
+                        flowBanner = genericMsg,
                         flowBannerIsError = true,
- // Модалка оплаты перекрывает список — иначе баннер не виден и кажется, что «ничего не произошло».
-                        paymentError =
-                            if (prev.paymentSheetVisible) {
-                                msg
-                            } else {
-                                prev.paymentError
-                            },
+                        isProcessingPay = false,
+                        paymentError = overlayMsg,
                     )
                 }
             }
@@ -2001,11 +2571,15 @@ constructor(
 
     override fun onCleared() {
         cancelWaterPourGestures()
+        // ViewModelScope завершается вместе с onCleared; await здесь невозможен — best-effort cleanup.
+        viewModelScope.launch {
+            if (!combinedPaymentSettled.get()) {
+                stopCombinedPaymentChannels()
+            }
+        }
+        releaseCombinedPaymentSession()
         cancelSbpFlow()
         subscriptionReceiptTimerJob?.cancel()
-        paymentClearingScope.launch {
-            runCatching { cardPaymentOrchestrator.cancelActivePayment() }
-        }
         paymentJob?.cancel()
         paymentClearingScope.cancel()
         super.onCleared()
@@ -2036,6 +2610,34 @@ constructor(
         subscriptionPaymentRequestUuid = requestUuid
     }
 
+    internal fun isCombinedPaymentSettledForUnitTests(): Boolean = combinedPaymentSettled.get()
+
+    internal suspend fun exitCombinedPaymentRecoveryToMenuForUnitTests() {
+        exitCombinedPaymentRecoveryToMenuInternal()
+    }
+
+    internal suspend fun clearSelectionForUnitTests() {
+        clearSelectionInternal()
+    }
+
+    internal suspend fun expireCombinedPaymentForUnitTests() {
+        combinedPaymentTimerJob = null
+        clearSelectionInternal()
+    }
+
+    internal fun applyTerminalBannerForCombinedStatusTest(terminalBanner: String) {
+        _state.update { st ->
+            st.copy(
+                cardPaymentUiStatus =
+                    resolveCombinedCardPaymentUiStatus(
+                        terminalBanner = terminalBanner,
+                        current = st.cardPaymentUiStatus,
+                        paymentConfirmed = st.combinedPaymentConfirmed,
+                    ),
+            )
+        }
+    }
+
     private fun payMethodNavKey(salePayMethod: String?): String =
         when (salePayMethod) {
             "SBP" -> "sbp"
@@ -2045,6 +2647,11 @@ constructor(
         }
 
     companion object {
+        const val COMBINED_PAYMENT_TIMEOUT_SECONDS = 120
+        const val COMBINED_PAID_PREPARE_FAILED_MESSAGE =
+            "Оплата прошла, но напиток не приготовлен. Обратитесь к оператору."
+        const val SUBSCRIPTION_EXIT_TIMEOUT_SECONDS = 10
+
         private const val WATER_POUR_DEBOUNCE_MS = 400L
         const val WATER_POUR_MAX_MS = 30_000L
         const val WATER_POUR_LIMIT_HIDE_MS = 4_000L

@@ -152,6 +152,7 @@ val ViwaServiceMenuGroups: List<ViwaServiceGroupSpec> =
                 listOf(
                     ViwaServiceSubTabSpec(ViwaServiceSubTabId.DebugWsLogs, "Логи сети"),
                     ViwaServiceSubTabSpec(ViwaServiceSubTabId.DebugController, "Дебаг контроллера"),
+                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.DebugSubscription, "Подписка"),
                 ),
         ),
         ViwaServiceGroupSpec(

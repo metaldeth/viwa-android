@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +57,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.SouthWest
+import androidx.compose.material3.Icon
 import androidx.activity.compose.BackHandler
 import com.viwa.android.R
 import com.viwa.android.domain.model.SBPLink
@@ -74,11 +85,17 @@ private val PaymentModalBodyHeight = 496.dp
 /** Внешний размер белой подложки QR. */
 private val SbpQrSlotSize = 200.dp
 
+/** Увеличенный QR основного combined-сценария оплаты напитка. */
+private val CombinedSbpQrSlotSize = 260.dp
+
 /** Равные отступы подложка → Canvas QR (тихая зона). */
 private val SbpQrQuietPadding = 6.dp
 
 /** Центральная марка СБП в QR (меньше доли сетки — проще считывание при том же ECC). */
 private val SbpQrCenterLogoSize = 40.dp
+
+/** Меню остаётся различимым под блокирующим стеклом combined-оплаты. */
+private const val CombinedPaymentScrimAlpha = 0.78f
 
 private data class PaymentSheetColors(
     val panelBg: Color,
@@ -139,6 +156,7 @@ private fun rememberPaymentSheetColors(): PaymentSheetColors {
 private fun PaymentSheetStep.contentDepth(): Int =
     when (this) {
         PaymentSheetStep.MethodChoice -> 0
+        PaymentSheetStep.Combined -> 1
         else -> 1
     }
 
@@ -187,8 +205,10 @@ fun CustomerPaymentSheet(
     step: PaymentSheetStep,
     priceRub: Int,
     terminalBanner: String,
+    cardPaymentUiStatus: CardPaymentUiStatus,
     paymentError: String?,
     isProcessing: Boolean,
+    combinedPaymentConfirmed: Boolean = false,
     sbpLink: SBPLink?,
     sbpStatus: SBPStatus,
     sbpRemainingSeconds: Int,
@@ -198,6 +218,7 @@ fun CustomerPaymentSheet(
     receiptError: String?,
     receiptRemainingSeconds: Int,
     onDismiss: () -> Unit,
+    onCombinedRecoveryToMenu: () -> Unit = {},
     onChooseSbp: () -> Unit,
     onChooseCard: () -> Unit,
  /** При включённом режиме разработки: налив без СБП/карты (старый fast-path). */
@@ -205,6 +226,23 @@ fun CustomerPaymentSheet(
     onBackToMethods: () -> Unit,
     onRetrySbp: () -> Unit = {},
 ) {
+    if (step == PaymentSheetStep.Combined) {
+        CombinedDrinkPaymentOverlay(
+            visible = visible,
+            priceRub = priceRub,
+            cardStatus = cardPaymentUiStatus,
+            sbpLink = sbpLink,
+            sbpLoading = sbpLoading,
+            sbpRemainingSeconds = sbpRemainingSeconds,
+            paymentError = paymentError,
+            combinedPaymentConfirmed = combinedPaymentConfirmed,
+            cancelEnabled = !combinedPaymentConfirmed,
+            onCancel = onDismiss,
+            onRecoveryToMenu = onCombinedRecoveryToMenu,
+        )
+        return
+    }
+
     val transition = updateTransition(targetState = visible, label = "CustomerPaymentSheet")
     if (transition.currentState || transition.targetState) {
         BackHandler(enabled = visible, onBack = onDismiss)
@@ -269,6 +307,7 @@ fun CustomerPaymentSheet(
                                             .heightIn(min = PaymentModalBodyHeight),
                                 ) {
                                     when (currentStep) {
+                            PaymentSheetStep.Combined -> Unit
                             PaymentSheetStep.MethodChoice -> {
                                 val sbpEntranceProgress = remember { Animatable(0f) }
                                 val cardEntranceProgress = remember { Animatable(0f) }
@@ -643,6 +682,203 @@ fun CustomerPaymentSheet(
     }
 }
 
+/**
+ * Полноэкранный блокирующий overlay: QR СБП по центру, таймер, карточный статус у терминала (слева снизу).
+ */
+@Composable
+private fun CombinedDrinkPaymentOverlay(
+    visible: Boolean,
+    priceRub: Int,
+    cardStatus: CardPaymentUiStatus,
+    sbpLink: SBPLink?,
+    sbpLoading: Boolean,
+    sbpRemainingSeconds: Int,
+    paymentError: String?,
+    combinedPaymentConfirmed: Boolean,
+    cancelEnabled: Boolean,
+    onCancel: () -> Unit,
+    onRecoveryToMenu: () -> Unit,
+) {
+    val transition = updateTransition(targetState = visible, label = "CombinedDrinkPaymentOverlay")
+    if (!transition.currentState && !transition.targetState) return
+
+    val recoveryMode = combinedPaymentConfirmed && !paymentError.isNullOrBlank()
+
+    BackHandler(enabled = visible && cancelEnabled && !recoveryMode, onBack = onCancel)
+
+    val scrimBase = ViwaCustomerUiTokens.PaymentModalScrim
+    val scrimAlphaMultiplier by transition.animateFloat(
+        transitionSpec = { tween(durationMillis = 220) },
+        label = "combinedScrimAlpha",
+    ) { shown -> if (shown) 1f else 0f }
+
+    val paymentColors = rememberPaymentSheetColors()
+
+    transition.AnimatedVisibility(
+        visible = { it },
+        enter = fadeIn(tween(220)),
+        exit = fadeOut(tween(180)),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .semantics { paneTitle = "Оплата напитка" },
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier =
+                    Modifier
+                        .matchParentSize()
+                        .background(
+                            scrimBase.copy(
+                                alpha = CombinedPaymentScrimAlpha * scrimAlphaMultiplier,
+                            ),
+                        )
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                do {
+                                    val event = awaitPointerEvent()
+                                    event.changes.forEach { it.consume() }
+                                } while (event.changes.any { it.pressed })
+                            }
+                        },
+            )
+            Column(
+                modifier =
+                    Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = "$priceRub ₽",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 34.sp,
+                    lineHeight = 38.sp,
+                    color = paymentColors.primaryText,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(16.dp))
+                if (recoveryMode) {
+                    Text(
+                        text = paymentError.orEmpty(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                } else {
+                    SbpQrSlot(
+                        sbpLoading = sbpLoading,
+                        sbpLink = sbpLink,
+                        paymentError = if (sbpLink == null && !sbpLoading) paymentError else null,
+                        size = CombinedSbpQrSlotSize,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = formatCountdown(sbpRemainingSeconds),
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 28.sp,
+                        lineHeight = 32.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Center,
+                        modifier =
+                            Modifier.semantics {
+                                contentDescription =
+                                    "Осталось ${formatCountdown(sbpRemainingSeconds)}"
+                            },
+                    )
+                }
+                if (!recoveryMode) {
+                    val centerPaymentError =
+                        paymentError?.takeIf { sbpLink != null && !sbpLoading }
+                    centerPaymentError?.let { err ->
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = err,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 28.dp, bottom = 96.dp)
+                        .widthIn(max = 360.dp)
+                        .semantics(mergeDescendants = true) {
+                            liveRegion = LiveRegionMode.Polite
+                            contentDescription = cardStatus.label
+                        },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.SouthWest,
+                    contentDescription = null,
+                    tint = paymentColors.secondaryText,
+                    modifier = Modifier.size(28.dp),
+                )
+                AnimatedContent(
+                    targetState = cardStatus,
+                    transitionSpec = {
+                        fadeIn(tween(220)) togetherWith fadeOut(tween(180))
+                    },
+                    label = "combinedCardStatus",
+                ) { status ->
+                    Text(
+                        text = status.label,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 22.sp,
+                        lineHeight = 28.sp,
+                        color = paymentColors.primaryText,
+                    )
+                }
+            }
+
+            if (recoveryMode) {
+                Column(
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    TextButton(onClick = onRecoveryToMenu) {
+                        Text(
+                            text = "Вернуться в меню",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = paymentColors.primaryText,
+                        )
+                    }
+                }
+            } else {
+                TextButton(
+                    onClick = onCancel,
+                    enabled = cancelEnabled,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 20.dp, end = 28.dp),
+                ) {
+                    Text(
+                        text = "Отмена",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = paymentColors.cancelLabel.copy(alpha = 0.85f),
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ReceiptQrSlot(
     receiptLoading: Boolean,
@@ -735,9 +971,10 @@ private fun SbpQrSlot(
     sbpLoading: Boolean,
     sbpLink: SBPLink?,
     paymentError: String?,
+    size: Dp = SbpQrSlotSize,
 ) {
     Surface(
-        modifier = Modifier.size(SbpQrSlotSize),
+        modifier = Modifier.size(size),
         shape = RoundedCornerShape(12.dp),
         color = ViwaCustomerUiTokens.SbpQrBackground,
         tonalElevation = 0.dp,

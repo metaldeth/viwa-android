@@ -69,6 +69,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
@@ -239,10 +241,23 @@ fun DrinkListScreen(
  /** Как `useDeselectDrinkOnClickOutside`. */
     val deselectBackdropInteraction = remember { MutableInteractionSource() }
 
+    val subscriptionClientId = state.scannedSubscriptionClientId
+
     BoxWithConstraints(
         modifier =
             Modifier
                 .fillMaxSize()
+                .pointerInput(subscriptionClientId) {
+                    if (subscriptionClientId == null) return@pointerInput
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.changes.any { it.changedToDown() }) {
+                                viewModel.resetSubscriptionExitTimer()
+                            }
+                        }
+                    }
+                }
                 .drawBehind {
                     drawRect(screenBg)
                     if (!isLight) {
@@ -581,47 +596,6 @@ fun DrinkListScreen(
             }
         }
 
-        if (state.subscriptionDebugEnabled) {
-            Column(
-                modifier =
-                    Modifier
-                        .align(Alignment.TopStart)
-                        .padding((12f * s).dp),
-                verticalArrangement = Arrangement.spacedBy((4f * s).dp),
-            ) {
-                TextButton(onClick = { viewModel.emulateSubscriptionQrScan() }) {
-                    Icon(
-                        imageVector = Icons.Rounded.QrCodeScanner,
-                        contentDescription = null,
-                        modifier = Modifier.size((22f * s).dp),
-                    )
-                    Spacer(Modifier.width((6f * s).dp))
-                    Text(
-                        "Эмуляция QR подписки",
-                        fontSize = (13f * s).sp,
-                        fontFamily = MontserratFamily,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-                DrinkListViewModel.FREE_SUBSCRIPTION_EMULATION_TEST_CLIENT_IDS.forEach { id ->
-                    TextButton(onClick = { viewModel.emulateSubscriptionQrScan(id) }) {
-                        Icon(
-                            imageVector = Icons.Rounded.QrCodeScanner,
-                            contentDescription = null,
-                            modifier = Modifier.size((18f * s).dp),
-                        )
-                        Spacer(Modifier.width((6f * s).dp))
-                        Text(
-                            text = "mock ${id.take(8)}",
-                            fontSize = (12f * s).sp,
-                            fontFamily = MontserratFamily,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-                }
-            }
-        }
-
         ServiceMenuTrigger(
             onActivate = { showPasswordDialog = true },
             modifier = Modifier.align(Alignment.TopEnd),
@@ -688,8 +662,10 @@ fun DrinkListScreen(
                         priceRub
                     },
                 terminalBanner = state.paymentTerminalBanner,
+                cardPaymentUiStatus = state.cardPaymentUiStatus,
                 paymentError = state.paymentError,
                 isProcessing = state.isProcessingPay,
+                combinedPaymentConfirmed = state.combinedPaymentConfirmed,
                 sbpLink = state.sbpLink,
                 sbpStatus = state.sbpStatus,
                 sbpRemainingSeconds = state.sbpRemainingSeconds,
@@ -699,22 +675,24 @@ fun DrinkListScreen(
                 receiptError = state.subscriptionReceiptError,
                 receiptRemainingSeconds = state.subscriptionReceiptRemainingSeconds,
                 onDismiss = { viewModel.dismissPaymentSheet() },
+                onCombinedRecoveryToMenu = { viewModel.exitCombinedPaymentRecoveryToMenu() },
                 onChooseSbp = {
                     if (state.paymentSheetStep == PaymentSheetStep.Subscription) {
                         viewModel.startSubscriptionPayment(isSbp = true)
-                    } else {
+                    } else if (state.paymentSheetStep != PaymentSheetStep.Combined) {
                         viewModel.openSbpStep(onNavigateToPreparing)
                     }
                 },
                 onChooseCard = {
                     if (state.paymentSheetStep == PaymentSheetStep.Subscription) {
                         viewModel.startSubscriptionPayment(isSbp = false)
-                    } else {
+                    } else if (state.paymentSheetStep != PaymentSheetStep.Combined) {
                         viewModel.startCardPayment(onNavigateToPreparing)
                     }
                 },
                 onDevPourWithoutPay =
                     if (state.freeMode &&
+                        !state.combinedPaymentConfirmed &&
                         !state.subscriptionPurchaseFlowActive &&
                         state.scannedSubscriptionClientId.isNullOrBlank()
                     ) {

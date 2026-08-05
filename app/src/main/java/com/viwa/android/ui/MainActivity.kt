@@ -17,13 +17,20 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -37,7 +44,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.viwa.android.BuildConfig
+import com.viwa.android.data.local.db.JsonStoreKeys
+import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.hardware.scanner.ScannerManager
+import com.viwa.android.ui.debug.DEV_CLIENT_CARD_UUID
+import com.viwa.android.ui.debug.DevClientCardScanOverlay
 import com.viwa.android.platform.KiayoSystemBars
 import com.viwa.android.platform.KioskCollapseTickerPolicy
 import com.viwa.android.platform.ViwaKioskSystemUi
@@ -117,6 +129,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var telemetryService: ViwaTelemetryService
+
+    @Inject
+    lateinit var configRepository: ConfigRepository
 
     private val themeViewModel: ThemeViewModel by viewModels()
     private val idleVideoViewModel: IdleVideoViewModel by viewModels()
@@ -261,6 +276,24 @@ class MainActivity : ComponentActivity() {
                                 IdleVideoOverlay(
                                     enabledVideoIds = enabledVideoIds,
                                     onDismiss = { idleVideoViewModel.resetTimer() },
+                                )
+                            }
+                            if (BuildConfig.DEBUG) {
+                                var cardScanDebugVisible by remember { mutableStateOf(false) }
+                                LaunchedEffect(backStackEntry) {
+                                    cardScanDebugVisible =
+                                        configRepository.get(JsonStoreKeys.SUBSCRIPTION_DEBUG_MODE) == "true"
+                                }
+                                DevClientCardScanOverlay(
+                                    visible = cardScanDebugVisible,
+                                    onEmulateScan = {
+                                        telemetryService.onLoyaltyCardScanned(DEV_CLIENT_CARD_UUID)
+                                    },
+                                    modifier =
+                                        Modifier
+                                            .align(Alignment.TopStart)
+                                            .zIndex(100f)
+                                            .padding(12.dp),
                                 )
                             }
                         }
