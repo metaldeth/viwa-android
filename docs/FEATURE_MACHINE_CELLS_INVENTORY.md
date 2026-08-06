@@ -380,6 +380,8 @@ Base: `/api/v1`, auth session cookie, roles как в `UserRole`.
 
 Offline machine: изменения persist в DB; при следующем `hello` автомат шлёт `cells.schema.report` + `cells.content.report`; server может ответить `cells.snapshot` если `schemaHash` или content revision отстаёт.
 
+**Android operator actions (service menu):** см. [`SERVICE_INVENTORY_OPERATOR_ACTIONS.md`](./SERVICE_INVENTORY_OPERATOR_ACTIONS.md) — `operatorOverride`, send-before-persist taste change, local recipe preview.
+
 ### 4.4 Sequence diagrams (mermaid)
 
 #### Регистрация + schema reconcile

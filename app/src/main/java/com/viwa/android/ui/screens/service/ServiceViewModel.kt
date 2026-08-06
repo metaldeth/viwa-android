@@ -8,6 +8,16 @@ import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import java.io.File
 import com.viwa.android.data.local.db.JsonStoreKeys
+import com.viwa.android.data.local.outbox.MachineOutboxStore
+import com.viwa.android.data.local.outbox.RecipeOutboxStore
+import com.viwa.android.data.local.recipe.CellAssignmentBaseStore
+import com.viwa.android.data.local.recipe.CellEffectiveRecipeStore
+import com.viwa.android.data.local.recipe.RecipeSyncFeatureFlags
+import com.viwa.android.data.remote.telemetry.mvp.MachineOutboxDrainCoordinator
+import com.viwa.android.data.remote.telemetry.mvp.cells.RecipeSyncCoordinator
+import com.viwa.android.domain.inventory.InventoryManagedRecipeSupport
+import com.viwa.android.domain.recipe.CellEffectiveRecipeSource
+import com.viwa.android.domain.recipe.RecipeCanonicalTriple
 import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.data.repository.UpdateRepository
 import com.viwa.android.hardware.FlowStripRgbCoordinator
@@ -22,6 +32,7 @@ import com.viwa.android.hardware.controller.decodeFlowTemperatureByte
 import com.viwa.android.hardware.controller.RequestCommand
 import com.viwa.android.hardware.controller.ResponseCommand
 import com.viwa.android.services.drink.ChooseDrinkBodyBuilder
+import com.viwa.android.services.drink.DrinkPreparationCalculations
 import com.viwa.android.services.drink.ViwaDrinkPreparingService
 import com.viwa.android.data.network.NetworkTrafficEntry
 import com.viwa.android.data.network.NetworkTrafficLogger
@@ -59,6 +70,7 @@ import com.viwa.android.domain.model.AppUpdate
 import com.viwa.android.domain.model.CellVolumeUpdate
 import com.viwa.android.domain.model.ContainerCalibrationInfo
 import com.viwa.android.domain.customer.TelemetryCellsSnapshotAdapter
+import com.viwa.android.domain.inventory.InventoryCellTasteChange
 import com.viwa.android.domain.model.MvpInventoryContentUpdate
 import com.viwa.android.domain.model.MvpInventoryTableRow
 import com.viwa.android.domain.model.TelemetryProduct
@@ -111,8 +123,11 @@ data class TelemetryConnectionUiState(
 data class PreparingStatsDrinkOption(
     val tasteId: Int,
     val title: String,
+    val containerNumber: Int,
     val recipeDrinkVolumeMl: Int,
     val recipeWaterMl: Double,
+    val recipeProductMl: Double,
+    val conversionFactor: Double,
 )
 
 data class PreparingStatsHistoryRow(
@@ -191,6 +206,8 @@ data class ServiceUiState(
     val controllerDebugMode: Int? = null,
     val controllerDebugError: Int? = null,
     val controllerDebugWaterMl: Int? = null,
+    val controllerDebugWaterLastDeltaMl: Int? = null,
+    val controllerDebugLifetimeWaterMl: Double? = null,
     val controllerDebugBusy: Boolean = false,
     val controllerDebugBanner: String? = null,
     val flowTemperatureSensor0C: Int? = null,
@@ -294,6 +311,11 @@ constructor(
     private val flowStripRgbCoordinator: FlowStripRgbCoordinator,
     private val telemetryRegistrationScannerCoordinator: TelemetryRegistrationScannerCoordinator,
     private val technicianServiceMenuAccess: com.viwa.android.domain.technician.TechnicianServiceMenuAccess,
+    private val cellEffectiveRecipeStore: CellEffectiveRecipeStore,
+    private val cellAssignmentBaseStore: CellAssignmentBaseStore,
+    private val recipeOutboxStore: RecipeOutboxStore,
+    private val machineOutboxDrainCoordinator: MachineOutboxDrainCoordinator,
+    private val recipeSyncCoordinator: RecipeSyncCoordinator,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ServiceUiState())
     val state: StateFlow<ServiceUiState> = _state.asStateFlow()
@@ -306,6 +328,13 @@ constructor(
 
     private val _snapshotProducts = MutableStateFlow<List<TelemetryProduct>>(emptyList())
     val snapshotProducts: StateFlow<List<TelemetryProduct>> = _snapshotProducts.asStateFlow()
+
+    private val _recipeBusyCellUuids = MutableStateFlow<Set<String>>(emptySet())
+    val recipeBusyCellUuids: StateFlow<Set<String>> = _recipeBusyCellUuids.asStateFlow()
+
+    /** Bumped on recipe report delivery events so inventory recipe dialog refreshes pending state. */
+    private val _recipeSyncUiRevision = MutableStateFlow(0)
+    val recipeSyncUiRevision: StateFlow<Int> = _recipeSyncUiRevision.asStateFlow()
 
     private val _dashboardCells = MutableStateFlow<List<ServiceDashboardCellUi>>(emptyList())
     val dashboardCells: StateFlow<List<ServiceDashboardCellUi>> = _dashboardCells.asStateFlow()
@@ -339,6 +368,131 @@ constructor(
 
     fun isServiceMenuAuthorized(): Boolean = technicianServiceMenuAccess.isAuthorized()
 
+    fun canEditManagedRecipe(): Boolean =
+        isServiceMenuAuthorized() ||
+            technicianServiceMenuAccess.hasScope("cells.calibrate")
+
+    fun isManagedRecipeGateActive(): Boolean = recipeSyncCoordinator.isManagedModeActive()
+
+    suspend fun buildInventoryRecipePanel(row: MvpInventoryTableRow): InventoryManagedRecipeSupport.InventoryRecipePanel {
+        val effective = cellEffectiveRecipeStore.getEffective(row.uuid)
+        val assignment = cellAssignmentBaseStore.get(row.uuid)
+        val pending = recipeOutboxStore.hasUnsentReportForCell(row.uuid)
+        val connected = _telemetryConnectionUi.value.connected
+        return InventoryManagedRecipeSupport.buildPanel(
+            row = row,
+            effective = effective,
+            assignmentBase = assignment,
+            managedGateActive = isManagedRecipeGateActive() || !RecipeSyncFeatureFlags.FEATURE_RECIPE_SYNC,
+            technicianAuthorized = canEditManagedRecipe(),
+            recipeBusy = row.uuid in _recipeBusyCellUuids.value,
+            pendingOutbox = pending && RecipeSyncFeatureFlags.FEATURE_RECIPE_SYNC,
+            serverConfirmed = connected && !pending && effective != null && RecipeSyncFeatureFlags.FEATURE_RECIPE_SYNC,
+        )
+    }
+
+    fun saveInventoryRecipeEdit(
+        row: MvpInventoryTableRow,
+        triple: RecipeCanonicalTriple,
+        onDone: (success: Boolean, message: String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            if (!_recipeBusyCellUuids.compareAndSetAdd(row.uuid)) {
+                onDone(false, "Операция уже выполняется")
+                return@launch
+            }
+            runCatching {
+                require(canEditManagedRecipe()) { "Требуется авторизация техника" }
+                require(RecipeSyncFeatureFlags.FEATURE_RECIPE_SYNC) { "Managed recipe sync выключен" }
+                require(isManagedRecipeGateActive()) { "Managed recipe gate не инициализирован" }
+                require(!row.productUuid.isNullOrBlank()) { "Нет продукта в ячейке" }
+                val assignment =
+                    cellAssignmentBaseStore.get(row.uuid)
+                        ?: error("Нет кэша базы продукта")
+                val recipe =
+                    cellEffectiveRecipeStore.applyLocalEffectiveRecipe(
+                        cellId = row.uuid,
+                        triple = triple,
+                        source = CellEffectiveRecipeSource.LOCAL_EDIT,
+                        productId = row.productUuid ?: assignment.productId,
+                        baseVersionId = assignment.currentBaseVersionId,
+                    )
+                when (val enqueue = recipeOutboxStore.enqueueReportAfterLocalEdit(recipe)) {
+                    is MachineOutboxStore.EnqueueResult.Inserted,
+                    is MachineOutboxStore.EnqueueResult.Duplicate,
+                    -> {
+                        _recipeSyncUiRevision.update { it + 1 }
+                        machineOutboxDrainCoordinator.onEnqueue()
+                    }
+                }
+                "Рецепт сохранён локально. Синхронизация при подключении WS."
+            }.fold(
+                onSuccess = { msg -> onDone(true, msg) },
+                onFailure = { e ->
+                    Timber.e(e, "saveInventoryRecipeEdit")
+                    onDone(false, e.message ?: "Ошибка сохранения рецепта")
+                },
+            )
+            _recipeBusyCellUuids.update { it - row.uuid }
+        }
+    }
+
+    fun resetInventoryRecipeToBase(
+        row: MvpInventoryTableRow,
+        onDone: (success: Boolean, message: String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            if (!_recipeBusyCellUuids.compareAndSetAdd(row.uuid)) {
+                onDone(false, "Операция уже выполняется")
+                return@launch
+            }
+            runCatching {
+                require(canEditManagedRecipe()) { "Требуется авторизация техника" }
+                require(RecipeSyncFeatureFlags.FEATURE_RECIPE_SYNC) { "Managed recipe sync выключен" }
+                require(isManagedRecipeGateActive()) { "Managed recipe gate не инициализирован" }
+                val base =
+                    cellAssignmentBaseStore.get(row.uuid)?.takeIf { it.hasCompleteAssignedBase }
+                        ?: error("База продукта неизвестна — сброс недоступен")
+                val triple =
+                    base.triple ?: error("База продукта неполная")
+                val recipe =
+                    cellEffectiveRecipeStore.applyLocalEffectiveRecipe(
+                        cellId = row.uuid,
+                        triple = triple,
+                        source = CellEffectiveRecipeSource.LOCAL_EDIT,
+                        productId = row.productUuid ?: base.productId,
+                        baseVersionId = base.currentBaseVersionId,
+                    )
+                when (val enqueue = recipeOutboxStore.enqueueReportAfterLocalEdit(recipe)) {
+                    is MachineOutboxStore.EnqueueResult.Inserted,
+                    is MachineOutboxStore.EnqueueResult.Duplicate,
+                    -> {
+                        _recipeSyncUiRevision.update { it + 1 }
+                        machineOutboxDrainCoordinator.onEnqueue()
+                    }
+                }
+                "Сброс к базе (rev ${base.baseRecipeRevision ?: "?"}). Сохранено локально, ожидает синхронизации."
+            }.fold(
+                onSuccess = { msg -> onDone(true, msg) },
+                onFailure = { e ->
+                    Timber.e(e, "resetInventoryRecipeToBase")
+                    onDone(false, e.message ?: "Ошибка сброса рецепта")
+                },
+            )
+            _recipeBusyCellUuids.update { it - row.uuid }
+        }
+    }
+
+    private fun MutableStateFlow<Set<String>>.compareAndSetAdd(uuid: String): Boolean {
+        var added = false
+        update { current ->
+            if (uuid in current) return@update current
+            added = true
+            current + uuid
+        }
+        return added
+    }
+
     private val _usbSerialDevices =
         MutableStateFlow<List<Pair<String, String>>>(emptyList())
     val usbSerialDevices: StateFlow<List<Pair<String, String>>> = _usbSerialDevices.asStateFlow()
@@ -364,6 +518,7 @@ constructor(
         observeTelemetryConnection()
         observeTelemetryRegistrationScans()
         observeInventoryTable()
+        observeRecipeReportDelivery()
         refreshSyrupCalibrationRows()
         refreshPreparingStatsData()
         observeControllerResponsesForDebug()
@@ -834,14 +989,53 @@ constructor(
 
     fun controllerDebugSendRecipe() {
         viewModelScope.launch {
+            val selected =
+                _state.value.preparingStatsDrinks.firstOrNull {
+                    it.tasteId == _state.value.preparingStatsSelectedTasteId
+                }
+            if (selected == null) {
+                _state.update {
+                    it.copy(
+                        controllerDebugBanner =
+                            "Выберите напиток на вкладке «Время готовки» или загрузите merge-конфиг",
+                    )
+                }
+                return@launch
+            }
+            val flowRate = _state.value.preparingStatsFlowRateMlPerSec
+            if (flowRate == null || flowRate <= 0.0) {
+                _state.update {
+                    it.copy(controllerDebugBanner = "Нет калибровки воды (flowRate ≤ 0) — рецепт не отправлен")
+                }
+                return@launch
+            }
+            val drinkVolumeMl = 300
+            val ratio = drinkVolumeMl.toDouble() / selected.recipeDrinkVolumeMl.toDouble()
+            val productAmount = selected.recipeProductMl * ratio
+            val dispenserWorkTimeSec = productAmount / selected.conversionFactor
+            val waterMl =
+                DrinkPreparationCalculations.waterMlForDrink(
+                    dosageWaterMl = selected.recipeWaterMl,
+                    drinkVolumeMl = drinkVolumeMl,
+                    recipeDrinkVolumeMl = selected.recipeDrinkVolumeMl,
+                )
+            val physicalPort = (selected.containerNumber + 8).coerceIn(1, 255)
             val body =
                 ChooseDrinkBodyBuilder.build(
-                    physicalPort = 9,
-                    dispenserWorkTimeSec = 3.0,
-                    waterMl = 20.0,
+                    physicalPort = physicalPort,
+                    dispenserWorkTimeSec = dispenserWorkTimeSec,
+                    waterMl = waterMl,
                     tof = 0,
                 )
             controllerGateway.sendCommand(RequestCommand.ChooseDrink, body)
+            _state.update {
+                it.copy(
+                    controllerDebugBanner =
+                        "ChooseDrink: ${selected.title}, ${drinkVolumeMl} мл, " +
+                            "water=${"%.1f".format(waterMl)} мл, product=${"%.1f".format(productAmount)} мл, " +
+                            "cf=${"%.4f".format(selected.conversionFactor)}",
+                )
+            }
         }
     }
 
@@ -857,32 +1051,29 @@ constructor(
         viewModelScope.launch { controllerHardware.setAutoModeCommand() }
     }
 
-    fun controllerDebugReadWaterCounter() {
+    fun controllerDebugAccountWaterCounter() {
         viewModelScope.launch {
-            _state.update { it.copy(controllerDebugBusy = true) }
+            _state.update { it.copy(controllerDebugBusy = true, controllerDebugBanner = null) }
             runCatching {
-                val ml = waterCounter.getWaterUsageMl()
+                val result = waterCounter.readAccumulateAndResetController()
+                refreshTotalWaterUsageMl()
                 _state.update {
                     it.copy(
                         controllerDebugBusy = false,
-                        controllerDebugWaterMl = ml,
-                        controllerDebugBanner = "Счётчик воды: $ml мл",
+                        controllerDebugWaterMl = result.deltaMl,
+                        controllerDebugWaterLastDeltaMl = result.deltaMl,
+                        controllerDebugLifetimeWaterMl = result.lifetimeTotalMl,
+                        controllerDebugBanner =
+                            if (result.deltaMl > 0) {
+                                "Учтено +${result.deltaMl} мл → lifetime ${"%.0f".format(result.lifetimeTotalMl)} мл, контроллер сброшен"
+                            } else {
+                                "Новый объём не учтён (+0 мл), lifetime ${"%.0f".format(result.lifetimeTotalMl)} мл, контроллер сброшен"
+                            },
                     )
                 }
             }.onFailure { e ->
                 _state.update {
                     it.copy(controllerDebugBusy = false, controllerDebugBanner = e.message)
-                }
-            }
-        }
-    }
-
-    fun controllerDebugResetWaterCounter() {
-        viewModelScope.launch {
-            runCatching {
-                waterCounter.resetWaterUsage()
-                _state.update {
-                    it.copy(controllerDebugBanner = "Счётчик сброшен (ResetWaterCounter)")
                 }
             }
         }
@@ -954,6 +1145,14 @@ constructor(
                     refreshSyrupCalibrationRows()
                     refreshPreparingStatsData()
                 }.onFailure { Timber.e(it, "observeInventoryTable") }
+            }
+        }
+    }
+
+    private fun observeRecipeReportDelivery() {
+        viewModelScope.launch {
+            recipeOutboxStore.reportDeliveryEvents.collect {
+                _recipeSyncUiRevision.update { revision -> revision + 1 }
             }
         }
     }
@@ -1089,6 +1288,10 @@ constructor(
         _dashboardCells.value = buildServiceDashboardCells(rows)
     }
 
+    private suspend fun refreshTotalWaterUsageMl() {
+        _totalWaterUsageMl.value = waterCounter.getAccumulatedWaterUsageMl()
+    }
+
  /** Обновить строки наполнения и блок дашборда (вода, ячейки). */
     fun refreshServiceDashboard() {
         refreshInventoryRows()
@@ -1112,12 +1315,23 @@ constructor(
                         CellVolumeUpdateWire(uuid = cell.uuid, volume = update.volumeMl)
                     }
                 if (wires.isEmpty()) error("Не найдены ячейки для сохранения объёмов")
-                telemetryCellsSyncCoordinator.onLocalVolumeChange(wires)
+                val uplinkResult = telemetryCellsSyncCoordinator.onLocalVolumeChange(wires)
+                uplinkResult.getOrThrow()
             }.fold(
-                onSuccess = { onDone(true, "Сохранено локально, cells.volume.report отправлен при подключении WS") },
+                onSuccess = { onDone(true, "Объёмы сохранены локально и отправлены на сервер") },
                 onFailure = { e ->
                     Timber.e(e, "saveInventoryVolumes")
-                    onDone(false, e.message ?: "Ошибка сохранения")
+                    val uplinkFailed = isTelemetryUplinkFailure(e)
+                    if (uplinkFailed) {
+                        refreshInventoryRows()
+                    }
+                    val message =
+                        if (uplinkFailed) {
+                            "Объёмы сохранены локально. Отправка на сервер не удалась: ${e.message ?: "offline"}"
+                        } else {
+                            e.message ?: "Ошибка сохранения"
+                        }
+                    onDone(!uplinkFailed, message)
                 },
             )
         }
@@ -1146,15 +1360,81 @@ constructor(
                             dosage2Price = update.dosage2PriceKopecks,
                         )
                     }
-                telemetryCellsSyncCoordinator.onLocalContentChange(updatedCells)
+                telemetryCellsSyncCoordinator.onLocalContentChange(updatedCells).getOrThrow()
             }.fold(
-                onSuccess = { onDone(true, "Сохранено локально, cells.content.report отправлен при подключении WS") },
+                onSuccess = { onDone(true, "Сохранено локально и отправлено на сервер") },
                 onFailure = { e ->
                     Timber.e(e, "saveMvpInventoryContent")
-                    onDone(false, e.message ?: "Ошибка сохранения")
+                    val uplinkFailed = isTelemetryUplinkFailure(e)
+                    if (uplinkFailed) {
+                        refreshInventoryRows()
+                    }
+                    val message =
+                        if (uplinkFailed) {
+                            "Сохранено локально. Отправка на сервер не удалась: ${e.message ?: "offline"}"
+                        } else {
+                            e.message ?: "Ошибка сохранения"
+                        }
+                    onDone(!uplinkFailed, message)
                 },
             )
         }
+    }
+
+    /** Остатки → смена вкуса оператором: сохраняет цены, uplink с operatorOverride. */
+    fun changeInventoryCellTaste(
+        cellUuid: String,
+        productUuid: String,
+        onDone: (success: Boolean, message: String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            runCatching {
+                val snapshot =
+                    telemetryCellsRepository.getSnapshot()
+                        ?: error("Нет локального snapshot ячеек")
+                val cell =
+                    snapshot.cells.find { it.uuid == cellUuid }
+                        ?: error("Ячейка не найдена")
+                val product =
+                    snapshot.products.find { it.uuid == productUuid }
+                        ?: error("Продукт не найден в snapshot.products")
+                if (cell.productUuid == productUuid) {
+                    error("Этот вкус уже назначен на ячейку")
+                }
+                val updated = InventoryCellTasteChange.applyProductAssignment(cell, product)
+                check(InventoryCellTasteChange.preservesPrices(cell, updated)) {
+                    "Internal error: taste change must preserve prices"
+                }
+                telemetryCellsSyncCoordinator.sendOperatorTasteOverrideAwaitingAck(updated).getOrThrow()
+            }.fold(
+                onSuccess = {
+                    refreshInventoryRows()
+                    onDone(true, "Вкус изменён и подтверждён сервером")
+                },
+                onFailure = { e ->
+                    Timber.e(e, "changeInventoryCellTaste")
+                    val message =
+                        when {
+                            isTelemetryUplinkFailure(e) ->
+                                "Не удалось отправить на сервер: ${e.message ?: "offline"}"
+                            e.message?.contains("не применил", ignoreCase = true) == true ->
+                                "Сервер отклонил смену вкуса: ${e.message}"
+                            e.message?.contains("Таймаут", ignoreCase = true) == true ->
+                                "Нет подтверждения сервера: ${e.message}"
+                            else -> e.message ?: "Ошибка смены вкуса"
+                        }
+                    onDone(false, message)
+                },
+            )
+        }
+    }
+
+    private fun isTelemetryUplinkFailure(error: Throwable): Boolean {
+        val msg = error.message.orEmpty()
+        return msg.contains("WebSocket", ignoreCase = true) ||
+            msg.contains("not connected", ignoreCase = true) ||
+            msg.contains("not online", ignoreCase = true) ||
+            msg.contains("not open", ignoreCase = true)
     }
 
  /** Остатки → одна ячейка: объём = maxVolume из merge-конфига. */
@@ -2286,8 +2566,11 @@ constructor(
                         append(product.taste.name)
                     }
                 },
+            containerNumber = containerNumber,
             recipeDrinkVolumeMl = product.dosage.drinkVolume,
             recipeWaterMl = product.dosage.water,
+            recipeProductMl = product.dosage.product,
+            conversionFactor = product.dosage.conversionFactor,
         )
 
     fun setWaterCalTargetMlInput(value: String) {

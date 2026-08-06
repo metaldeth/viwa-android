@@ -60,11 +60,15 @@ constructor(
         }
         networkObserver.start()
 
+        cellsSyncCoordinator.startRecipeDownlinkOverflowHandling(appScope) { reason ->
+            scheduleConnect(reason)
+        }
+
         wsManager.cellsSyncHandler =
             object : MvpTelemetryCellsSyncHandler {
-                override suspend fun onWebSocketHello() {
+                override suspend fun onWebSocketHello(hello: MvpHelloPayloadDto) {
                     dispenseSyncCoordinator.onWebSocketHello()
-                    cellsSyncCoordinator.onWebSocketHello()
+                    cellsSyncCoordinator.onWebSocketHello(hello)
                 }
 
                 override suspend fun onCellsSnapshot(payloadJson: String) {
@@ -73,6 +77,18 @@ constructor(
 
                 override suspend fun onSchemaAck(payload: kotlinx.serialization.json.JsonObject) {
                     cellsSyncCoordinator.onSchemaAck(payload)
+                }
+
+                override suspend fun onRecipeSyncControl(payloadJson: String) {
+                    cellsSyncCoordinator.onRecipeSyncControl(payloadJson)
+                }
+
+                override suspend fun onRecipeCommand(payloadJson: String) {
+                    cellsSyncCoordinator.onRecipeCommand(payloadJson)
+                }
+
+                override suspend fun onRecipeDisconnect() {
+                    cellsSyncCoordinator.onRecipeDisconnect()
                 }
             }
     }

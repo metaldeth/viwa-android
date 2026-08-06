@@ -1,6 +1,6 @@
 package com.viwa.android.ui.screens.service.devices
 
-import com.viwa.android.data.payment.aqsi.setup.AqsiPillUsbIdentifiers
+import com.viwa.android.hardware.serial.AqsiPillUsbIdentifiers
 import com.viwa.android.data.payment.aqsi.setup.AqsiPaymentStartupInitializer
 import com.viwa.android.hardware.controller.ControllerHardwareManager
 import com.viwa.android.hardware.devices.DeviceRuntimeDiscoveryResult
@@ -13,6 +13,8 @@ import com.viwa.android.hardware.serial.PortRole
 import com.viwa.android.hardware.serial.SerialDeviceInfo
 import com.viwa.android.hardware.serial.SerialPortAssignmentEvents
 import com.viwa.android.hardware.serial.ViwaSerialPort
+import com.viwa.android.services.payment.PillUsbOwner
+import com.viwa.android.services.payment.PillUsbSessionOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -63,6 +65,11 @@ sealed interface PaymentDeviceStatus {
 
     data class Ready(val deviceName: String) : PaymentDeviceStatus
 
+    data class Busy(
+        val deviceName: String,
+        val message: String,
+    ) : PaymentDeviceStatus
+
     data class Error(
         val deviceName: String,
         val message: String,
@@ -112,6 +119,7 @@ class DevicesBlockController(
     private val deviceRuntimeDiscovery: ViwaDeviceRuntimeDiscovery,
     private val aqsiPaymentStartupInitializer: AqsiPaymentStartupInitializer,
     private val scannerStartupInitializer: ViwaScannerStartupInitializer,
+    private val pillUsbSessionOwner: PillUsbSessionOwner,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) : DevicesBlockActions {
     private val _state = MutableStateFlow(DevicesBlockState())
@@ -342,6 +350,18 @@ class DevicesBlockController(
                 message = "Для порта платёжника не найден serial-драйвер",
             )
         }
+        if (AqsiPillUsbIdentifiers.isAqsiPill(device)) {
+            pillUsbSessionOwner.activeOwner.value?.let { owner ->
+                return PaymentDeviceStatus.Busy(
+                    deviceName = paymentDeviceName,
+                    message =
+                        when (owner) {
+                            PillUsbOwner.CUSTOMER_PAYMENT -> "Терминал занят оплатой"
+                            PillUsbOwner.PROVISIONING -> "Терминал занят настройкой Pill"
+                        },
+                )
+            }
+        }
         return serialPort.probeOpen(paymentDeviceName).fold(
             onSuccess = { PaymentDeviceStatus.Ready(paymentDeviceName) },
             onFailure = { error ->
@@ -376,11 +396,7 @@ class DevicesBlockController(
     }
 
     private fun inferAqsiPaymentDeviceName(devices: List<SerialDeviceInfo>): String? {
-        val aqsiDevices =
-            devices.filter { device ->
-                device.vendorId == AqsiPillUsbIdentifiers.VENDOR_ID &&
-                    device.productId == AqsiPillUsbIdentifiers.PRODUCT_ID
-            }
+        val aqsiDevices = devices.filter { AqsiPillUsbIdentifiers.isAqsiPill(it) }
         return aqsiDevices.singleOrNull()?.deviceName ?: aqsiDevices.firstOrNull()?.deviceName
     }
 

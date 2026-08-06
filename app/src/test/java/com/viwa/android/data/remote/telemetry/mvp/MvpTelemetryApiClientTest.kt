@@ -1,7 +1,7 @@
 package com.viwa.android.data.remote.telemetry.mvp
 
+import com.viwa.android.test.OkHttpTestClientRegistry
 import kotlinx.serialization.json.Json
-import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -15,6 +15,7 @@ class MvpTelemetryApiClientTest {
     private lateinit var server: MockWebServer
     private lateinit var client: MvpTelemetryApiClient
     private lateinit var json: Json
+    private val okHttpRegistry = OkHttpTestClientRegistry()
 
     @Before
     fun setUp() {
@@ -28,7 +29,7 @@ class MvpTelemetryApiClientTest {
             }
         client =
             MvpTelemetryApiClient(
-                httpClient = OkHttpClient(),
+                httpClient = okHttpRegistry.newClient(),
                 json = json,
                 enrollmentKeyProvider = { "test-enrollment-key" },
             )
@@ -36,6 +37,7 @@ class MvpTelemetryApiClientTest {
 
     @After
     fun tearDown() {
+        okHttpRegistry.shutdownAll()
         server.shutdown()
     }
 
@@ -178,7 +180,7 @@ class MvpTelemetryApiClientTest {
         // given
         val clientWithoutKey =
             MvpTelemetryApiClient(
-                httpClient = OkHttpClient(),
+                httpClient = okHttpRegistry.newClient(),
                 json = json,
                 enrollmentKeyProvider = { "   " },
             )
@@ -198,7 +200,7 @@ class MvpTelemetryApiClientTest {
         // given
         val clientWithoutKey =
             MvpTelemetryApiClient(
-                httpClient = OkHttpClient(),
+                httpClient = okHttpRegistry.newClient(),
                 json = json,
                 enrollmentKeyProvider = { "" },
             )
@@ -293,7 +295,7 @@ class MvpTelemetryApiClientTest {
         // given
         val provisionClient =
             MvpTelemetryApiClient(
-                httpClient = OkHttpClient(),
+                httpClient = okHttpRegistry.newClient(),
                 json = json,
                 enrollmentKeyProvider = { "test-enrollment-key" },
                 factoryProvisionKeyProvider = { "factory-key-test" },

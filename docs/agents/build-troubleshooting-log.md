@@ -6,10 +6,8 @@
 
 | ID | Severity | Summary | Status |
 |----|----------|---------|--------|
-| BT-001 | high | Full `:app:testDebugUnitTest` зависает без CPU и вывода даже с `--no-daemon` и `--max-workers=1` (повтор 2026-08-05; hang локализован в `TechnicianAllowlistStoreDeltaTest`) | `open` |
 | BT-005 | medium | `TelemetryPourMessageCodecTest > encodePayload anonymous plain hold allows null clientId` — `TelemetryV3CodecTest.kt:107` | `open` |
 | BT-002 | medium | `TechnicianAllowlistSyncCoordinatorDisconnectTest` — `UncompletedCoroutinesError` | `open` |
-| BT-003 | medium | `OfflineGrantVerifierTest` — OOM при параллельных workers | `open` |
 | BT-004 | high | `assembleRelease` падает до R8 — signing env / keystore не настроены | `open` |
 
 ---
@@ -63,7 +61,17 @@
   at TechnicianKeyTest.kt:447 (invokeSuspend :452) — waiting on condition в runTest
   ```
   Параллельно воспроизвёлся известный BT-005 (`TelemetryV3CodecTest.kt:107`).
-- **Причина:** `runTest` в этом тесте ждёт условие, которое не наступает — корутина не завершается и держит test executor. Точная причина внутри теста не диагностирована.
-- **Workaround / fix:** до починки прогонять точечные тесты по затронутым классам (`--tests "*DrinkList*"` и т.п.), полный suite не считать gate. Для BT-001 следующий шаг конкретный: чинить ожидание в `TechnicianKeyTest.kt:447`, а не искать зависший класс.
-- **Статус:** `open`
-- **Связи:** BT-005 (тот же прогон); `assembleDebug` в этом же прогоне — exit 0
+- **Причина:** `TechnicianAllowlistStoreDeltaTest` регистрировал MockK `coEvery { db.withTransaction(...) }` внутри `runTest`. MockK для suspend-стабов вызывает `InternalPlatformDsl.runCoroutine` / `runBlocking`, что на single-thread `StandardTestDispatcher` даёт детерминированный deadlock (TIMED_WAITING, CPU≈0). Перенос stubbing в helper с `runBlocking` не помог — MockK также deadlock-ит при **вызове** suspend-мока из `runTest`.
+- **Workaround / fix:** добавлен `internal` test-конструктор `TechnicianAllowlistStore(allowlistDao, stateDao)` с passthrough-транзакциями (без MockK/Room). Delta-тесты переведены на него; production path по-прежнему использует `database.withTransaction`.
+- **Статус:** `resolved`
+- **Связи:** BT-005 (тот же прогон, отдельная проблема); verify: `gradlew.bat :app:testDebugUnitTest --tests "*TechnicianAllowlistStoreDeltaTest*hello*" --no-daemon --max-workers=1` → BUILD SUCCESSFUL ~74s; `--tests TechnicianAllowlistStoreDeltaTest` + `TechnicianKeyAuthorizationServiceTest` + `TechnicianKeyPolicySecurityTest` → BUILD SUCCESSFUL ~25s
+
+### 2026-08-06 — full unit suite hang/OOM (OkHttp TaskRunner, inventory ack pipeline)
+
+- **Repo:** `viwa-android` (`c:\wiva\viwa-android`)
+- **Команда:** `gradlew.bat :app:testDebugUnitTest --console=plain` (~18.7 min, killed); cleanup: `gradlew.bat --stop` (2 daemons)
+- **Симптом:** полный suite завис; JUnit XML только у 10 классов (inventory ack pipeline + inventory domain), все с timestamp `2026-08-06 12:17:39`. Затем `OutOfMemoryError` в `okhttp3.internal.concurrent.TaskRunner`; процесс убит.
+- **Причина:** накопление ресурсов в одном test JVM при полном прогоне (~139 классов): (1) `OkHttpClient()` в telemetry/OTA тестах без shutdown (`SimpleTelemetryCoordinatorTest`, `MvpTelemetryApiClientTest`, `SimpleTelemetryCoordinatorSerialGuardTest`, `AppUpdateCoordinatorTest`); (2) `MvpTelemetryWebSocketManager` + `SimpleTelemetryCoordinator` с `SupervisorJob()` без `cancel()`/`disconnect()` в `@After`; (3) `CellsContentReportAckAwaiter` — pending ack waits не очищались при WS disconnect; (4) ack-тесты использовали `launch {}` в MockK `coEvery` для `completeAck`.
+- **Workaround / fix:** `OkHttpTestClientRegistry` + shutdown в `@After`; tearDown WS/coordinator scopes; `CellsContentReportAckAwaiter.cancelAll()` из `MvpTelemetryWebSocketManager.disconnect()`; синхронный `completeAck` в `TelemetryCellsSyncCoordinatorTest`; `testOptions`: `maxParallelForks=1`, `maxHeapSize=1536m`, JUnit parallel disabled. Retry full suite: `--max-workers=1`.
+- **Статус:** `resolved`
+- **Связи:** inventory ack tests (`TelemetryAckRouterTest`, `TelemetryCellsSyncCoordinatorTest`, `CellsContentReportAckSemanticsTest`); BT-003 закрыт тем же фиксом (OkHttp lifecycle + single fork)

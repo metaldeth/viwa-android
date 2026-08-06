@@ -33,6 +33,9 @@ class DrinkListViewModelSubscriptionCancelTest {
 
     @After
     fun tearDown() {
+        runBlocking {
+            DrinkListViewModelTestSupport.clearTrackedViewModels(executor.asCoroutineDispatcher())
+        }
         Dispatchers.resetMain()
         executor.shutdownNow()
     }

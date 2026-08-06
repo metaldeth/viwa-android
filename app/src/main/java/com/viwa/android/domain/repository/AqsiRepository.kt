@@ -7,7 +7,8 @@ import com.viwa.android.domain.model.AqsiPaymentResult
  * Доступ к настройке и операциям ридера aQsi. Конфиг читается/пишется в JsonStore —
  * ключ [com.viwa.android.data.local.db.JsonStoreKeys.AQSI_SETTINGS].
  *
- * Реализация (TCP/JPAY) — последующие задачи пайплайна.
+ * Production card flow: USB Arcus2 on the assigned Pill via [initiatePayment] /
+ * [cancelPayment] (see [com.viwa.android.data.payment.aqsi.AqsiUsbPaymentManager]).
  */
 interface AqsiRepository {
 
@@ -15,10 +16,10 @@ interface AqsiRepository {
 
     suspend fun saveConfig(config: AqsiConfig)
 
- /**
- * Проверка канала без финансовой транзакции (TCP connect в пределах [AqsiConfig.timeoutMs],
- * закрытие сокета; при необходимости — минимальный handshake, не списание).
- */
+    /**
+     * Service-menu connectivity probe: runs a real 1 ₽ Arcus2 [testPayment] on the assigned
+     * USB Pill (not a standalone TCP/JPAY customer path).
+     */
     suspend fun testTcpConnection(): Result<Unit>
 
     suspend fun initiatePayment(amountKopecks: Int): Result<AqsiPaymentResult>

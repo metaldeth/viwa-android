@@ -12,18 +12,42 @@ import kotlinx.serialization.json.Json
 
 @Singleton
 class TechnicianAllowlistStore
-@Inject
-constructor(
-    private val database: ViwaDatabase,
+private constructor(
+    private val databaseOrNull: ViwaDatabase?,
     private val allowlistDao: TechnicianAllowlistDao,
     private val stateDao: TechnicianAllowlistStateDao,
+    private val passthroughTransactions: Boolean,
 ) {
+    @Inject
+    constructor(
+        database: ViwaDatabase,
+        allowlistDao: TechnicianAllowlistDao,
+        stateDao: TechnicianAllowlistStateDao,
+    ) : this(database, allowlistDao, stateDao, passthroughTransactions = false)
+
+    /**
+     * Passthrough transactions for unit tests — avoids MockK [coEvery] on [RoomDatabase.withTransaction],
+     * which deadlocks under [kotlinx.coroutines.test.runTest]'s single-thread dispatcher.
+     */
+    internal constructor(
+        allowlistDao: TechnicianAllowlistDao,
+        stateDao: TechnicianAllowlistStateDao,
+    ) : this(null, allowlistDao, stateDao, passthroughTransactions = true)
+
     private val json =
         Json {
             ignoreUnknownKeys = true
             encodeDefaults = true
         }
     private val clock: () -> Long = { System.currentTimeMillis() }
+
+    private suspend fun inTransaction(block: suspend () -> Unit) {
+        if (passthroughTransactions) {
+            block()
+        } else {
+            databaseOrNull!!.withTransaction { block() }
+        }
+    }
 
     suspend fun getCursor(): String = stateDao.getState()?.deltaCursor ?: "0"
 
@@ -37,7 +61,7 @@ constructor(
     ) {
         val now = clock()
         val entities = records.map { it.toEntity(now) }
-        database.withTransaction {
+        inTransaction {
             for (entity in entities) {
                 allowlistDao.upsert(entity)
             }

@@ -16,6 +16,7 @@ import com.viwa.android.hardware.scanner.ViwaScannerStartupInitializer
 import com.viwa.android.hardware.scanner.ViwaScannerTrafficLogger
 import com.viwa.android.hardware.serial.SerialPortAssignmentEvents
 import com.viwa.android.hardware.serial.ViwaSerialPort
+import com.viwa.android.services.payment.PillUsbSessionOwner
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow
@@ -33,6 +34,7 @@ constructor(
     aqsiPaymentStartupInitializer: AqsiPaymentStartupInitializer,
     scannerStartupInitializer: ViwaScannerStartupInitializer,
     aqsiUsbPaymentManager: AqsiUsbPaymentManager,
+    pillUsbSessionOwner: PillUsbSessionOwner,
     scannerTrafficLogger: ViwaScannerTrafficLogger,
     portScanPort: ViwaControllerPortScanPort,
     manualPortProbe: ViwaControllerManualPortProbe,
@@ -59,6 +61,7 @@ constructor(
             deviceRuntimeDiscovery = deviceRuntimeDiscovery,
             aqsiPaymentStartupInitializer = aqsiPaymentStartupInitializer,
             scannerStartupInitializer = scannerStartupInitializer,
+            pillUsbSessionOwner = pillUsbSessionOwner,
             scope = viewModelScope,
         )
 
@@ -66,6 +69,7 @@ constructor(
         PaymentTerminalBlockController(
             aqsiUsbPaymentManager = aqsiUsbPaymentManager,
             serialPort = serialPort,
+            pillUsbSessionOwner = pillUsbSessionOwner,
             parentScope = viewModelScope,
         )
 

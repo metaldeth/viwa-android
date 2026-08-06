@@ -285,6 +285,12 @@ private fun PaymentStatusCard(
                     labels.paymentReadyPort.format(status.deviceName),
                     false,
                 )
+            is PaymentDeviceStatus.Busy ->
+                Triple(
+                    labels.paymentBusyTitle,
+                    labels.paymentBusyDetails.format(status.deviceName, status.message),
+                    false,
+                )
             is PaymentDeviceStatus.Error ->
                 Triple(
                     labels.paymentErrorTitle,

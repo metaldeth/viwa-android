@@ -6,8 +6,6 @@ import com.viwa.android.data.local.db.JsonStoreKeys
 import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.ui.screens.customer.IDLE_VIDEO_IDS_ALL
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,37 +14,42 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
-private const val IDLE_TIMEOUT_MS = 60_000L
-
-/**
- * Attract idle overlay (полноэкранное видео ожидания).
- * На k3568 после ExoPlayer/TextureView киоск залипал на белом экране без UI —
- * пока выключено жёстко. Настройки idle в сервисном меню сохраняются, но оверлей не показывается.
- */
-private const val IDLE_OVERLAY_ENABLED = false
+enum class IdlePhase {
+    Hidden,
+    Prewarm,
+    Visible,
+}
 
 @HiltViewModel
 class IdleVideoViewModel @Inject constructor(
     private val configRepository: ConfigRepository,
 ) : ViewModel() {
 
-    private val _isVisible = MutableStateFlow(false)
-    val isVisible: StateFlow<Boolean> = _isVisible.asStateFlow()
+    companion object {
+        const val IDLE_TIMEOUT_MS = 60_000L
+        const val IDLE_PREWARM_LEAD_MS = 3_000L
+        const val PREWARM_READY_TIMEOUT_MS = 5_000L
+    }
 
- /**
- * Список id включённых видео скринсейвера.
- * Пустой список = ожидание отключено полностью (.length === 0).
- */
+    private val _phase = MutableStateFlow(IdlePhase.Hidden)
+    val phase: StateFlow<IdlePhase> = _phase.asStateFlow()
+
+    /** Список id включённых видео скринсейвера. Пустой список = ожидание отключено полностью. */
     private val _enabledVideoIds = MutableStateFlow(IDLE_VIDEO_IDS_ALL)
     val enabledVideoIds: StateFlow<List<String>> = _enabledVideoIds.asStateFlow()
 
-    private var idleJob: Job? = null
-
- /**
- * true только когда приложение на экране выбора напитков (DrinkListScreen / Home).
- * На PreparingScreen, ServiceScreen и других экранах — false.
- */
     private var screenActive = false
+    private var customerFlowBlocked = false
+
+    private fun isIdleAllowed(): Boolean = screenActive && !customerFlowBlocked
+
+    private val phaseScheduler =
+        IdleVideoPhaseScheduler(
+            scope = viewModelScope,
+            isScreenActive = { isIdleAllowed() },
+            enabledVideoIds = { _enabledVideoIds.value },
+            onPhaseChanged = { _phase.value = it },
+        )
 
     init {
         viewModelScope.launch { loadSettings() }
@@ -58,8 +61,7 @@ class IdleVideoViewModel @Inject constructor(
             val ids = Json.decodeFromString<List<String>>(saved)
             _enabledVideoIds.value = ids
             if (ids.isEmpty()) {
-                idleJob?.cancel()
-                _isVisible.value = false
+                phaseScheduler.cancelAndHide()
             }
         }
     }
@@ -73,70 +75,65 @@ class IdleVideoViewModel @Inject constructor(
         }
     }
 
- /**
- * Вызывается при навигации.
- * [active] = true только для Routes.Home (DrinkListScreen).
- * На остальных экранах таймер отменяется и idle не показывается.
- */
+    /** Вызывается при навигации. [active] = true только для Routes.Home. */
     fun setActive(active: Boolean) {
         screenActive = active
-        if (!active) {
-            idleJob?.cancel()
-            _isVisible.value = false
+        if (!isIdleAllowed()) {
+            phaseScheduler.cancelAndHide()
         } else {
-            scheduleIdle()
+            phaseScheduler.scheduleIdle()
         }
     }
 
- /** Любое касание экрана сбрасывает таймер и скрывает оверлей. */
+    /**
+     * Блокирует idle, пока на Home открыт платёж, подписка, чек, налив и т.п.
+     * При снятии блокировки запускает новый отсчёт без показа оверлея.
+     */
+    fun setCustomerFlowBlocked(blocked: Boolean) {
+        if (customerFlowBlocked == blocked) return
+        customerFlowBlocked = blocked
+        if (blocked) {
+            phaseScheduler.cancelAndHide()
+        } else if (screenActive) {
+            phaseScheduler.scheduleIdle()
+        }
+    }
+
+    /** Любое касание экрана сбрасывает таймер и скрывает оверлей. */
     fun resetTimer() {
-        _isVisible.value = false
-        if (screenActive) scheduleIdle()
+        phaseScheduler.cancelAndHide()
+        if (isIdleAllowed()) phaseScheduler.scheduleIdle()
     }
 
-    private fun scheduleIdle() {
-        idleJob?.cancel()
-        _isVisible.value = false
-        if (!IDLE_OVERLAY_ENABLED) return
-        if (!screenActive || _enabledVideoIds.value.isEmpty()) return
-        idleJob = viewModelScope.launch {
-            delay(IDLE_TIMEOUT_MS)
-            if (screenActive && _enabledVideoIds.value.isNotEmpty()) {
-                _isVisible.value = true
-            }
-        }
+    /** Вызывается хостом, когда playerA дошёл до STATE_READY в фазе Prewarm. */
+    fun onPrewarmReady() {
+        phaseScheduler.onPrewarmReady()
     }
 
- /** Включить / выключить конкретное видео. */
     fun toggleVideo(id: String, enabled: Boolean) {
         val current = _enabledVideoIds.value.toMutableList()
         if (enabled && id !in current) current.add(id)
         else if (!enabled) current.remove(id)
         _enabledVideoIds.value = current
         saveSettings()
-        scheduleIdle()
+        phaseScheduler.scheduleIdle()
     }
 
- /** Включить все 14 видео. */
     fun enableAllVideos() {
         _enabledVideoIds.value = IDLE_VIDEO_IDS_ALL
         saveSettings()
-        scheduleIdle()
+        phaseScheduler.scheduleIdle()
     }
 
- /**
- * Полностью отключить видео ожидания.
- * Пустой список — idle не запускается совсем (.length === 0).
- */
+    /** Пустой список — idle не запускается совсем. */
     fun disableAllVideos() {
         _enabledVideoIds.value = emptyList()
         saveSettings()
-        idleJob?.cancel()
-        _isVisible.value = false
+        phaseScheduler.cancelAndHide()
     }
 
     override fun onCleared() {
         super.onCleared()
-        idleJob?.cancel()
+        phaseScheduler.clear()
     }
 }

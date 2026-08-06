@@ -10,6 +10,7 @@ import com.viwa.android.data.local.outbox.PourOutboxStore
 import com.viwa.android.data.local.outbox.TestOutboxFixtures
 import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.domain.telemetry.PlainWaterType
+import com.viwa.android.data.remote.telemetry.mvp.cells.RecipeMessageCodec
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -17,6 +18,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -41,7 +43,7 @@ class TelemetryAckRouterTest {
             )
         commerceOutboxStore = CommerceOutboxStore(outboxStore)
         pourOutboxStore = PourOutboxStore(outboxStore)
-        router = TelemetryAckRouter(outboxStore)
+        router = TelemetryAckRouter(outboxStore, RecipeMessageCodec())
     }
 
     @Test
@@ -144,6 +146,36 @@ class TelemetryAckRouterTest {
             )
         assertEquals(AckRouteOutcome.HANDLED, outcome)
         assertTrue(cellsCalled)
+    }
+
+    @Test
+    fun `routes applied content report ack to cells content handler`() = runTest {
+        var receivedCorrelation: String? = null
+        val payload =
+            buildJsonObject {
+                put("ok", true)
+                put("applied", 1)
+            }
+        val envelope =
+            MvpWsEnvelopeDto(
+                type = "ack",
+                messageId = "ack-content",
+                sentAt = "2026-07-27T10:00:00.000Z",
+                payload = payload,
+                correlationId = "content-msg-1",
+            )
+        val outcome =
+            router.routeAck(
+                envelope = envelope,
+                sessionGeneration = 1L,
+                cellsHandler = null,
+                loyaltyHandler = null,
+                cellsContentAckHandler = { correlation, _ ->
+                    receivedCorrelation = correlation
+                },
+            )
+        assertEquals(AckRouteOutcome.HANDLED, outcome)
+        assertEquals("content-msg-1", receivedCorrelation)
     }
 
     @Test
@@ -704,5 +736,84 @@ class TelemetryAckRouterTest {
             pourBalanceHandler = { balanceCalled = true },
         )
         assertTrue(balanceCalled)
+    }
+
+    @Test
+    fun `routes machine water usage ack by correlationId`() = runTest {
+        val waterUsageOutboxStore = com.viwa.android.data.local.outbox.WaterUsageOutboxStore(outboxStore)
+        waterUsageOutboxStore.enqueueWaterUsageReport(
+            com.viwa.android.domain.telemetry.WaterUsageReportSnapshot(
+                totalMl = 9000,
+                reportedAt = "2026-08-05T12:00:00.000Z",
+            ),
+        )
+        val row = persistence.allRows().single()
+        assertEquals(MachineOutboxKind.MACHINE_WATER_USAGE_REPORT.wireValue, row.kind)
+        outboxStore.markInFlight(row, sessionGeneration = 3L)
+        val payload =
+            buildJsonObject {
+                put("totalMl", 9000)
+                put("reportedAt", "2026-08-05T12:00:00.000Z")
+                put("ok", true)
+            }
+        val envelope =
+            MvpWsEnvelopeDto(
+                type = "ack",
+                messageId = "ack-water-usage",
+                sentAt = "2026-08-05T12:00:00.000Z",
+                payload = payload,
+                correlationId = row.messageId,
+            )
+        val outcome =
+            router.routeAck(
+                envelope = envelope,
+                sessionGeneration = 3L,
+                cellsHandler = null,
+                loyaltyHandler = null,
+            )
+        assertEquals(AckRouteOutcome.HANDLED, outcome)
+        assertEquals(MachineOutboxStatus.ACKED.name, persistence.allRows().single().status)
+    }
+
+    @Test
+    fun `routes recipe command ack to recipe handler not content awaiter`() = runTest {
+        var recipeHandled = false
+        var contentHandled = false
+        val payload =
+            buildJsonObject {
+                put(
+                    "acks",
+                    buildJsonArray {
+                        add(
+                            buildJsonObject {
+                                put("commandId", "cmd-1")
+                                put("commandGeneration", "1")
+                                put("cellUuid", "cell-1")
+                                put("status", "applied")
+                            },
+                        )
+                    },
+                )
+            }
+        val envelope =
+            MvpWsEnvelopeDto(
+                type = "ack",
+                messageId = "ack-recipe",
+                sentAt = "2026-08-06T12:00:00.000Z",
+                payload = payload,
+                correlationId = "recipe-corr",
+            )
+        val outcome =
+            router.routeAck(
+                envelope = envelope,
+                sessionGeneration = 1L,
+                cellsHandler = null,
+                loyaltyHandler = null,
+                cellsContentAckHandler = { _, _ -> contentHandled = true },
+                recipeAckHandler = { _, _ -> recipeHandled = true },
+            )
+        assertEquals(AckRouteOutcome.HANDLED, outcome)
+        assertTrue(recipeHandled)
+        assertFalse(contentHandled)
     }
 }

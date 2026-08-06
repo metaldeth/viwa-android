@@ -24,4 +24,25 @@ internal object IdleVideoCrossfadeTiming {
         val delay = crossfadeDelayMs(durationMs, positionMs, triggerBeforeEndMs) ?: return false
         return delay <= 0L
     }
+
+    fun preloadDelayMs(
+        durationMs: Long,
+        positionMs: Long,
+        triggerBeforeEndMs: Long,
+        preloadLeadMs: Long,
+    ): Long? {
+        if (durationMs == C.TIME_UNSET || durationMs <= 0L) return null
+        val remaining = durationMs - positionMs
+        return (remaining - triggerBeforeEndMs - preloadLeadMs).coerceAtLeast(0L)
+    }
+
+    fun shouldPreloadNow(
+        durationMs: Long,
+        positionMs: Long,
+        triggerBeforeEndMs: Long,
+        preloadLeadMs: Long,
+    ): Boolean {
+        val delay = preloadDelayMs(durationMs, positionMs, triggerBeforeEndMs, preloadLeadMs) ?: return false
+        return delay <= 0L
+    }
 }

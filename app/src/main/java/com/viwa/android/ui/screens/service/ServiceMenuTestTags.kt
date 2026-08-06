@@ -37,6 +37,29 @@ object ServiceMenuTestTags {
     const val CONTROLLER_PORT_DROPDOWN = "controller_port_dropdown"
     const val CONTROLLER_PORT_CONNECT = "controller_port_connect"
 
+    const val INVENTORY_ROOT = "service_inventory_root"
+    const val INVENTORY_RECIPE_DIALOG = "service_inventory_recipe_dialog"
+    const val INVENTORY_RECIPE_DRIFT_BADGE = "service_inventory_recipe_drift_badge"
+    const val INVENTORY_RECIPE_BASE_VERSION = "service_inventory_recipe_base_version"
+    const val INVENTORY_RECIPE_SYNC_STATUS = "service_inventory_recipe_sync_status"
+    const val INVENTORY_RECIPE_EDIT_BUTTON = "service_inventory_recipe_edit_button"
+    const val INVENTORY_RECIPE_EDIT_SAVE = "service_inventory_recipe_edit_save"
+    const val INVENTORY_RECIPE_EDIT_CONFIRM = "service_inventory_recipe_edit_confirm"
+    const val INVENTORY_RECIPE_EDIT_CONFIRM_BUTTON = "service_inventory_recipe_edit_confirm_button"
+    const val INVENTORY_RECIPE_RESET_BUTTON = "service_inventory_recipe_reset_button"
+    const val INVENTORY_RECIPE_RESET_CONFIRM = "service_inventory_recipe_reset_confirm"
+    const val INVENTORY_RECIPE_RESET_CONFIRM_BUTTON = "service_inventory_recipe_reset_confirm_button"
+    const val INVENTORY_TASTE_PICKER = "service_inventory_taste_picker"
+    const val INVENTORY_TASTE_CONFIRM = "service_inventory_taste_confirm"
+    const val INVENTORY_TASTE_CONFIRM_BUTTON = "service_inventory_taste_confirm_button"
+
+    fun inventoryRecipeButtonTag(cellNumber: Int): String = "service_inventory_recipe_btn_$cellNumber"
+
+    fun inventoryChangeTasteButtonTag(cellNumber: Int): String = "service_inventory_change_taste_btn_$cellNumber"
+
+    fun inventoryTasteOptionTag(productUuid: String): String =
+        "service_inventory_taste_option_${productUuid.replace("-", "_")}"
+
     fun serviceGroupTag(groupId: ViwaServiceGroupId): String =
         when (groupId) {
             ViwaServiceGroupId.Dashboard -> "service_group_dashboard"
@@ -118,6 +141,21 @@ object ServiceMenuTestTags {
             CONTROLLER_PORT_ROOT,
             CONTROLLER_PORT_DROPDOWN,
             CONTROLLER_PORT_CONNECT,
+            INVENTORY_ROOT,
+            INVENTORY_RECIPE_DIALOG,
+            INVENTORY_RECIPE_DRIFT_BADGE,
+            INVENTORY_RECIPE_BASE_VERSION,
+            INVENTORY_RECIPE_SYNC_STATUS,
+            INVENTORY_RECIPE_EDIT_BUTTON,
+            INVENTORY_RECIPE_EDIT_SAVE,
+            INVENTORY_RECIPE_EDIT_CONFIRM,
+            INVENTORY_RECIPE_EDIT_CONFIRM_BUTTON,
+            INVENTORY_RECIPE_RESET_BUTTON,
+            INVENTORY_RECIPE_RESET_CONFIRM,
+            INVENTORY_RECIPE_RESET_CONFIRM_BUTTON,
+            INVENTORY_TASTE_PICKER,
+            INVENTORY_TASTE_CONFIRM,
+            INVENTORY_TASTE_CONFIRM_BUTTON,
         ) +
             ViwaServiceMenuGroups.map { serviceGroupTag(it.id) }.toSet() +
             ViwaServiceMenuGroups.flatMap { group -> group.subTabs.map { serviceSubTabTag(it.id) } }.toSet()

@@ -14,6 +14,7 @@ data class MvpInventoryTableRow(
     val sosVolume: Int,
     val maxVolume: Int,
     val volumeStatus: CellVolumeStatus,
+    val conversionFactor: Double = TelemetryCell.DEFAULT_CONVERSION_FACTOR,
 )
 
 data class MvpInventoryContentUpdate(
@@ -37,6 +38,7 @@ fun TelemetryCell.toMvpInventoryTableRow(): MvpInventoryTableRow =
         sosVolume = sosVolume,
         maxVolume = maxVolume,
         volumeStatus = resolveCellVolumeStatus(volume, blockVolume, sosVolume),
+        conversionFactor = conversionFactor,
     )
 
 fun mapMvpInventoryFromSnapshot(snapshot: TelemetryCellsSnapshot?): Pair<List<MvpInventoryTableRow>, List<TelemetryProduct>> {

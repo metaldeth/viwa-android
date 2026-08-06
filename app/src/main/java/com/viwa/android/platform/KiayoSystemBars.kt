@@ -2,29 +2,32 @@ package com.viwa.android.platform
 
 import android.content.Context
 import android.content.Intent
+import android.os.Process
 import timber.log.Timber
 
-/** Kiayo / Rockchip K3568 vendor API for system navigation bar (`com.kiayo.externservice`). */
+/**
+ * Kiayo / Rockchip K3568 hooks implemented in `system_server`.
+ *
+ * The broadcasts are protected and persistent properties are system-only. A regular `/data/app`
+ * build must rely on factory provisioning; these calls are reserved for a platform-installed Viwa.
+ */
 object KiayoSystemBars {
-    const val PACKAGE_EXTERN_SERVICE = "com.kiayo.externservice"
     const val ACTION_HIDE_NAVIGATION_BAR = "com.kiayo.hide.navigationBar"
     const val ACTION_SHOW_NAVIGATION_BAR = "com.kiayo.show.navigationBar"
     private const val PERSIST_NAV_BAR_PROP = "persist.kiayo.status.naviBar"
     private const val NAV_BAR_HIDDEN = "0"
     private const val NAV_BAR_SHOWN = "1"
 
-    fun isAvailable(context: Context): Boolean =
-        runCatching {
-            context.packageManager.getPackageInfo(PACKAGE_EXTERN_SERVICE, 0)
-            true
-        }.getOrDefault(false)
+    fun isAvailable(): Boolean = Process.myUid() == Process.SYSTEM_UID
 
     fun hideNavigationBar(context: Context) {
+        if (!isAvailable()) return
         trySetPersistNavBarState(NAV_BAR_HIDDEN)
         sendNavBarBroadcast(context, ACTION_HIDE_NAVIGATION_BAR, "hide")
     }
 
     fun showNavigationBar(context: Context) {
+        if (!isAvailable()) return
         trySetPersistNavBarState(NAV_BAR_SHOWN)
         sendNavBarBroadcast(context, ACTION_SHOW_NAVIGATION_BAR, "show")
     }
@@ -53,7 +56,6 @@ object KiayoSystemBars {
         action: String,
         label: String,
     ) {
-        if (!isAvailable(context)) return
         runCatching {
             context.sendBroadcast(Intent(action))
         }.onFailure { e ->

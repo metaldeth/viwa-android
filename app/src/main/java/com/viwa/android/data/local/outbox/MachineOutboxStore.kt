@@ -41,6 +41,17 @@ constructor(
         return dao.countPendingOrInFlight()
     }
 
+    suspend fun hasUnsentRecipeEntries(nowMs: Long = clock()): Boolean {
+        ensureMigrated()
+        return dao.hasUnsentRecipeEntries(nowMs)
+    }
+
+    suspend fun hasUnsentRecipeReportForCell(cellId: String, nowMs: Long = clock()): Boolean {
+        ensureMigrated()
+        if (cellId.isBlank()) return false
+        return dao.hasUnsentRecipeReportForCell(cellId, nowMs)
+    }
+
     suspend fun markInFlight(
         entry: MachineOutboxEntryEntity,
         sessionGeneration: Long,

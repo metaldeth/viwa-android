@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Update server for wiva-android APK distribution",
   "main": "server.js",
+  "scripts": {
+    "test": "node --test apk-name.test.js admin.test.js"
+  },
   "engines": {
     "node": ">=20"
   }

@@ -16,11 +16,13 @@ import com.viwa.android.ui.screens.service.ServiceScreen
 fun ViwaNavGraph(
     navController: NavHostController,
     onOpenService: () -> Unit,
+    onHomeIdleBlockingChanged: (Boolean) -> Unit = {},
 ) {
     NavHost(navController = navController, startDestination = Routes.Home) {
         composable(Routes.Home) {
             HomeScreen(
                 onOpenService = onOpenService,
+                onHomeIdleBlockingChanged = onHomeIdleBlockingChanged,
                 onOpenFreeDrinkOffer = { navController.navigate(Routes.FreeDrinkOffer) },
                 onNavigateToPreparing = { tasteId, productName, estSeconds, mediaKey, payMethod, priceRub ->
                     navController.navigate(

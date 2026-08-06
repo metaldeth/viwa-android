@@ -179,8 +179,14 @@ fun DrinkListScreen(
     onOpenService: () -> Unit,
     onOpenFreeDrinkOffer: () -> Unit,
     onNavigateToPreparing: (tasteId: Int, productName: String, estSeconds: Int, mediaKey: String?, payMethod: String, priceRub: Int) -> Unit,
+    onHomeIdleBlockingChanged: (Boolean) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val blocksIdleOverlay = state.blocksIdleVideoOverlay()
+    val onHomeIdleBlockingChangedState by rememberUpdatedState(onHomeIdleBlockingChanged)
+    LaunchedEffect(blocksIdleOverlay) {
+        onHomeIdleBlockingChangedState(blocksIdleOverlay)
+    }
  /** Одна бутылка = 0,5 л (500 мл). */
     val bottlesSavedCount =
         remember(state.accumulatedWaterMl) {

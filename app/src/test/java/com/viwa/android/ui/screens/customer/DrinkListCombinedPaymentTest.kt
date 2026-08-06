@@ -50,8 +50,14 @@ class DrinkListCombinedPaymentTest {
 
     @After
     fun tearDown() {
+        runBlocking {
+            DrinkListViewModelTestSupport.clearTrackedViewModels(mainDispatcher)
+        }
         Dispatchers.resetMain()
-        executor.shutdownNow()
+        executor.shutdown()
+        if (!executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+            executor.shutdownNow()
+        }
     }
 
     private suspend fun awaitCondition(timeoutMs: Long = 5000L, condition: () -> Boolean): Boolean {
@@ -583,7 +589,7 @@ class DrinkListCombinedPaymentTest {
         }
 
     @Test
-    fun combinedStart_sets120SecondTimer() =
+    fun combinedStart_sets60SecondTimer() =
         runBlocking {
             val (vm, mocks) =
                 combinedVm {

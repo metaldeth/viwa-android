@@ -10,6 +10,7 @@ fun HomeScreen(
     onOpenService: () -> Unit,
     onOpenFreeDrinkOffer: () -> Unit,
     onNavigateToPreparing: (tasteId: Int, productName: String, estSeconds: Int, mediaKey: String?, payMethod: String, priceRub: Int) -> Unit,
+    onHomeIdleBlockingChanged: (Boolean) -> Unit = {},
 ) {
     val vm: DrinkListViewModel = hiltViewModel()
     DrinkListScreen(
@@ -17,5 +18,6 @@ fun HomeScreen(
         onOpenService = onOpenService,
         onOpenFreeDrinkOffer = onOpenFreeDrinkOffer,
         onNavigateToPreparing = onNavigateToPreparing,
+        onHomeIdleBlockingChanged = onHomeIdleBlockingChanged,
     )
 }

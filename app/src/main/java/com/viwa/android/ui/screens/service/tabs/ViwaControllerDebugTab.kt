@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -29,7 +30,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -147,9 +150,22 @@ fun ViwaControllerDebugTab(
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
-                "Счётчик воды: ${state.controllerDebugWaterMl ?: "—"} мл",
+                "Последнее учтённое значение: ${state.controllerDebugWaterMl?.let { "+$it" } ?: "—"} мл",
                 style = MaterialTheme.typography.bodyMedium,
             )
+            state.controllerDebugWaterLastDeltaMl?.let { delta ->
+                Text(
+                    "Последнее приращение lifetime: +$delta мл",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            state.controllerDebugLifetimeWaterMl?.let { total ->
+                Text(
+                    "Lifetime (WATER_USAGE_ML): ${"%.0f".format(total)} мл",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
             state.controllerDebugBanner?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
             }
@@ -170,10 +186,10 @@ fun ViwaControllerDebugTab(
                 onClick = viewModel::controllerDebugSendRecipe,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Отправить рецепт")
+                Text("Отправить рецепт выбранного напитка")
             }
             Text(
-                "ChooseDrink: порт 9, 3 с, 20 мл, tof 0",
+                "ChooseDrink из вкладки «Время готовки» (300 мл, tof 0). Без выбранного напитка команда не отправляется.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -190,20 +206,10 @@ fun ViwaControllerDebugTab(
             OutlinedButton(onClick = viewModel::controllerDebugAutoMode, modifier = Modifier.fillMaxWidth()) {
                 Text("Авто режим")
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = viewModel::controllerDebugReadWaterCounter,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Читать счётчик")
-                }
-                OutlinedButton(
-                    onClick = viewModel::controllerDebugResetWaterCounter,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Сбросить")
-                }
-            }
+            WaterCounterAccountSection(
+                busy = state.controllerDebugBusy,
+                onConfirm = viewModel::controllerDebugAccountWaterCounter,
+            )
             HorizontalDivider()
             Text("Flow станция", style = MaterialTheme.typography.titleSmall)
             val tempLabel = if (state.flowTemperatureSensor0C != null && state.flowTemperatureSensor1C != null) {
@@ -346,6 +352,63 @@ private fun ControllerTrafficRow(
                     color = dirColor.copy(alpha = 0.6f),
                     lineHeight = serviceMenuSp(12),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WaterCounterAccountSection(
+    busy: Boolean,
+    onConfirm: () -> Unit,
+) {
+    var confirmVisible by remember { mutableStateOf(false) }
+    Text(
+        "Считать показание контроллера, добавить в lifetime и сбросить счётчик на плате.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(8.dp))
+    if (busy) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
+            Text("Считывание…", style = MaterialTheme.typography.bodySmall)
+        }
+    } else if (!confirmVisible) {
+        OutlinedButton(
+            onClick = { confirmVisible = true },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !busy,
+        ) {
+            Text("Считать, учесть и сбросить")
+        }
+    } else {
+        Text(
+            "Добавить текущее показание в lifetime и сбросить контроллер?",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { confirmVisible = false },
+                modifier = Modifier.weight(1f),
+                enabled = !busy,
+            ) {
+                Text("Отмена")
+            }
+            Button(
+                onClick = {
+                    confirmVisible = false
+                    onConfirm()
+                },
+                modifier = Modifier.weight(1f),
+                enabled = !busy,
+            ) {
+                Text("Подтвердить")
             }
         }
     }

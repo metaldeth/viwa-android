@@ -1,6 +1,8 @@
 package com.viwa.android.data.remote.telemetry.mvp
 
 import com.viwa.android.data.network.NetworkTrafficLogger
+import com.viwa.android.data.remote.telemetry.mvp.cells.RecipeMessageCodec
+import com.viwa.android.data.remote.telemetry.mvp.cells.RecipeSyncCoordinator
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 
@@ -18,8 +20,16 @@ internal fun TestScope.createWsManagerForTests(
     return MvpTelemetryWebSocketManager(
         appScope = this,
         networkTrafficLogger = trafficLogger,
-        ackRouter = mockk(relaxed = true),
+        ackRouter = TelemetryAckRouter(
+            outboxStore = mockk(relaxed = true),
+            recipeCodec = RecipeMessageCodec(),
+        ),
+        cellsContentReportAckAwaiter = mockk(relaxed = true),
+        recipeSyncCoordinator = RecipeSyncCoordinator(RecipeMessageCodec()),
         outboxDrainCoordinator = mockk(relaxed = true),
+        outboxStore = mockk(relaxed = true),
+        recipeOutboxStore = mockk(relaxed = true),
+        recipeMessageCodec = RecipeMessageCodec(),
         offlineEntitlementCoordinator = mockk(relaxed = true),
         technicianKeySessionCoordinator = mockk(relaxed = true),
         appUpdateCoordinatorProvider = otaProvider,

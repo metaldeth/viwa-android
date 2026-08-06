@@ -83,6 +83,7 @@ import org.junit.Before
 import org.junit.Test
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Task-05 п.12–14: полный [DrinkListViewModel] + однопоточный [kotlinx.coroutines.Dispatchers.Main],
@@ -103,8 +104,14 @@ class DrinkListViewModelTask05IntegrationTest {
 
     @After
     fun tearDown() {
+        runBlocking {
+            DrinkListViewModelTestSupport.clearTrackedViewModels(mainDispatcher)
+        }
         Dispatchers.resetMain()
-        executor.shutdownNow()
+        executor.shutdown()
+        if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+            executor.shutdownNow()
+        }
     }
 
  /**
@@ -172,11 +179,7 @@ class DrinkListViewModelTask05IntegrationTest {
             }
         }
 
-    private fun defaultSbpRepo(): SBPRepository {
-        val r = mockk<SBPRepository>(relaxUnitFun = true)
-        coEvery { r.getSettings() } returns SBPSettings(timeoutInSeconds = 120)
-        return r
-    }
+    private fun defaultSbpRepo(): SBPRepository = DrinkListViewModelTestSupport.sbpRepositoryMock()
 
     private fun createGatewayAndPaymentMocks(): Pair<ControllerGateway, ControllerSbpNotifyService> {
         val gateway = mockk<ControllerGateway>(relaxUnitFun = true)
@@ -217,13 +220,14 @@ class DrinkListViewModelTask05IntegrationTest {
                     status = SubscriptionPaymentStatus.PENDING,
                 ),
             )
-        val nano = mockk<NanoKassaRepository>(relaxed = true)
+        val nano = DrinkListViewModelTestSupport.nanoKassaRepositoryMock()
         val networkTraffic = mockk<NetworkTrafficLogger>(relaxUnitFun = true)
         every { networkTraffic.entries } returns MutableStateFlow<List<NetworkTrafficEntry>>(emptyList()).asStateFlow()
         val controllerTraffic = mockk<ViwaControllerTrafficLogger>(relaxUnitFun = true)
         every { controllerTraffic.entries } returns
             MutableStateFlow<List<ControllerTrafficEntry>>(emptyList()).asStateFlow()
-        return DrinkListViewModel(
+        val vm =
+            DrinkListViewModel(
             vmConfigRepo(),
             cellsRepo,
             preparingManager,
@@ -244,7 +248,9 @@ class DrinkListViewModelTask05IntegrationTest {
             controllerTraffic,
             cardPaymentOrchestrator,
             mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
-        ) to subscriptionUseCases
+        )
+        DrinkListViewModelTestSupport.trackViewModel(vm)
+        return vm to subscriptionUseCases
     }
 
     private fun sampleContainer(): DrinkContainer {
@@ -410,14 +416,15 @@ class DrinkListViewModelTask05IntegrationTest {
                 ),
             )
         coEvery { subscriptionUseCases.apply(any(), any()) } returns Result.success(Unit)
-        val nano = mockk<NanoKassaRepository>(relaxUnitFun = true)
+        val nano = DrinkListViewModelTestSupport.nanoKassaRepositoryMock()
         val networkTraffic = mockk<NetworkTrafficLogger>(relaxUnitFun = true)
         every { networkTraffic.entries } returns
             MutableStateFlow<List<NetworkTrafficEntry>>(emptyList()).asStateFlow()
         val controllerTraffic = mockk<ViwaControllerTrafficLogger>(relaxUnitFun = true)
         every { controllerTraffic.entries } returns
             MutableStateFlow<List<ControllerTrafficEntry>>(emptyList()).asStateFlow()
-        return DrinkListViewModel(
+        val vm =
+            DrinkListViewModel(
             vmConfigRepo(),
             cellsRepo,
             preparing,
@@ -438,7 +445,9 @@ class DrinkListViewModelTask05IntegrationTest {
             controllerTraffic,
             orch,
             mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
-        ) to subscriptionUseCases
+        )
+        DrinkListViewModelTestSupport.trackViewModel(vm)
+        return vm to subscriptionUseCases
     }
 
     @Test

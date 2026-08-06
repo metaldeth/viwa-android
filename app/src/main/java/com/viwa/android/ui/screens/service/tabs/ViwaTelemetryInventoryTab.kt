@@ -38,6 +38,10 @@ import com.viwa.android.ui.screens.service.ServiceViewModel
 import com.viwa.android.ui.screens.service.SettingsColumn
 import com.viwa.android.ui.screens.service.SettingsTextField
 
+/**
+ * Legacy MVP inventory editor (product + prices). **Not mounted** in [com.viwa.android.ui.screens.service.ViwaServiceMenuTabContent];
+ * dashboard PATCH is source of truth for content/prices. Use Обслуживание → Остатки for operator taste override.
+ */
 @Composable
 fun ViwaTelemetryInventoryTab(
     viewModel: ServiceViewModel,
@@ -76,6 +80,13 @@ private fun MvpTelemetryInventoryTab(
     }
 
     SettingsColumn {
+        Text(
+            "Legacy (не в меню): продукт/цены редактируются на dashboard. " +
+                "Локальное сохранение здесь — best-effort uplink без server ack; не заменяет dashboard PATCH.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+        Spacer(Modifier.height(8.dp))
         Text(
             "MVP: продукты из локального snapshot.products[] (не REST). Сохранение → cells.content.report.",
             style = MaterialTheme.typography.bodySmall,

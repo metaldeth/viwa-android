@@ -15,9 +15,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import com.viwa.android.test.OkHttpTestClientRegistry
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -35,6 +35,7 @@ class SimpleTelemetryCoordinatorSerialGuardTest {
     private lateinit var jwtCache: MachineJwtCache
     private var wsConnectCalls = 0
     private lateinit var wsManager: MvpTelemetryWebSocketManager
+    private val okHttpRegistry = OkHttpTestClientRegistry()
 
     private val json =
         Json {
@@ -60,6 +61,7 @@ class SimpleTelemetryCoordinatorSerialGuardTest {
 
     @After
     fun tearDown() {
+        okHttpRegistry.shutdownAll()
         server.shutdown()
     }
 
@@ -155,7 +157,7 @@ class SimpleTelemetryCoordinatorSerialGuardTest {
         SimpleTelemetryCoordinator(
             apiClient =
                 MvpTelemetryApiClient(
-                    httpClient = OkHttpClient(),
+                    httpClient = okHttpRegistry.newClient(),
                     json = json,
                     enrollmentKeyProvider = { "test-key" },
                 ),

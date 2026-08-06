@@ -29,7 +29,7 @@
 
 | Поле | Значение |
 |------|----------|
-| Хост (prod legacy) | `83.166.246.158:9083` |
+| Хост (prod legacy) | `https://tl.vitamin-water.ru/android-ota` |
 | Имя APK | `viwa-android-{versionName}-release.apk` или `wiva-android-*` (legacy) |
 
 ## Legacy update-server (Docker)
@@ -48,3 +48,37 @@ gradlew.bat assembleRelease
 ```
 
 APK: `app/build/outputs/apk/release/viwa-android-{versionName}-release.apk`.
+
+## Локальный релиз (release-android)
+
+Keystore и пароли **не хранятся в git** — они лежат на OTA-сервере в `/opt/viwa-android/signing/` (`release.jks`, `credentials.json` или `.storepass`/`.keypass`). Собранные APK — в `/opt/viwa-android/release/`.
+
+Публичный манифест: `https://tl.vitamin-water.ru/android-ota/version.json`.
+
+### Однократная настройка сервера
+
+Если signing materials ещё только локально:
+
+```powershell
+.\scripts\bootstrap-signing-to-server.ps1
+# при необходимости: -Token <RELEASE_TOKEN>
+```
+
+Скрипт копирует `signing/release.jks` и пароли на `wiva-server`, создаёт `credentials.json` и шаблон `signing/release-remote.env` (добавьте `RELEASE_TOKEN`).
+
+### Сборка и публикация с Windows
+
+```bat
+release-android.cmd
+```
+
+Скрипт:
+
+1. Скачивает keystore и credentials с update-server (Bearer `RELEASE_TOKEN`)
+2. Собирает `gradlew.bat assembleRelease` с подписью
+3. Загружает APK на сервер (`POST /admin/upload`)
+4. Печатает актуальный `version.json`
+
+Переменные: `UPDATE_BASE_URL` (по умолчанию `https://tl.vitamin-water.ru/android-ota`), `RELEASE_TOKEN` — из окружения или `signing/release-remote.env`.
+
+Каталог `signing/` в репозитории gitignored; секреты в документацию не добавлять.

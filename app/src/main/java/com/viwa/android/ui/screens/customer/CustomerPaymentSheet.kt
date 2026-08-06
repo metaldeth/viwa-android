@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -65,7 +66,7 @@ import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.SouthWest
+import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material3.Icon
 import androidx.activity.compose.BackHandler
 import com.viwa.android.R
@@ -86,7 +87,7 @@ private val PaymentModalBodyHeight = 496.dp
 private val SbpQrSlotSize = 200.dp
 
 /** Увеличенный QR основного combined-сценария оплаты напитка. */
-private val CombinedSbpQrSlotSize = 260.dp
+private val CombinedSbpQrSlotSize = 300.dp
 
 /** Равные отступы подложка → Canvas QR (тихая зона). */
 private val SbpQrQuietPadding = 6.dp
@@ -746,6 +747,7 @@ private fun CombinedDrinkPaymentOverlay(
                 modifier =
                     Modifier
                         .align(Alignment.Center)
+                        .offset(y = (-24).dp)
                         .padding(horizontal = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -757,7 +759,7 @@ private fun CombinedDrinkPaymentOverlay(
                     color = paymentColors.primaryText,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(8.dp))
                 if (recoveryMode) {
                     Text(
                         text = paymentError.orEmpty(),
@@ -768,6 +770,15 @@ private fun CombinedDrinkPaymentOverlay(
                         modifier = Modifier.padding(horizontal = 8.dp),
                     )
                 } else {
+                    Text(
+                        text = "Или отсканируйте QR-код",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 20.sp,
+                        lineHeight = 24.sp,
+                        color = paymentColors.secondaryText,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(10.dp))
                     SbpQrSlot(
                         sbpLoading = sbpLoading,
                         sbpLink = sbpLink,
@@ -804,41 +815,14 @@ private fun CombinedDrinkPaymentOverlay(
                 }
             }
 
-            Row(
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 28.dp, bottom = 96.dp)
-                        .widthIn(max = 360.dp)
-                        .semantics(mergeDescendants = true) {
-                            liveRegion = LiveRegionMode.Polite
-                            contentDescription = cardStatus.label
-                        },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.SouthWest,
-                    contentDescription = null,
-                    tint = paymentColors.secondaryText,
-                    modifier = Modifier.size(28.dp),
+            if (!recoveryMode) {
+                CombinedCardReaderHint(
+                    cardStatus = cardStatus,
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 24.dp, bottom = 12.dp),
                 )
-                AnimatedContent(
-                    targetState = cardStatus,
-                    transitionSpec = {
-                        fadeIn(tween(220)) togetherWith fadeOut(tween(180))
-                    },
-                    label = "combinedCardStatus",
-                ) { status ->
-                    Text(
-                        text = status.label,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 22.sp,
-                        lineHeight = 28.sp,
-                        color = paymentColors.primaryText,
-                    )
-                }
             }
 
             if (recoveryMode) {
@@ -874,6 +858,68 @@ private fun CombinedDrinkPaymentOverlay(
                         color = paymentColors.cancelLabel.copy(alpha = 0.85f),
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CombinedCardReaderHint(
+    cardStatus: CardPaymentUiStatus,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier =
+            modifier
+                .widthIn(max = 320.dp)
+                .semantics(mergeDescendants = true) {
+                    liveRegion = LiveRegionMode.Polite
+                    contentDescription = cardStatus.label
+                },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_payment_tile_card),
+                contentDescription = null,
+                modifier =
+                    Modifier
+                        .width(92.dp)
+                        .height(74.dp),
+            )
+            Spacer(Modifier.height(2.dp))
+            Icon(
+                imageVector = Icons.Rounded.ArrowDownward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(38.dp),
+            )
+        }
+        AnimatedContent(
+            targetState = cardStatus,
+            transitionSpec = {
+                fadeIn(tween(220)) togetherWith fadeOut(tween(180))
+            },
+            label = "combinedCardStatus",
+        ) { status ->
+            Column {
+                Text(
+                    text = "Оплата картой",
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                    color = Color.White.copy(alpha = 0.72f),
+                )
+                Text(
+                    text = status.label,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 19.sp,
+                    lineHeight = 23.sp,
+                    color = Color.White,
+                )
             }
         }
     }

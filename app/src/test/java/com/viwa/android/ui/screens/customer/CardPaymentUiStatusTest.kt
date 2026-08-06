@@ -40,13 +40,13 @@ class CardPaymentUiStatusTest {
     }
 
     @Test
-    fun normalize_bankProcessing_mapsCorrectly() {
+    fun normalize_bankProcessing_mapsToProcessing() {
         assertEquals(
-            CardPaymentUiStatus.BankProcessing,
+            CardPaymentUiStatus.Processing,
             normalizeCardPaymentUiStatus("Терминал устанавливает связь с банком"),
         )
         assertEquals(
-            CardPaymentUiStatus.BankProcessing,
+            CardPaymentUiStatus.Processing,
             normalizeCardPaymentUiStatus("Банк обрабатывает платёж"),
         )
     }
@@ -72,6 +72,18 @@ class CardPaymentUiStatusTest {
         assertEquals(
             CardPaymentUiStatus.Processing,
             normalizeCardPaymentUiStatus("Получаем итоговый код оплаты"),
+        )
+    }
+
+    @Test
+    fun normalize_declinedPayment_mapsToFailure() {
+        assertEquals(
+            CardPaymentUiStatus.Failure,
+            normalizeCardPaymentUiStatus("Оплата отклонена банком"),
+        )
+        assertEquals(
+            CardPaymentUiStatus.Failure,
+            normalizeCardPaymentUiStatus("Оплата завершилась неуспешно"),
         )
     }
 }

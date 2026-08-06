@@ -2,6 +2,7 @@ package com.viwa.android.data.remote.telemetry.mvp
 
 import com.viwa.android.data.local.outbox.MachineOutboxEntryEntity
 import com.viwa.android.data.local.outbox.MachineOutboxKind
+import com.viwa.android.data.local.outbox.RecipeOutboxStore
 import com.viwa.android.data.local.outbox.MachineOutboxStore
 import com.viwa.android.data.local.outbox.OutboxFeatureFlags
 import com.viwa.android.data.local.outbox.OutboxRetryPolicy
@@ -29,6 +30,7 @@ constructor(
     private val wsManagerLazy: Lazy<MvpTelemetryWebSocketManager>,
     private val apiClient: MvpTelemetryApiClient,
     private val bearerTokenProvider: MachineOutboxBearerTokenProvider,
+    private val recipeOutboxStore: RecipeOutboxStore,
     @AppIoScope private val appScope: CoroutineScope,
 ) {
     private val json =
@@ -190,10 +192,19 @@ constructor(
                 batchId = batchId,
                 entries =
                     marked.map { row ->
+                        val kind = MachineOutboxKind.fromWire(row.kind)
+                        val restIdempotencyKey =
+                            if (kind == MachineOutboxKind.CELLS_RECIPE_REPORT ||
+                                kind == MachineOutboxKind.CELLS_RECIPE_COMMAND_ACK
+                            ) {
+                                RecipeOutboxStore.restIdempotencyKey(row)
+                            } else {
+                                row.idempotencyKey
+                            }
                         MachineOutboxBatchEntryDto(
                             kind = row.kind,
                             messageId = row.messageId,
-                            idempotencyKey = row.idempotencyKey,
+                            idempotencyKey = restIdempotencyKey,
                             sentAt = TelemetryIsoTimestamps.nowUtc(),
                             payload = json.decodeFromString(JsonObject.serializer(), row.payloadJson),
                         )
@@ -226,6 +237,13 @@ constructor(
                 "acked", "idempotent" -> {
                     val kind = MachineOutboxKind.fromWire(entry.kind) ?: return@forEach
                     outboxStore.markAcked(messageId = result.messageId, kind = kind)
+                    when (kind) {
+                        MachineOutboxKind.CELLS_RECIPE_COMMAND_ACK ->
+                            recipeOutboxStore.onCommandAckOutboxDelivered(entry)
+                        MachineOutboxKind.CELLS_RECIPE_REPORT ->
+                            recipeOutboxStore.onRecipeReportOutboxDelivered(entry)
+                        else -> Unit
+                    }
                     ackedMessageIds += result.messageId
                 }
                 "rejected" -> outboxStore.markServerError(entry, result.code ?: "REJECTED", "batch rejected")

@@ -10,7 +10,6 @@ import com.viwa.android.domain.model.TelemetryCell
 import com.viwa.android.domain.model.TelemetryCellsSnapshot
 import com.viwa.android.domain.model.TelemetryProduct
 import com.viwa.android.domain.offline.OfflineAuthorizationReason
-import com.viwa.android.domain.repository.NanoKassaRepository
 import com.viwa.android.domain.repository.SBPRepository
 import com.viwa.android.domain.repository.TelemetryCellsRepository
 import com.viwa.android.domain.usecase.CheckSBPStatusUseCase
@@ -63,8 +62,14 @@ class DrinkListViewModelMvpInventoryTest {
 
     @After
     fun tearDown() {
+        runBlocking {
+            DrinkListViewModelTestSupport.clearTrackedViewModels(executor.asCoroutineDispatcher())
+        }
         Dispatchers.resetMain()
-        executor.shutdownNow()
+        executor.shutdown()
+        if (!executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+            executor.shutdownNow()
+        }
     }
 
     private suspend fun flushMain(times: Int = 16) {
@@ -111,7 +116,7 @@ class DrinkListViewModelMvpInventoryTest {
     }
 
     private fun createTestTelemetry(): ViwaTelemetryService {
-        val mock = mockk<ViwaTelemetryService>(relaxUnitFun = true)
+        val mock = mockk<ViwaTelemetryService>(relaxed = true)
         every { mock.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Disconnected()).asStateFlow()
         every { mock.subscribeInfo } returns MutableStateFlow(null).asStateFlow()
@@ -149,14 +154,15 @@ class DrinkListViewModelMvpInventoryTest {
         val getSbp = mockk<GetSBPLinkUseCase>(relaxUnitFun = true)
         val checkSbp = mockk<CheckSBPStatusUseCase>(relaxUnitFun = true)
         val subscriptionUseCases = relaxedSubscriptionPaymentUseCases()
-        val sbp = mockk<SBPRepository>(relaxUnitFun = true)
-        val nano = mockk<NanoKassaRepository>(relaxUnitFun = true)
+        val sbp = DrinkListViewModelTestSupport.sbpRepositoryMock()
+        val nano = DrinkListViewModelTestSupport.nanoKassaRepositoryMock()
         val networkTraffic = mockk<NetworkTrafficLogger>(relaxUnitFun = true)
         every { networkTraffic.entries } returns MutableStateFlow<List<NetworkTrafficEntry>>(emptyList()).asStateFlow()
         val controllerTraffic = mockk<ViwaControllerTrafficLogger>(relaxUnitFun = true)
         every { controllerTraffic.entries } returns MutableStateFlow<List<ControllerTrafficEntry>>(emptyList()).asStateFlow()
         val orch = mockk<CardPaymentOrchestrator>(relaxUnitFun = true)
-        return DrinkListViewModel(
+        val vm =
+            DrinkListViewModel(
             configRepository,
             telemetryCellsRepository,
             preparing,
@@ -178,6 +184,8 @@ class DrinkListViewModelMvpInventoryTest {
             orch,
             mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
         )
+        DrinkListViewModelTestSupport.trackViewModel(vm)
+        return vm
     }
 
     private fun mvpSnapshot(): TelemetryCellsSnapshot =

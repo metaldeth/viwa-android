@@ -227,4 +227,35 @@ class TelemetryCellsMessageCodecTest {
         val cellJson = codec.contentReportPayloadObject(payloadJson)["cells"]!!.toString()
         assertTrue(cellJson.contains("\"conversionFactor\":8.125"))
     }
+
+    @Test
+    fun encodeContentReport_operatorOverride_omittedByDefault() {
+        val cell = sampleContentCell()
+
+        val payloadJson = codec.encodeContentReportPayload(listOf(cell))
+        val cellJson = codec.contentReportPayloadObject(payloadJson)["cells"]!!.toString()
+
+        assertFalse(cellJson.contains("operatorOverride"))
+    }
+
+    @Test
+    fun encodeContentReport_operatorOverride_trueWhenExplicitServiceAction() {
+        val cell = sampleContentCell()
+
+        val payloadJson = codec.encodeContentReportPayload(listOf(cell), operatorOverride = true)
+        val cellJson = codec.contentReportPayloadObject(payloadJson)["cells"]!!.toString()
+
+        assertTrue(cellJson.contains("\"operatorOverride\":true"))
+    }
+
+    private fun sampleContentCell(): TelemetryCell =
+        TelemetryCell(
+            uuid = "u1",
+            cellNumber = 1,
+            productUuid = "prod-cherry",
+            maxVolume = 5000,
+            dosage1Price = 9900,
+            dosage2Price = 14900,
+            conversionFactor = 4.0,
+        )
 }

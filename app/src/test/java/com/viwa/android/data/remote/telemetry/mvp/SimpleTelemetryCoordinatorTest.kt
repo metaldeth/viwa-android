@@ -6,17 +6,20 @@ import com.viwa.android.data.network.NetworkTrafficLogger
 import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.domain.model.TelemetryConfig
 import com.viwa.android.hardware.controller.FlowTemperatureStore
+import com.viwa.android.test.OkHttpTestClientRegistry
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.runs
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
-import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -52,6 +55,11 @@ class SimpleTelemetryCoordinatorTest {
     private lateinit var machineSecretStore: InMemoryMachineSecretStore
     private lateinit var jwtCache: MachineJwtCache
     private lateinit var coordinator: SimpleTelemetryCoordinator
+    private lateinit var httpClient: okhttp3.OkHttpClient
+    private lateinit var wsManager: MvpTelemetryWebSocketManager
+    private lateinit var wsAppScope: CoroutineScope
+    private lateinit var coordinatorAppScope: CoroutineScope
+    private val okHttpRegistry = OkHttpTestClientRegistry()
 
     @Before
     fun setUp() {
@@ -66,25 +74,34 @@ class SimpleTelemetryCoordinatorTest {
                 encodeDefaults = true
                 explicitNulls = false
             }
+        httpClient = okHttpRegistry.newClient()
         val apiClient =
             MvpTelemetryApiClient(
-                httpClient = OkHttpClient(),
+                httpClient = httpClient,
                 json = json,
                 enrollmentKeyProvider = { "test-key" },
             )
+        wsAppScope = CoroutineScope(SupervisorJob())
+        wsManager =
+            MvpTelemetryWebSocketManager(
+                appScope = wsAppScope,
+                networkTrafficLogger = mockk(relaxed = true),
+                ackRouter = mockk(relaxed = true),
+                cellsContentReportAckAwaiter = mockk(relaxed = true),
+                recipeSyncCoordinator = mockk(relaxed = true),
+                outboxDrainCoordinator = mockk(relaxed = true),
+                outboxStore = mockk(relaxed = true),
+                recipeOutboxStore = mockk(relaxed = true),
+                recipeMessageCodec = com.viwa.android.data.remote.telemetry.mvp.cells.RecipeMessageCodec(),
+                offlineEntitlementCoordinator = mockk(relaxed = true),
+                technicianKeySessionCoordinator = mockk(relaxed = true),
+                appUpdateCoordinatorProvider = mockOtaCoordinatorProvider(),
+            )
+        coordinatorAppScope = CoroutineScope(SupervisorJob())
         coordinator =
             SimpleTelemetryCoordinator(
                 apiClient = apiClient,
-                wsManager =
-                    MvpTelemetryWebSocketManager(
-                        appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
-                        networkTrafficLogger = mockk(relaxed = true),
-                        ackRouter = mockk(relaxed = true),
-                        outboxDrainCoordinator = mockk(relaxed = true),
-                        offlineEntitlementCoordinator = mockk(relaxed = true),
-                        technicianKeySessionCoordinator = mockk(relaxed = true),
-                        appUpdateCoordinatorProvider = mockOtaCoordinatorProvider(),
-                    ),
+                wsManager = wsManager,
                 cellsSyncCoordinator = mockk(relaxed = true),
                 dispenseSyncCoordinator = mockk(relaxed = true),
                 configRepository = configRepository,
@@ -95,12 +112,16 @@ class SimpleTelemetryCoordinatorTest {
                 offlineEntitlementCoordinator = mockk(relaxed = true),
                 technicianKeySessionCoordinator = mockk(relaxed = true),
                 networkValidatedSideEffects = mockk(relaxed = true),
-                appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
+                appScope = coordinatorAppScope,
             )
     }
 
     @After
     fun tearDown() {
+        wsManager.disconnect()
+        wsAppScope.cancel()
+        coordinatorAppScope.cancel()
+        okHttpRegistry.shutdownAll()
         server.shutdown()
     }
 
@@ -244,7 +265,7 @@ class SimpleTelemetryCoordinatorTest {
         // given
         val clientWithoutKey =
             MvpTelemetryApiClient(
-                httpClient = OkHttpClient(),
+                httpClient = okHttpRegistry.newClient(),
                 json =
                     Json {
                         ignoreUnknownKeys = true
@@ -253,19 +274,26 @@ class SimpleTelemetryCoordinatorTest {
                     },
                 enrollmentKeyProvider = { "" },
             )
+        val localWsScope = CoroutineScope(SupervisorJob())
+        val localWsManager =
+            MvpTelemetryWebSocketManager(
+                appScope = localWsScope,
+                networkTrafficLogger = mockk(relaxed = true),
+                ackRouter = mockk(relaxed = true),
+                cellsContentReportAckAwaiter = mockk(relaxed = true),
+                recipeSyncCoordinator = mockk(relaxed = true),
+                outboxDrainCoordinator = mockk(relaxed = true),
+                outboxStore = mockk(relaxed = true),
+                recipeOutboxStore = mockk(relaxed = true),
+                recipeMessageCodec = com.viwa.android.data.remote.telemetry.mvp.cells.RecipeMessageCodec(),
+                offlineEntitlementCoordinator = mockk(relaxed = true),
+                technicianKeySessionCoordinator = mockk(relaxed = true),
+                appUpdateCoordinatorProvider = mockOtaCoordinatorProvider(),
+            )
         val localCoordinator =
             SimpleTelemetryCoordinator(
                 apiClient = clientWithoutKey,
-                wsManager =
-                    MvpTelemetryWebSocketManager(
-                        appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
-                        networkTrafficLogger = mockk(relaxed = true),
-                        ackRouter = mockk(relaxed = true),
-                        outboxDrainCoordinator = mockk(relaxed = true),
-                        offlineEntitlementCoordinator = mockk(relaxed = true),
-                        technicianKeySessionCoordinator = mockk(relaxed = true),
-                        appUpdateCoordinatorProvider = mockOtaCoordinatorProvider(),
-                    ),
+                wsManager = localWsManager,
                 cellsSyncCoordinator = mockk(relaxed = true),
                 dispenseSyncCoordinator = mockk(relaxed = true),
                 configRepository = configRepository,
@@ -284,6 +312,8 @@ class SimpleTelemetryCoordinatorTest {
         // then
         assertTrue(result.exceptionOrNull() is MissingEnrollmentKeyException)
         assertEquals(0, server.requestCount)
+        localWsManager.disconnect()
+        localWsScope.cancel()
     }
 
     @Test

@@ -6,6 +6,14 @@ import com.viwa.android.data.network.NetworkTrafficDirection
 import com.viwa.android.data.network.NetworkTrafficLogger
 import com.viwa.android.data.network.redactNetworkPayload
 import com.viwa.android.data.remote.telemetry.ConnectionState
+import com.viwa.android.data.remote.telemetry.mvp.cells.CellsContentReportAckAwaiter
+import com.viwa.android.data.remote.telemetry.mvp.cells.RECIPE_WS_TYPE_COMMAND
+import com.viwa.android.data.remote.telemetry.mvp.cells.RECIPE_WS_TYPE_SYNC_CONTROL
+import com.viwa.android.data.remote.telemetry.mvp.cells.RecipeMessageCodec
+import com.viwa.android.data.remote.telemetry.mvp.cells.RecipeSyncCoordinator
+import com.viwa.android.data.local.outbox.MachineOutboxKind
+import com.viwa.android.data.local.outbox.MachineOutboxStore
+import com.viwa.android.data.local.outbox.RecipeOutboxStore
 import com.viwa.android.data.telemetry.loyalty.LoyaltyWsCodec
 import com.viwa.android.di.AppIoScope
 import java.net.URI
@@ -31,6 +39,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.java_websocket.client.WebSocketClient
@@ -52,7 +61,12 @@ constructor(
     @AppIoScope private val appScope: CoroutineScope,
     private val networkTrafficLogger: NetworkTrafficLogger,
     private val ackRouter: TelemetryAckRouter,
+    private val cellsContentReportAckAwaiter: CellsContentReportAckAwaiter,
+    private val recipeSyncCoordinator: RecipeSyncCoordinator,
     private val outboxDrainCoordinator: MachineOutboxDrainCoordinator,
+    private val outboxStore: MachineOutboxStore,
+    private val recipeOutboxStore: RecipeOutboxStore,
+    private val recipeMessageCodec: RecipeMessageCodec,
     private val offlineEntitlementCoordinator: com.viwa.android.data.remote.telemetry.mvp.offline.OfflineEntitlementSessionCoordinator,
     private val technicianKeySessionCoordinator: com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianKeySessionCoordinator,
     private val appUpdateCoordinatorProvider: javax.inject.Provider<com.viwa.android.domain.ota.AppUpdateCoordinator>,
@@ -317,6 +331,11 @@ constructor(
         serverTechnicianKeysEnabled = null
         outboxDrainCoordinator.stopPeriodicFlush()
         technicianKeySessionCoordinator.onDisconnect()
+        cellsContentReportAckAwaiter.cancelAll()
+        appScope.launch {
+            runCatching { cellsSyncHandler?.onRecipeDisconnect() }
+                .onFailure { Timber.w(it, "MvpTelemetry WS: recipe disconnect cleanup failed") }
+        }
         resetHeartbeatAckTracking()
         heartbeatTrafficLogCounter.set(0)
         transportPingLogCounter.set(0)
@@ -498,9 +517,19 @@ constructor(
                 "ack" -> onAck(envelope, sourceClient, sessionGeneration)
                 "error" -> onError(envelope, sourceClient, sessionGeneration)
                 "cells.snapshot" -> onCellsSnapshot(envelope, sourceClient, sessionGeneration)
+                RECIPE_WS_TYPE_SYNC_CONTROL ->
+                    onRecipeSyncControl(envelope, sourceClient, sessionGeneration)
+                RECIPE_WS_TYPE_COMMAND ->
+                    onRecipeCommand(envelope, sourceClient, sessionGeneration)
                 LoyaltyWsCodec.TYPE_STATUS_CHANGED ->
                     onLoyaltyStatusChanged(envelope, sourceClient, sessionGeneration)
-                else -> Timber.d("MvpTelemetry WS: ignored type=${envelope.type}")
+                else -> {
+                    if (recipeSyncCoordinator.isRecipeWireType(envelope.type)) {
+                        Timber.d("MvpTelemetry WS: ignored recipe type=${envelope.type} (not negotiated)")
+                    } else {
+                        Timber.d("MvpTelemetry WS: ignored type=${envelope.type}")
+                    }
+                }
             }
         }.onFailure { Timber.w(it, "MvpTelemetry WS parse failed") }
     }
@@ -537,7 +566,7 @@ constructor(
         startHeartbeatLoop(sourceClient, sessionGeneration)
         startHeartbeatWatchdog(sourceClient, sessionGeneration)
         appScope.launch {
-            runCatching { cellsSyncHandler?.onWebSocketHello() }
+            runCatching { cellsSyncHandler?.onWebSocketHello(hello) }
                 .onFailure { Timber.w(it, "MvpTelemetry WS: cells sync onHello failed") }
             runCatching { offlineEntitlementCoordinator.onHello(hello) }
                 .onFailure { Timber.w(it, "MvpTelemetry WS: offline entitlement onHello failed") }
@@ -586,6 +615,12 @@ constructor(
                         pourBalanceHandler = { ackPayload ->
                             loyaltySyncHandler?.onPourReportBalanceAck(ackPayload)
                         },
+                        cellsContentAckHandler = { correlation, ackPayload ->
+                            cellsContentReportAckAwaiter.completeAck(correlation, ackPayload)
+                        },
+                        recipeAckHandler = { correlation, ackPayload ->
+                            onRecipeAck(correlation, ackPayload)
+                        },
                         onUnprovenPourDedupAck = { entry ->
                             outboxDrainCoordinator.handleUnprovenPourDedupAck(entry)
                         },
@@ -624,6 +659,12 @@ constructor(
                         technicianErrorHandler = { corr, errCode, errMessage ->
                             technicianKeySyncHandler?.onValidateError(corr, errCode, errMessage)
                         },
+                        cellsContentErrorHandler = { corr, errCode, errMessage ->
+                            cellsContentReportAckAwaiter.completeError(
+                                corr,
+                                "$errCode: $errMessage",
+                            )
+                        },
                     )
                 if (outcome == AckRouteOutcome.ORPHAN) {
                     Timber.w(
@@ -659,6 +700,92 @@ constructor(
         appScope.launch {
             runCatching { cellsSyncHandler?.onCellsSnapshot(payloadJson) }
                 .onFailure { Timber.w(it, "MvpTelemetry WS: cells.snapshot handler failed") }
+        }
+    }
+
+    private fun onRecipeSyncControl(
+        envelope: MvpWsEnvelopeDto,
+        sourceClient: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        if (!acceptSession(sourceClient, sessionGeneration, RECIPE_WS_TYPE_SYNC_CONTROL)) return
+        if (!recipeSyncCoordinator.isHelloEligible()) {
+            Timber.d("MvpTelemetry WS: ignoring sync.control — recipe sync not negotiated")
+            return
+        }
+        val payloadEl = envelope.payload ?: return
+        val payloadJson = json.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), payloadEl)
+        appScope.launch {
+            runCatching { cellsSyncHandler?.onRecipeSyncControl(payloadJson) }
+                .onFailure { Timber.w(it, "MvpTelemetry WS: recipe sync.control failed") }
+        }
+    }
+
+    private fun onRecipeCommand(
+        envelope: MvpWsEnvelopeDto,
+        sourceClient: MvpWsClient,
+        sessionGeneration: Long,
+    ) {
+        if (!acceptSession(sourceClient, sessionGeneration, RECIPE_WS_TYPE_COMMAND)) return
+        if (!recipeSyncCoordinator.isHelloEligible()) {
+            Timber.d("MvpTelemetry WS: ignoring recipe command — recipe sync not negotiated")
+            return
+        }
+        val payloadEl = envelope.payload ?: return
+        val payloadJson = json.encodeToString(kotlinx.serialization.json.JsonElement.serializer(), payloadEl)
+        appScope.launch {
+            runCatching { cellsSyncHandler?.onRecipeCommand(payloadJson) }
+                .onFailure { Timber.w(it, "MvpTelemetry WS: recipe command failed") }
+        }
+    }
+
+    private suspend fun onRecipeAck(
+        correlation: String,
+        payload: JsonObject,
+    ) {
+        if (!recipeSyncCoordinator.isHelloEligible()) {
+            Timber.d("MvpTelemetry WS: ignoring recipe ack correlation=$correlation")
+            return
+        }
+        val entry = outboxStore.findByMessageId(correlation)
+        if (entry != null) {
+            val kind = MachineOutboxKind.fromWire(entry.kind)
+            if (
+                kind == MachineOutboxKind.CELLS_RECIPE_REPORT ||
+                kind == MachineOutboxKind.CELLS_RECIPE_COMMAND_ACK
+            ) {
+                if (recipeAckIndicatesSuccess(payload)) {
+                    outboxStore.markAcked(messageId = correlation, kind = kind)
+                    when (kind) {
+                        MachineOutboxKind.CELLS_RECIPE_COMMAND_ACK ->
+                            recipeOutboxStore.onCommandAckOutboxDelivered(entry)
+                        MachineOutboxKind.CELLS_RECIPE_REPORT ->
+                            recipeOutboxStore.onRecipeReportOutboxDelivered(entry)
+                        else -> Unit
+                    }
+                    outboxStore.purgeAckedByMessageIds(listOf(correlation))
+                }
+                return
+            }
+        }
+        if (recipeMessageCodec.isRecipeCommandAckPayload(payload)) {
+            Timber.d("MvpTelemetry WS: recipe command ack batch correlation=$correlation")
+            return
+        }
+        if (recipeMessageCodec.isRecipeReportAckPayload(payload)) {
+            Timber.d("MvpTelemetry WS: recipe report ack correlation=$correlation keys=${payload.keys}")
+        }
+    }
+
+    private fun recipeAckIndicatesSuccess(payload: JsonObject): Boolean {
+        if (payload["ok"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() == true) return true
+        if (payload["idempotent"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() == true) return true
+        if (payload["ingested"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() == true) return true
+        if (payload["delivered"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() == true) return true
+        val results = payload["results"]?.jsonArray ?: return false
+        return results.any { element ->
+            val obj = element.jsonObject
+            obj["status"]?.jsonPrimitive?.content?.lowercase() in setOf("acked", "idempotent", "applied")
         }
     }
 

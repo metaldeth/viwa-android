@@ -13,6 +13,10 @@ interface MachineOutboxPersistence {
 
     suspend fun countPendingOrInFlight(): Int
 
+    suspend fun hasUnsentRecipeEntries(nowMs: Long): Boolean
+
+    suspend fun hasUnsentRecipeReportForCell(cellId: String, nowMs: Long): Boolean
+
     suspend fun recoverAllInFlightToPending(): Int
 
     suspend fun purgeAckedBefore(beforeMs: Long): Int
@@ -37,6 +41,12 @@ class RoomMachineOutboxPersistence(
         dao.findByKindAndIdempotencyKey(kind, idempotencyKey)
 
     override suspend fun countPendingOrInFlight(): Int = dao.countPendingOrInFlight()
+
+    override suspend fun hasUnsentRecipeEntries(nowMs: Long): Boolean =
+        dao.hasUnsentRecipeEntries(nowMs)
+
+    override suspend fun hasUnsentRecipeReportForCell(cellId: String, nowMs: Long): Boolean =
+        dao.hasUnsentRecipeReportForCell(cellId, nowMs)
 
     override suspend fun recoverAllInFlightToPending(): Int = dao.recoverAllInFlightToPending()
 

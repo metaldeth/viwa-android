@@ -65,7 +65,7 @@ constructor(
         return measuredMl
     }
 
-    fun cancelHoldPourSession() {
+    suspend fun cancelHoldPourSession() {
         activeRequestUuid = null
         activeClientId = null
         waterCounter.cancelHoldPourSession()
@@ -76,7 +76,7 @@ constructor(
         activeClientId = null
     }
 
-    private fun clearAndReturn(value: Int): Int {
+    private suspend fun clearAndReturn(value: Int): Int {
         clearSessionLocals()
         waterCounter.cancelHoldPourSession()
         return value

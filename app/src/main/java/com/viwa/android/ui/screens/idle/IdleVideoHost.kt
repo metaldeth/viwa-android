@@ -40,112 +40,124 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import kotlin.coroutines.resume
 
-private const val TAG = "IdleVideoOverlay"
+private const val TAG = "IdleVideoHost"
 
 private const val CROSSFADE_MS = 500
-/**
- * За сколько мс до конца начинаем кроссфейд.
- * Должно быть >= времени буферизации на реальном железе (~2 с).
- */
-
 private const val CROSSFADE_TRIGGER_MS = 1_500L
-/** Максимальное время ожидания готовности следующего плеера (запасной сценарий). */
-
+private const val PRELOAD_LEAD_MS = 6_000L
 private const val READY_WAIT_TIMEOUT_MS = 3_000L
-
-/** Если idle-плеер не вышел в READY/BUFFERING — закрыть оверлей, не держать белый экран. */
-private const val FIRST_FRAME_TIMEOUT_MS = 5_000L
+private const val CONTAINER_FADE_MS = 200
+private const val FIRST_FRAME_FALLBACK_MS = 1_500L
 
 private inline fun idleVideoLog(block: () -> Unit) {
     if (BuildConfig.DEBUG) block()
 }
+
 /**
- * Полноэкранный скринсейвер из включённых видео [enabledVideoIds].
- *
- * Два ExoPlayer (A/B ping-pong): пока A играет, B загружает следующий ролик.
- * Кроссфейд по ExoPlayer events + одноразовый delay до границы, без 100 ms polling.
+ * Хост idle-видео: прогрев без surface (Prewarm) и показ с fade-in (Visible).
+ * Монтируется только когда [phase] != [IdlePhase.Hidden].
  */
-
 @UnstableApi
-
 @Composable
-
-fun IdleVideoOverlay(
+fun IdleVideoHost(
+    phase: IdlePhase,
     enabledVideoIds: List<String>,
+    onPrewarmReady: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val files = remember(enabledVideoIds) {
-        enabledVideoIds.map { id -> "$id.mp4" }.ifEmpty { return@remember emptyList() }
-    }
-    if (files.isEmpty()) {
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onDismiss,
-                    ),
-        )
-        return
-    }
+    val files =
+        remember(enabledVideoIds) {
+            enabledVideoIds.map { id -> "$id.mp4" }.ifEmpty { emptyList() }
+        }
+    if (files.isEmpty()) return
+
     val playerA = remember(context) { buildCustomerBackgroundExoPlayer(context, repeatMode = Player.REPEAT_MODE_OFF) }
     val playerB = remember(context) { buildCustomerBackgroundExoPlayer(context, repeatMode = Player.REPEAT_MODE_OFF) }
     val alphaA = remember { Animatable(0f) }
     val alphaB = remember { Animatable(0f) }
+    val containerAlpha = remember { Animatable(0f) }
     var activeIsA by remember { mutableStateOf(true) }
     var lifecyclePaused by remember { mutableStateOf(false) }
     var crossfading by remember { mutableStateOf(false) }
     val counter = remember { intArrayOf(0) }
     var stallWatchState by remember { mutableStateOf(IdleVideoStallWatchdog.WatchState()) }
+    var prewarmSignaled by remember { mutableStateOf(false) }
+
+    val dismissRequestedAt = remember { longArrayOf(0L) }
+
+    fun dismiss() {
+        dismissRequestedAt[0] = System.currentTimeMillis()
+        playerA.pause()
+        playerB.pause()
+        playerA.playWhenReady = false
+        playerB.playWhenReady = false
+        onDismiss()
+    }
+
     DisposableEffect(playerA, playerB) {
         onDispose {
+            if (BuildConfig.DEBUG && dismissRequestedAt[0] != 0L) {
+                Timber.d("IdleMetrics dismiss_ms=${System.currentTimeMillis() - dismissRequestedAt[0]}")
+            }
+            playerA.pause()
+            playerB.pause()
             playerA.release()
             playerB.release()
         }
     }
+
     DisposableEffect(lifecycleOwner) {
-        val obs = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_STOP -> {
-                    lifecyclePaused = true
-                    playerA.pause()
-                    playerB.pause()
-                }
-                Lifecycle.Event.ON_START -> {
-                    lifecyclePaused = false
-                    val active = if (activeIsA) playerA else playerB
-                    if (active.playbackState == Player.STATE_READY ||
-                        active.playbackState == Player.STATE_BUFFERING
-                    ) {
-                        active.play()
+        val obs =
+            LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_STOP -> {
+                        lifecyclePaused = true
+                        playerA.pause()
+                        playerB.pause()
                     }
+                    Lifecycle.Event.ON_START -> {
+                        lifecyclePaused = false
+                        if (phase != IdlePhase.Visible) return@LifecycleEventObserver
+                        val active = if (activeIsA) playerA else playerB
+                        if (
+                            active.playbackState == Player.STATE_READY ||
+                            active.playbackState == Player.STATE_BUFFERING
+                        ) {
+                            active.play()
+                        }
+                    }
+                    else -> Unit
                 }
-                else -> Unit
             }
-        }
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
+
     fun uri(idx: Int) =
         Uri.parse(
             "${ViwaElectronAssets.ASSET_URI_PREFIX}/video/${files[idx % files.size]}",
         )
+
     fun preload(player: ExoPlayer, idx: Int) {
         val name = files[idx % files.size]
         idleVideoLog {
             Timber.tag(TAG).d("preload %d (%s) → %s", idx % files.size, name, if (player === playerA) "A" else "B")
         }
+        // playWhenReady снимаем до prepare: фабрика ставит его в true, иначе плеер
+        // начинает декодировать сразу и держит нагрузку до своей очереди.
+        player.playWhenReady = false
         player.setMediaItem(MediaItem.fromUri(uri(idx)))
         player.prepare()
     }
+
+    fun nextAssetIndex(): Int = (counter[0] + 1) % files.size
+
     fun recoverStalledPlayer(
         player: ExoPlayer,
         action: IdleVideoStallWatchdog.RecoveryAction,
@@ -159,7 +171,7 @@ fun IdleVideoOverlay(
                 player.seekTo(pos)
                 if (
                     player.playbackState == Player.STATE_IDLE ||
-                        player.playbackState == Player.STATE_ENDED
+                    player.playbackState == Player.STATE_ENDED
                 ) {
                     player.prepare()
                 }
@@ -178,6 +190,7 @@ fun IdleVideoOverlay(
             }
         }
     }
+
     suspend fun awaitPlayerState(
         player: ExoPlayer,
         targetState: Int,
@@ -197,34 +210,61 @@ fun IdleVideoOverlay(
             cont.invokeOnCancellation { player.removeListener(listener) }
         }
     }
+
+    /**
+     * Ждём именно отрисовку кадра, а не READY: READY означает лишь буфер,
+     * а показывать оверлей до первого кадра — это чёрная вспышка.
+     */
+    suspend fun awaitFirstFrame(player: ExoPlayer): Boolean {
+        return withTimeoutOrNull(FIRST_FRAME_FALLBACK_MS) {
+            suspendCancellableCoroutine { cont ->
+                val listener =
+                    object : Player.Listener {
+                        override fun onRenderedFirstFrame() {
+                            player.removeListener(this)
+                            if (cont.isActive) cont.resume(true)
+                        }
+                    }
+                player.addListener(listener)
+                cont.invokeOnCancellation { player.removeListener(listener) }
+            }
+        } ?: false
+    }
+
+    suspend fun preloadNextWithLead(active: ExoPlayer, next: ExoPlayer, idx: Int) {
+        val dur = active.duration
+        if (dur == C.TIME_UNSET || dur <= 0L) {
+            preload(next, idx)
+            return
+        }
+        val lead =
+            IdleVideoCrossfadeTiming.preloadDelayMs(
+                durationMs = dur,
+                positionMs = active.currentPosition,
+                triggerBeforeEndMs = CROSSFADE_TRIGGER_MS,
+                preloadLeadMs = PRELOAD_LEAD_MS,
+            ) ?: 0L
+        if (lead > 0L) delay(lead.coerceAtMost(60_000L))
+        preload(next, idx)
+    }
+
     suspend fun waitForCrossfadeWindow(active: ExoPlayer, next: ExoPlayer) {
         if (active.playbackState == Player.STATE_ENDED) {
-            val waitStart = System.currentTimeMillis()
-            while (next.playbackState != Player.STATE_READY &&
-                System.currentTimeMillis() - waitStart < READY_WAIT_TIMEOUT_MS
-            ) {
-                if (next.playbackState != Player.STATE_READY) {
-                    awaitPlayerState(next, Player.STATE_READY)
-                }
-            }
+            withTimeoutOrNull(READY_WAIT_TIMEOUT_MS) { awaitPlayerState(next, Player.STATE_READY) }
             return
         }
         while (true) {
             when (active.playbackState) {
                 Player.STATE_ENDED -> {
-                    val waitStart = System.currentTimeMillis()
-                    while (next.playbackState != Player.STATE_READY &&
-                        System.currentTimeMillis() - waitStart < READY_WAIT_TIMEOUT_MS
-                    ) {
-                        awaitPlayerState(next, Player.STATE_READY)
-                    }
+                    withTimeoutOrNull(READY_WAIT_TIMEOUT_MS) { awaitPlayerState(next, Player.STATE_READY) }
                     return
                 }
                 Player.STATE_READY, Player.STATE_BUFFERING -> {
                     val dur = active.duration
                     val pos = active.currentPosition
                     if (dur != C.TIME_UNSET && dur > 0) {
-                        if (IdleVideoCrossfadeTiming.shouldCrossfadeNow(
+                        if (
+                            IdleVideoCrossfadeTiming.shouldCrossfadeNow(
                                 durationMs = dur,
                                 positionMs = pos,
                                 triggerBeforeEndMs = CROSSFADE_TRIGGER_MS,
@@ -242,25 +282,8 @@ fun IdleVideoOverlay(
                                 positionMs = pos,
                                 triggerBeforeEndMs = CROSSFADE_TRIGGER_MS,
                             )
-                        if (delayMs != null && next.playbackState != Player.STATE_READY) {
-                            val waitBudget = (delayMs + READY_WAIT_TIMEOUT_MS).coerceAtMost(dur - pos)
-                            val waitStart = System.currentTimeMillis()
-                            while (next.playbackState != Player.STATE_READY &&
-                                System.currentTimeMillis() - waitStart < waitBudget
-                            ) {
-                                awaitPlayerState(next, Player.STATE_READY)
-                            }
-                        }
                         if (delayMs != null) {
                             delay(delayMs.coerceAtMost(60_000L))
-                            if (next.playbackState != Player.STATE_READY) {
-                                val waitStart = System.currentTimeMillis()
-                                while (next.playbackState != Player.STATE_READY &&
-                                    System.currentTimeMillis() - waitStart < READY_WAIT_TIMEOUT_MS
-                                ) {
-                                    awaitPlayerState(next, Player.STATE_READY)
-                                }
-                            }
                             return
                         }
                     }
@@ -270,18 +293,80 @@ fun IdleVideoOverlay(
             }
         }
     }
-    LaunchedEffect(Unit) {
+
+    LaunchedEffect(phase, files) {
+        if (phase != IdlePhase.Prewarm || prewarmSignaled) return@LaunchedEffect
+        val prewarmStart = System.currentTimeMillis()
         preload(playerA, 0)
+        awaitPlayerState(playerA, Player.STATE_READY)
+        if (BuildConfig.DEBUG) {
+            Timber.d("IdleMetrics prewarm_ready_ms=${System.currentTimeMillis() - prewarmStart}")
+        }
+        prewarmSignaled = true
+        onPrewarmReady()
+    }
+
+    LaunchedEffect(phase) {
+        if (phase != IdlePhase.Visible) return@LaunchedEffect
+        val visibleStart = System.currentTimeMillis()
+        containerAlpha.snapTo(0f)
+        alphaA.snapTo(1f)
+        alphaB.snapTo(0f)
+
+        // Запускаем воспроизведение до ожидания кадра: часть декодеров на паузе
+        // первый кадр не отдаёт, и ожидание упиралось бы в fallback.
         playerA.playWhenReady = true
-        preload(playerB, 1)
-        alphaA.animateTo(1f, tween(CROSSFADE_MS, easing = LinearEasing))
-        while (true) {
+        playerA.play()
+        val firstFrameRendered = awaitFirstFrame(playerA)
+        if (BuildConfig.DEBUG) {
+            val clipDur = playerA.duration
+            Timber.d(
+                "IdleMetrics clip_duration_ms=${if (clipDur == C.TIME_UNSET || clipDur <= 0L) -1 else clipDur}",
+            )
+            Timber.d("IdleMetrics first_frame_ms=${System.currentTimeMillis() - visibleStart}")
+        }
+        if (
+            !firstFrameRendered &&
+            !playerA.isPlaying &&
+            playerA.playbackState != Player.STATE_READY &&
+            playerA.playbackState != Player.STATE_BUFFERING
+        ) {
+            Timber.tag(TAG).w("Idle video failed to render first frame — dismiss")
+            dismiss()
+            return@LaunchedEffect
+        }
+        containerAlpha.animateTo(1f, tween(CONTAINER_FADE_MS, easing = LinearEasing))
+
+        while (isActive) {
             val isA = activeIsA
             val active = if (isA) playerA else playerB
             val next = if (isA) playerB else playerA
             val fromAlpha = if (isA) alphaA else alphaB
             val toAlpha = if (isA) alphaB else alphaA
+            preloadNextWithLead(active, next, nextAssetIndex())
             waitForCrossfadeWindow(active, next)
+            val windowAt = System.currentTimeMillis()
+            val nextReadyAtWindow = next.playbackState == Player.STATE_READY
+            if (next.playbackState != Player.STATE_READY) {
+                withTimeoutOrNull(READY_WAIT_TIMEOUT_MS) { awaitPlayerState(next, Player.STATE_READY) }
+            }
+            if (BuildConfig.DEBUG) {
+                Timber.d(
+                    "IdleMetrics crossfade clip=%d next_ready=%b ready_wait_ms=%d",
+                    counter[0],
+                    nextReadyAtWindow,
+                    System.currentTimeMillis() - windowAt,
+                )
+            }
+            if (next.playbackState != Player.STATE_READY) {
+                // Повторить текущий ролик безопаснее, чем кроссфейдить в неготовый
+                // плеер: иначе на экране окажется чёрный кадр.
+                Timber.tag(TAG).w("next idle player not ready — repeating current clip")
+                active.seekTo(0)
+                active.playWhenReady = true
+                active.play()
+                continue
+            }
             next.seekTo(0)
             next.playWhenReady = true
             crossfading = true
@@ -293,11 +378,11 @@ fun IdleVideoOverlay(
             }
             activeIsA = !isA
             counter[0]++
-            val preloadTarget = if (activeIsA) playerB else playerA
-            preload(preloadTarget, counter[0] + 1)
         }
     }
-    LaunchedEffect(playerA, playerB) {
+
+    LaunchedEffect(phase, playerA, playerB) {
+        if (phase != IdlePhase.Visible) return@LaunchedEffect
         while (isActive) {
             delay(IdleVideoStallWatchdog.TICK_INTERVAL_MS)
             if (crossfading || lifecyclePaused) continue
@@ -327,69 +412,59 @@ fun IdleVideoOverlay(
             }
         }
     }
-    LaunchedEffect(playerA) {
-        delay(FIRST_FRAME_TIMEOUT_MS)
-        val state = playerA.playbackState
-        if (
-            state != Player.STATE_READY &&
-            state != Player.STATE_BUFFERING &&
-            !playerA.isPlaying
-        ) {
-            Timber.tag(TAG).w("Idle video failed to start (state=%d) — dismiss", state)
-            onDismiss()
-        }
-    }
 
-    Box(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black),
-    ) {
-        AndroidView(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = alphaA.value },
-            factory = { ctx ->
-                (LayoutInflater.from(ctx).inflate(R.layout.idle_player_view, null) as PlayerView)
-                    .apply {
-                        layoutParams =
-                            ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                            )
-                        player = playerA
-                    }
-            },
-        )
-        AndroidView(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = alphaB.value },
-            factory = { ctx ->
-                (LayoutInflater.from(ctx).inflate(R.layout.idle_player_view, null) as PlayerView)
-                    .apply {
-                        layoutParams =
-                            ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                            )
-                        player = playerB
-                    }
-            },
-        )
-        // Поверх TextureView: иначе тап часто не доходит до Compose clickable родителя.
+    if (phase == IdlePhase.Visible) {
         Box(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onDismiss,
-                    ),
-        )
+                    .graphicsLayer { alpha = containerAlpha.value }
+                    .background(Color.Black),
+        ) {
+            AndroidView(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = alphaA.value },
+                factory = { ctx ->
+                    (LayoutInflater.from(ctx).inflate(R.layout.idle_player_view, null) as PlayerView)
+                        .apply {
+                            layoutParams =
+                                ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                )
+                            player = playerA
+                        }
+                },
+            )
+            AndroidView(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = alphaB.value },
+                factory = { ctx ->
+                    (LayoutInflater.from(ctx).inflate(R.layout.idle_player_view, null) as PlayerView)
+                        .apply {
+                            layoutParams =
+                                ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                )
+                            player = playerB
+                        }
+                },
+            )
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { dismiss() },
+                        ),
+            )
+        }
     }
 }

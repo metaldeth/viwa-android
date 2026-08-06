@@ -11,6 +11,8 @@ import com.viwa.android.data.local.technician.TechnicianAllowlistDao
 import com.viwa.android.data.local.technician.TechnicianAllowlistStateDao
 import com.viwa.android.data.local.technician.TechnicianAuditOutboxDao
 import com.viwa.android.data.local.outbox.MachineOutboxPersistence
+import com.viwa.android.data.local.recipe.CellAssignmentBaseDao
+import com.viwa.android.data.local.recipe.CellEffectiveRecipeDao
 import com.viwa.android.data.local.outbox.RoomMachineOutboxPersistence
 import dagger.Module
 import dagger.Provides
@@ -27,7 +29,15 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): ViwaDatabase =
         Room
             .databaseBuilder(context, ViwaDatabase::class.java, "wiva.db")
-            .addMigrations(ViwaDatabase.MIGRATION_1_2, ViwaDatabase.MIGRATION_2_3, ViwaDatabase.MIGRATION_3_4)
+            .addMigrations(
+                ViwaDatabase.MIGRATION_1_2,
+                ViwaDatabase.MIGRATION_2_3,
+                ViwaDatabase.MIGRATION_3_4,
+                ViwaDatabase.MIGRATION_4_5,
+                ViwaDatabase.MIGRATION_5_6,
+                ViwaDatabase.MIGRATION_6_7,
+                ViwaDatabase.MIGRATION_7_8,
+            )
             .build()
 
     @Provides
@@ -50,6 +60,12 @@ object DatabaseModule {
 
     @Provides
     fun provideTechnicianAuditOutboxDao(db: ViwaDatabase): TechnicianAuditOutboxDao = db.technicianAuditOutboxDao()
+
+    @Provides
+    fun provideCellEffectiveRecipeDao(db: ViwaDatabase): CellEffectiveRecipeDao = db.cellEffectiveRecipeDao()
+
+    @Provides
+    fun provideCellAssignmentBaseDao(db: ViwaDatabase): CellAssignmentBaseDao = db.cellAssignmentBaseDao()
 
     @Provides
     @Singleton

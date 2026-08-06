@@ -24,6 +24,8 @@ import com.viwa.android.data.local.technician.TechnicianAuditOutboxDao
 
 import com.viwa.android.data.local.outbox.MachineOutboxDao
 import com.viwa.android.data.local.outbox.MachineOutboxEntryEntity
+import com.viwa.android.data.local.recipe.CellAssignmentBaseEntity
+import com.viwa.android.data.local.recipe.CellEffectiveRecipeEntity
 import com.viwa.android.data.local.technician.TechnicianAllowlistEntity
 import com.viwa.android.data.local.technician.TechnicianAllowlistStateEntity
 import com.viwa.android.data.local.technician.TechnicianAuditOutboxEntity
@@ -45,11 +47,13 @@ import com.viwa.android.data.local.technician.TechnicianAuditOutboxEntity
         TechnicianAllowlistEntity::class,
         TechnicianAllowlistStateEntity::class,
         TechnicianAuditOutboxEntity::class,
+        CellEffectiveRecipeEntity::class,
+        CellAssignmentBaseEntity::class,
     ],
 
-    version = 4,
+    version = 8,
 
-    exportSchema = false,
+    exportSchema = true,
 
 )
 
@@ -74,6 +78,10 @@ abstract class ViwaDatabase : RoomDatabase() {
     abstract fun technicianAllowlistStateDao(): TechnicianAllowlistStateDao
 
     abstract fun technicianAuditOutboxDao(): TechnicianAuditOutboxDao
+
+    abstract fun cellEffectiveRecipeDao(): com.viwa.android.data.local.recipe.CellEffectiveRecipeDao
+
+    abstract fun cellAssignmentBaseDao(): com.viwa.android.data.local.recipe.CellAssignmentBaseDao
 
     companion object {
 
@@ -420,6 +428,110 @@ abstract class ViwaDatabase : RoomDatabase() {
                         """
                         CREATE INDEX IF NOT EXISTS index_technician_audit_outbox_sync_status
                         ON technician_audit_outbox(sync_status)
+                        """.trimIndent(),
+                    )
+                }
+            }
+
+        val MIGRATION_4_5: Migration =
+            object : Migration(4, 5) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS cell_effective_recipe (
+                            cell_id TEXT NOT NULL PRIMARY KEY,
+                            base_drink_volume_ml INTEGER,
+                            water_deci_ml INTEGER,
+                            product_deci_ml INTEGER,
+                            fingerprint TEXT,
+                            source TEXT NOT NULL,
+                            product_id TEXT,
+                            base_version_id TEXT,
+                            last_applied_command_generation INTEGER NOT NULL DEFAULT 0,
+                            cancel_through_generation INTEGER NOT NULL DEFAULT 0,
+                            updated_at_ms INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    )
+                }
+            }
+
+        val MIGRATION_5_6: Migration =
+            object : Migration(5, 6) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        ALTER TABLE cell_effective_recipe
+                        ADD COLUMN device_report_revision INTEGER NOT NULL DEFAULT 0
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        """
+                        ALTER TABLE cell_effective_recipe
+                        ADD COLUMN last_applied_command_id TEXT
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        """
+                        ALTER TABLE cell_effective_recipe
+                        ADD COLUMN last_terminal_ack_status TEXT
+                        """.trimIndent(),
+                    )
+                }
+            }
+
+        val MIGRATION_6_7: Migration =
+            object : Migration(6, 7) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        ALTER TABLE cell_effective_recipe
+                        ADD COLUMN last_terminal_command_generation INTEGER NOT NULL DEFAULT 0
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        """
+                        ALTER TABLE cell_effective_recipe
+                        ADD COLUMN last_terminal_ack_failure_code TEXT
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        """
+                        ALTER TABLE cell_effective_recipe
+                        ADD COLUMN terminal_ack_delivered INTEGER NOT NULL DEFAULT 0
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        """
+                        UPDATE cell_effective_recipe
+                        SET last_terminal_command_generation = last_applied_command_generation
+                        WHERE last_terminal_ack_status = 'applied'
+                          AND last_applied_command_id IS NOT NULL
+                          AND last_terminal_command_generation = 0
+                        """.trimIndent(),
+                    )
+                }
+            }
+
+        val MIGRATION_7_8: Migration =
+            object : Migration(7, 8) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS cell_assignment_base (
+                            cell_uuid TEXT NOT NULL PRIMARY KEY,
+                            status TEXT NOT NULL,
+                            product_id TEXT,
+                            current_base_version_id TEXT,
+                            base_recipe_revision INTEGER,
+                            base_drink_volume_ml INTEGER,
+                            water_deci_ml INTEGER,
+                            product_deci_ml INTEGER,
+                            fingerprint TEXT,
+                            received_at_ms INTEGER NOT NULL,
+                            prior_fingerprint TEXT,
+                            prior_received_at_ms INTEGER
+                        )
                         """.trimIndent(),
                     )
                 }

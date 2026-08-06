@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "canonicalPrefix": "v1",
+  "fieldOrder": ["baseDrinkVolumeMl", "productDeciMl", "waterDeciMl"],
+  "syncNote": "Canonical copy: viwa-android/app/src/test/resources/recipe/golden-v1.json — byte-identical; paritySha256 must match.",
+  "paritySha256": "7ebf7ba76a9037a4ce274010b372ffea029c0247ff2fb2a63c5f6781eb3a383d",
+  "vectors": [
+    {
+      "id": "default",
+      "baseDrinkVolumeMl": 300,
+      "waterDeciMl": 2700,
+      "productDeciMl": 300,
+      "canonicalString": "v1|baseDrinkVolumeMl=300|productDeciMl=300|waterDeciMl=2700",
+      "fingerprint": "cd1adcdbe51bd39d03619bc39d834fc2fdd38293801f7053b164f920923d8afd",
+      "expectValid": true
+    },
+    {
+      "id": "edge-round",
+      "baseDrinkVolumeMl": 300,
+      "waterDeciMl": 2705,
+      "productDeciMl": 295,
+      "canonicalString": "v1|baseDrinkVolumeMl=300|productDeciMl=295|waterDeciMl=2705",
+      "fingerprint": "48defc14dd9ceb1046112ea23a74fbf53f58a23e26cf4b3a7009e9a13ad4aa98",
+      "expectValid": true
+    },
+    {
+      "id": "max-ish",
+      "baseDrinkVolumeMl": 1000,
+      "waterDeciMl": 9500,
+      "productDeciMl": 500,
+      "canonicalString": "v1|baseDrinkVolumeMl=1000|productDeciMl=500|waterDeciMl=9500",
+      "fingerprint": "56397d7b207f085f900066c0b93259361ae24e9a46dc9dce35b8812943fc3b04",
+      "expectValid": true
+    },
+    {
+      "id": "base-at-min",
+      "baseDrinkVolumeMl": 100,
+      "waterDeciMl": 900,
+      "productDeciMl": 100,
+      "canonicalString": "v1|baseDrinkVolumeMl=100|productDeciMl=100|waterDeciMl=900",
+      "fingerprint": "fc254d35ec1abed04025a91832bf0f370bd99126a2efdc4ea416c0aab746cc45",
+      "expectValid": true
+    },
+    {
+      "id": "product-deci-at-max",
+      "baseDrinkVolumeMl": 1000,
+      "waterDeciMl": 0,
+      "productDeciMl": 10000,
+      "canonicalString": "v1|baseDrinkVolumeMl=1000|productDeciMl=10000|waterDeciMl=0",
+      "fingerprint": "0115af20b507530b4d30642336e173274259df7b4207ceb3bc2b4d268d19a56f",
+      "expectValid": true
+    },
+    {
+      "id": "representative-3000-deci",
+      "baseDrinkVolumeMl": 300,
+      "waterDeciMl": 0,
+      "productDeciMl": 3000,
+      "canonicalString": "v1|baseDrinkVolumeMl=300|productDeciMl=3000|waterDeciMl=0",
+      "fingerprint": "f5ffc308f685c495d85ca1df6487dc1330074a5c79aa4fb407f355b9fd719367",
+      "expectValid": true
+    },
+    {
+      "id": "base-drink-min",
+      "baseDrinkVolumeMl": 99,
+      "waterDeciMl": 891,
+      "productDeciMl": 99,
+      "expectValid": false,
+      "rejectReasons": ["BASE_DRINK_VOLUME_ML_MIN"]
+    },
+    {
+      "id": "base-drink-max",
+      "baseDrinkVolumeMl": 1001,
+      "waterDeciMl": 9009,
+      "productDeciMl": 1,
+      "expectValid": false,
+      "rejectReasons": ["BASE_DRINK_VOLUME_ML_MAX"]
+    },
+    {
+      "id": "water-negative",
+      "baseDrinkVolumeMl": 300,
+      "waterDeciMl": -1,
+      "productDeciMl": 3001,
+      "expectValid": false,
+      "rejectReasons": ["WATER_DECI_ML_MIN"]
+    },
+    {
+      "id": "product-negative",
+      "baseDrinkVolumeMl": 300,
+      "waterDeciMl": 3001,
+      "productDeciMl": -1,
+      "expectValid": false,
+      "rejectReasons": ["PRODUCT_DECI_ML_MIN"]
+    },
+    {
+      "id": "water-deci-max",
+      "baseDrinkVolumeMl": 1000,
+      "waterDeciMl": 100001,
+      "productDeciMl": 0,
+      "expectValid": false,
+      "rejectReasons": ["WATER_DECI_ML_MAX", "INVARIANT_SUM"]
+    },
+    {
+      "id": "product-deci-max",
+      "baseDrinkVolumeMl": 1000,
+      "waterDeciMl": 0,
+      "productDeciMl": 10001,
+      "expectValid": false,
+      "rejectReasons": ["PRODUCT_DECI_ML_MAX", "INVARIANT_SUM"]
+    },
+    {
+      "id": "invariant-zero",
+      "baseDrinkVolumeMl": 300,
+      "waterDeciMl": 0,
+      "productDeciMl": 0,
+      "expectValid": false,
+      "rejectReasons": ["INVARIANT_SUM", "INVARIANT_ZERO"]
+    },
+    {
+      "id": "invariant-sum",
+      "baseDrinkVolumeMl": 300,
+      "waterDeciMl": 2700,
+      "productDeciMl": 301,
+      "expectValid": false,
+      "rejectReasons": ["INVARIANT_SUM"]
+    }
+  ]
+}

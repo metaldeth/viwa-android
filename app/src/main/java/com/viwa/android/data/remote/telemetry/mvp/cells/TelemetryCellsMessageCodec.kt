@@ -56,6 +56,8 @@ internal data class CellContentReportWire(
     val dosage1Price: Int? = null,
     val dosage2Price: Int? = null,
     val conversionFactor: Double? = null,
+    /** true only for explicit operator taste override in service menu. */
+    val operatorOverride: Boolean? = null,
 )
 
 @Serializable
@@ -154,7 +156,10 @@ constructor() {
             CellVolumeReportPayloadWire(updates = updates),
         )
 
-    fun encodeContentReportPayload(cells: List<TelemetryCell>): String {
+    fun encodeContentReportPayload(
+        cells: List<TelemetryCell>,
+        operatorOverride: Boolean = false,
+    ): String {
         val wireCells =
             cells.map { cell ->
                 CellContentReportWire(
@@ -168,6 +173,7 @@ constructor() {
                     dosage1Price = cell.dosage1Price,
                     dosage2Price = cell.dosage2Price,
                     conversionFactor = cell.conversionFactor,
+                    operatorOverride = operatorOverride.takeIf { it },
                 )
             }
         return json.encodeToString(

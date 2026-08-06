@@ -32,8 +32,12 @@ class FakeMachineOutboxPersistence : MachineOutboxPersistence {
                     (it.status == MachineOutboxStatus.PENDING.name ||
                         it.status == MachineOutboxStatus.IN_FLIGHT.name) &&
                         it.nextRetryAtMs <= nowMs
-                }.sortedBy { it.createdAtMs }
-                .take(limit)
+                }.sortedWith(
+                    compareBy<MachineOutboxEntryEntity> { row ->
+                        MachineOutboxKind.fromWire(row.kind)?.drainPriority ?: 2
+                    }.thenBy { it.createdAtMs }
+                        .thenBy { it.localId },
+                ).take(limit)
         }
 
     override suspend fun findByMessageId(messageId: String): MachineOutboxEntryEntity? =
@@ -52,6 +56,27 @@ class FakeMachineOutboxPersistence : MachineOutboxPersistence {
             rows.values.count {
                 it.status == MachineOutboxStatus.PENDING.name ||
                     it.status == MachineOutboxStatus.IN_FLIGHT.name
+            }
+        }
+
+    override suspend fun hasUnsentRecipeEntries(nowMs: Long): Boolean =
+        mutex.withLock {
+            rows.values.any {
+                it.kind in RECIPE_KIND_WIRE &&
+                    it.status == MachineOutboxStatus.PENDING.name &&
+                    it.nextRetryAtMs <= nowMs
+            }
+        }
+
+    override suspend fun hasUnsentRecipeReportForCell(cellId: String, nowMs: Long): Boolean =
+        mutex.withLock {
+            val prefix = "$cellId|"
+            rows.values.any {
+                it.kind == MachineOutboxKind.CELLS_RECIPE_REPORT.wireValue &&
+                    (it.status == MachineOutboxStatus.PENDING.name ||
+                        it.status == MachineOutboxStatus.IN_FLIGHT.name) &&
+                    it.nextRetryAtMs <= nowMs &&
+                    it.idempotencyKey.startsWith(prefix)
             }
         }
 
@@ -96,4 +121,12 @@ class FakeMachineOutboxPersistence : MachineOutboxPersistence {
         }
 
     fun allRows(): List<MachineOutboxEntryEntity> = rows.values.toList()
+
+    private companion object {
+        val RECIPE_KIND_WIRE =
+            setOf(
+                MachineOutboxKind.CELLS_RECIPE_REPORT.wireValue,
+                MachineOutboxKind.CELLS_RECIPE_COMMAND_ACK.wireValue,
+            )
+    }
 }

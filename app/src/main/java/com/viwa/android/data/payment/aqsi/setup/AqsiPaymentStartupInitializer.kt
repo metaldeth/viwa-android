@@ -3,6 +3,7 @@
 import com.viwa.android.data.payment.aqsi.network.AqsiPillHostNetworkBootstrap
 import com.viwa.android.data.payment.aqsi.serial.AqsiUsbSerialAccess
 import com.viwa.android.di.AqsiIoScope
+import com.viwa.android.hardware.serial.AqsiPillUsbIdentifiers
 import com.viwa.android.hardware.serial.PaymentSerialPort
 import com.viwa.android.hardware.serial.PortRole
 import javax.inject.Inject

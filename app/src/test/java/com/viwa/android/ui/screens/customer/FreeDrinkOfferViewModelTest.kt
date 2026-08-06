@@ -8,6 +8,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -22,9 +23,12 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FreeDrinkOfferViewModelTest {
+    private val scheduler = TestCoroutineScheduler()
+    private val mainDispatcher = StandardTestDispatcher(scheduler)
+
     @Before
     fun setup() {
-        Dispatchers.setMain(StandardTestDispatcher())
+        Dispatchers.setMain(mainDispatcher)
     }
 
     @After
@@ -33,8 +37,7 @@ class FreeDrinkOfferViewModelTest {
     }
 
     @Test
-    fun T11_9_qrUrlContainsMachineSerialPathWithoutOrganizationId() = runTest {
-        
+    fun T11_9_qrUrlContainsMachineSerialPathWithoutOrganizationId() = runTest(scheduler) {
         // given
         val telemetry = mockk<ViwaTelemetryService>()
         coEvery { telemetry.loadMachineRegistration() } returns

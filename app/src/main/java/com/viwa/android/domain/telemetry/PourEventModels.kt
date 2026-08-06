@@ -60,6 +60,10 @@ data class PourEventSnapshot(
     val strength: String? = null,
     val strengthRatio: Double? = null,
     val syrupMlActual: Int? = null,
+    val recipeDrinkVolumeMl: Int? = null,
+    val recipeWaterMl: Double? = null,
+    val recipeProductMl: Double? = null,
+    val conversionFactor: Double? = null,
 )
 
 /** Paid beverage — flat `telemetry.paid.complete` atomic payload. */
@@ -76,4 +80,8 @@ data class PaidCompleteSnapshot(
     val syrupMlActual: Int,
     val amountKopecks: Int,
     val payMethod: String,
+    val recipeDrinkVolumeMl: Int? = null,
+    val recipeWaterMl: Double? = null,
+    val recipeProductMl: Double? = null,
+    val conversionFactor: Double? = null,
 )

@@ -7,6 +7,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
 import com.viwa.android.data.payment.aqsi.setup.AqsiSetupEntryPoint
+import com.viwa.android.hardware.serial.AqsiPillUsbIdentifiers
 import dagger.hilt.android.EntryPointAccessors
 import timber.log.Timber
 

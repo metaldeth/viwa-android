@@ -58,6 +58,7 @@ class MachineOutboxDrainCoordinatorTest {
                     },
                 apiClient = apiClient,
                 bearerTokenProvider = bearerProvider,
+                recipeOutboxStore = mockk(relaxed = true),
                 appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined),
             )
     }

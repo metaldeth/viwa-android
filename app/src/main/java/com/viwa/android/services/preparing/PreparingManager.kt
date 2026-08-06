@@ -17,8 +17,11 @@ import com.viwa.android.services.drink.DrinkPreparationCalculations
 import com.viwa.android.services.drink.ViwaDrinkPreparingService
 import com.viwa.android.services.drink.ViwaDrinkSelectionService
 import com.viwa.android.hardware.FlowStripRgbCoordinator
+import com.viwa.android.data.local.recipe.CellEffectiveRecipeStore
+import com.viwa.android.data.remote.telemetry.mvp.cells.RecipeSyncCoordinator
 import com.viwa.android.data.remote.telemetry.v3.TelemetryDispenseSyncCoordinator
 import com.viwa.android.data.remote.telemetry.mvp.MachineOutboxDrainCoordinator
+import com.viwa.android.domain.inventory.InventoryCellRecipeSupport
 import com.viwa.android.domain.model.customer.DrinkConcentration
 import com.viwa.android.domain.model.customer.toRatio
 import com.viwa.android.domain.offline.OfflineAuthorizationReason
@@ -26,6 +29,7 @@ import com.viwa.android.domain.offline.OfflinePourTransactionCoordinator
 import com.viwa.android.domain.offline.SubscriptionPourContext
 import com.viwa.android.domain.telemetry.DispenseTelemetryFactory
 import com.viwa.android.domain.telemetry.DispenseTelemetryFactory.newStableUuid
+import androidx.annotation.VisibleForTesting
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -59,6 +63,8 @@ constructor(
     private val offlinePourCoordinator: OfflinePourTransactionCoordinator,
     private val outboxDrainCoordinator: MachineOutboxDrainCoordinator,
     private val telemetryService: ViwaTelemetryService,
+    private val effectiveRecipeStore: CellEffectiveRecipeStore,
+    private val recipeSyncCoordinator: RecipeSyncCoordinator,
     @AppIoScope private val scope: CoroutineScope,
 ) {
     private val mutex = Mutex()
@@ -170,15 +176,52 @@ constructor(
             }
 
             val effectiveRatio = concentration.toRatio()
+            val telemetryCell = snapshot.cells.find { it.cellNumber == container.containerNumber }
+            val cellUuid = telemetryCell?.uuid
+            val conversionFactor =
+                telemetryCell?.conversionFactor ?: container.product.dosage.conversionFactor
+            val pourFromEffectivePermitted =
+                pourFromEffectiveOverrideForTests
+                    ?: InventoryCellRecipeSupport.isPourFromEffectivePermitted(
+                        managedGateActive = recipeSyncCoordinator.isManagedModeActive(),
+                    )
+            val effective =
+                cellUuid?.let { uuid ->
+                    if (pourFromEffectivePermitted) {
+                        effectiveRecipeStore.getEffective(uuid)
+                    } else {
+                        null
+                    }
+                }
+            val pourSetup =
+                InventoryCellRecipeSupport.resolvePourSetup(
+                    effective = effective,
+                    conversionFactor = conversionFactor,
+                    pourVolumeMl = volumeMl,
+                    pourFromEffectivePermitted = pourFromEffectivePermitted,
+                )
+            if (pourSetup.usedLegacyFallback) {
+                Timber.tag(TAG).w(
+                    "pourRecipeFallback cell=%s reason=%s diagnostics=%s paid=%s source=%s",
+                    cellUuid,
+                    pourSetup.fallbackReason?.wireValue,
+                    pourSetup.diagnostics,
+                    isPaidSalePayMethod(salePayMethod),
+                    pourSetup.source,
+                )
+            }
+            val baseDosage = pourSetup.baseDosage
+            val controllerDosage = pourSetup.controllerDosage
+            val containerForPour =
+                container.copy(product = container.product.copy(dosage = controllerDosage))
             val preparingTime =
                 drinkSelection.chooseDrink(
-                    container = container,
+                    container = containerForPour,
                     drinkVolumeMl = volumeMl,
                     waterOption = waterOption,
                     concentrationRatio = effectiveRatio,
                     flowRateMlPerSec = flowRate,
                 )
-            val dosage = container.product.dosage
             val isPaidPour = isPaidSalePayMethod(salePayMethod)
             val pourRequestUuid =
                 subscriptionPourContext?.requestUuid
@@ -190,10 +233,9 @@ constructor(
                     null
                 }
             val actualWaterMl =
-                DrinkPreparationCalculations.waterMlForDrink(
-                    dosageWaterMl = dosage.water,
-                    drinkVolumeMl = volumeMl,
-                    recipeDrinkVolumeMl = dosage.drinkVolume,
+                InventoryCellRecipeSupport.actualWaterMlForResolution(
+                    resolution = pourSetup,
+                    pourVolumeMl = volumeMl,
                 )
             currentPreparingContext =
                 CurrentPreparingContext(
@@ -204,9 +246,13 @@ constructor(
                     drinkName = container.product.name,
                     containerNumber = container.containerNumber,
                     volumeMl = volumeMl,
-                    recipeDrinkVolumeMl = dosage.drinkVolume,
-                    recipeWaterMl = dosage.water,
-                    recipeProductMl = dosage.product,
+                    recipeDrinkVolumeMl = baseDosage.drinkVolume,
+                    recipeWaterMl = baseDosage.water,
+                    recipeProductMl = baseDosage.product,
+                    recipeConversionFactor = baseDosage.conversionFactor,
+                    pourRecipeSource = pourSetup.source.name,
+                    pourRecipeFallbackReason = pourSetup.fallbackReason?.wireValue,
+                    pourRecipeFallbackDiagnostics = pourSetup.diagnostics,
                     actualWaterMl = actualWaterMl,
                     flowRateMlPerSec = flowRate,
                     expectedTimeSec = preparingTime,
@@ -284,7 +330,7 @@ constructor(
     private suspend fun enqueueDispenseTelemetry(context: CurrentPreparingContext) {
         val dosage =
             com.viwa.android.domain.model.customer.DrinkDosage(
-                conversionFactor = 0.0,
+                conversionFactor = context.recipeConversionFactor,
                 drinkVolume = context.recipeDrinkVolumeMl,
                 product = context.recipeProductMl,
                 water = context.recipeWaterMl,
@@ -365,6 +411,10 @@ constructor(
         val recipeDrinkVolumeMl: Int,
         val recipeWaterMl: Double,
         val recipeProductMl: Double,
+        val recipeConversionFactor: Double,
+        val pourRecipeSource: String,
+        val pourRecipeFallbackReason: String? = null,
+        val pourRecipeFallbackDiagnostics: String? = null,
         val actualWaterMl: Double,
         val flowRateMlPerSec: Double,
         val expectedTimeSec: Int,
@@ -406,5 +456,10 @@ constructor(
 
     companion object {
         private const val TAG = "PreparingManager"
+
+        /** Task-20 integration tests — override Phase C gate without flipping compile-time flag. */
+        @VisibleForTesting
+        @JvmField
+        internal var pourFromEffectiveOverrideForTests: Boolean? = null
     }
 }

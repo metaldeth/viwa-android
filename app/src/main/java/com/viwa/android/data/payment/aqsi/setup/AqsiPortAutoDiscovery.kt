@@ -3,6 +3,7 @@
 import com.viwa.android.hardware.serial.PaymentSerialDeviceInfo
 import com.viwa.android.hardware.serial.PaymentSerialPort
 import com.viwa.android.hardware.serial.PortRole
+import com.viwa.android.hardware.serial.AqsiPillUsbIdentifiers
 import javax.inject.Inject
 import javax.inject.Singleton
 import timber.log.Timber

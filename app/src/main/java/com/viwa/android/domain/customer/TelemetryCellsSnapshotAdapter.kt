@@ -4,7 +4,6 @@ import com.viwa.android.domain.model.TelemetryCell
 import com.viwa.android.domain.model.TelemetryCellsSnapshot
 import com.viwa.android.domain.model.TelemetryProduct
 import com.viwa.android.domain.model.customer.DrinkContainer
-import com.viwa.android.domain.model.customer.DrinkDosage
 import com.viwa.android.domain.model.customer.DrinkPrice
 import com.viwa.android.domain.model.customer.DrinkProduct
 import com.viwa.android.domain.model.customer.DrinkTaste
@@ -12,16 +11,14 @@ import com.viwa.android.domain.model.customer.DrinkTaste
 /**
  * Snapshot MVP cells → [DrinkContainer] для customer UI (без legacy merge-inventory).
  * Цены: копейки → рубли; blockVolume → minVolumeMl для [DrinkContainer.isUnavailable].
+ *
+ * **Dosage source:** локальный шаблон [TelemetryCellsDefaultDosage] (300/270/30 + CF ячейки).
+ * Managed effective recipe для налива читается в [com.viwa.android.services.preparing.PreparingManager]
+ * через [com.viwa.android.domain.inventory.InventoryCellRecipeSupport] при
+ * `FEATURE_RECIPE_SYNC` + managed gate + `FEATURE_RECIPE_POUR_FROM_EFFECTIVE` (Phase C).
+ * Report-only (step 5–6): uplink effective, customer pour остаётся на шаблоне.
  */
 object TelemetryCellsSnapshotAdapter {
-    private val defaultDosageTemplate =
-        DrinkDosage(
-            conversionFactor = TelemetryCell.DEFAULT_CONVERSION_FACTOR,
-            drinkVolume = 300,
-            product = 30.0,
-            water = 270.0,
-        )
-
     fun toDrinkContainers(snapshot: TelemetryCellsSnapshot): List<DrinkContainer> =
         snapshot.cells
             .sortedBy { it.cellNumber }
@@ -53,7 +50,7 @@ object TelemetryCellsSnapshotAdapter {
                             mediaKey = tasteMediaKey,
                             hexColor = null,
                         ),
-                    dosage = defaultDosageTemplate.copy(conversionFactor = cell.conversionFactor),
+                    dosage = TelemetryCellsDefaultDosage.templateWithConversionFactor(cell.conversionFactor),
                     dPrices = prices,
                 ),
             volumeMl = cell.volume,

@@ -77,7 +77,7 @@ constructor(
     override suspend fun getCurrentVersionCode(): Int = withContext(Dispatchers.IO) { apkVerifier.readInstalledVersionCode() }
 
     override suspend fun getUpdateServerHost(): String =
-        configRepository.get(JsonStoreKeys.UPDATE_SERVER_HOST) ?: "http://83.166.246.158:9083"
+        configRepository.get(JsonStoreKeys.UPDATE_SERVER_HOST) ?: "https://tl.vitamin-water.ru/android-ota"
 
     override suspend fun setUpdateServerHost(host: String) =
         configRepository.set(JsonStoreKeys.UPDATE_SERVER_HOST, host)

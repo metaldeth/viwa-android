@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Kiosk: allow all USB devices without permission dialog (lock-task blocks UI). -->
+    <usb-device />
+</resources>

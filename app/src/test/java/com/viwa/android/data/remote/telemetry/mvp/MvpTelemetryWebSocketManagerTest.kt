@@ -4,6 +4,7 @@ import com.viwa.android.data.remote.telemetry.ConnectionState
 import com.viwa.android.data.network.NetworkTrafficLogger
 import io.mockk.coVerify
 import io.mockk.mockk
+import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -65,7 +66,7 @@ class MvpTelemetryWebSocketManagerTest {
             // then
             assertFalse(manager.connectionState.value is ConnectionState.Connected)
             advanceUntilIdle()
-            coVerify(exactly = 0) { cellsHandler.onWebSocketHello() }
+            coVerify(exactly = 0) { cellsHandler.onWebSocketHello(any<MvpHelloPayloadDto>()) }
             assertTrue(
                 trafficLogger.entries.value.any { it.summary.contains("drop stale inbound") },
             )
@@ -89,7 +90,7 @@ class MvpTelemetryWebSocketManagerTest {
 
             // then
             assertEquals(TelemetryConnectionPhase.Idle, manager.fsmPhase())
-            coVerify(exactly = 1) { cellsHandler.onWebSocketHello() }
+            coVerify(exactly = 1) { cellsHandler.onWebSocketHello(any<MvpHelloPayloadDto>()) }
         }
 
     @Test

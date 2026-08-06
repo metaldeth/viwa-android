@@ -19,6 +19,8 @@ import com.viwa.android.hardware.serial.PaymentSerialPort
 import com.viwa.android.hardware.serial.ViwaPaymentSerialPort
 import com.viwa.android.services.payment.CardPaymentEventLogger
 import com.viwa.android.services.payment.CardPaymentOrchestrator
+import com.viwa.android.services.payment.PillUsbSessionOwner
+import com.viwa.android.services.payment.PillUsbSessionOwnerImpl
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -96,4 +98,8 @@ abstract class AqsiModule {
     @Binds
     @Singleton
     abstract fun bindAqsiUsbSerialAccess(impl: AndroidAqsiUsbSerialAccess): AqsiUsbSerialAccess
+
+    @Binds
+    @Singleton
+    abstract fun bindPillUsbSessionOwner(impl: PillUsbSessionOwnerImpl): PillUsbSessionOwner
 }

@@ -54,8 +54,14 @@ class DrinkListViewModelUnlimitedWaterTest {
 
     @After
     fun tearDown() {
+        runBlocking {
+            DrinkListViewModelTestSupport.clearTrackedViewModels(mainDispatcher)
+        }
         Dispatchers.resetMain()
-        executor.shutdownNow()
+        executor.shutdown()
+        if (!executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+            executor.shutdownNow()
+        }
     }
 
     private suspend fun flushMain(times: Int = 16) {
@@ -89,11 +95,11 @@ class DrinkListViewModelUnlimitedWaterTest {
             MutableStateFlow(com.viwa.android.services.preparing.CustomerPreparingPhase.Idle).asStateFlow()
         return DrinkListViewModel(
             DrinkListViewModelTestSupport.vmConfigRepo(),
-            mockk(relaxed = true),
+            DrinkListViewModelTestSupport.cellsRepositoryMock(),
             preparing,
             gateway,
             com.viwa.android.hardware.controller.FlowTemperatureStore(),
-            mockk(relaxed = true),
+            DrinkListViewModelTestSupport.aqsiManagerMock(),
             mockk(relaxed = true),
             telemetry,
             mockk(relaxed = true),
@@ -102,13 +108,13 @@ class DrinkListViewModelUnlimitedWaterTest {
             mockk(relaxed = true),
             mockk(relaxed = true),
             mockk(relaxed = true),
-            mockk(relaxed = true),
-            mockk(relaxed = true),
+            DrinkListViewModelTestSupport.sbpRepositoryMock(),
+            DrinkListViewModelTestSupport.nanoKassaRepositoryMock(),
             mockk(relaxed = true),
             mockk(relaxed = true),
             mockk(relaxed = true),
             holdPour,
-        )
+        ).also { DrinkListViewModelTestSupport.trackViewModel(it) }
     }
 
     @Test
@@ -142,7 +148,7 @@ class DrinkListViewModelUnlimitedWaterTest {
                     maxVolumeMl = 2000,
                 ),
             )
-        val telemetry = mockk<ViwaTelemetryService>(relaxUnitFun = true)
+        val telemetry = DrinkListViewModelTestSupport.createTestTelemetry()
         every { telemetry.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
         every { telemetry.subscribeInfo } returns subscribeInfo.asStateFlow()
@@ -219,7 +225,7 @@ class DrinkListViewModelUnlimitedWaterTest {
                     maxVolumeMl = 2000,
                 ),
             )
-        val telemetry = mockk<ViwaTelemetryService>(relaxUnitFun = true)
+        val telemetry = DrinkListViewModelTestSupport.createTestTelemetry()
         every { telemetry.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
         every { telemetry.subscribeInfo } returns subscribeInfo.asStateFlow()
@@ -307,7 +313,7 @@ class DrinkListViewModelUnlimitedWaterTest {
                     maxVolumeMl = 2000,
                 ),
             )
-        val telemetry = mockk<ViwaTelemetryService>(relaxUnitFun = true)
+        val telemetry = DrinkListViewModelTestSupport.createTestTelemetry()
         every { telemetry.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
         every { telemetry.subscribeInfo } returns subscribeInfo.asStateFlow()
@@ -360,7 +366,7 @@ class DrinkListViewModelUnlimitedWaterTest {
             )
         val holdPour = mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true)
         coEvery { holdPour.finalizeHoldPourSession() } returns 95
-        val telemetry = mockk<ViwaTelemetryService>(relaxUnitFun = true)
+        val telemetry = DrinkListViewModelTestSupport.createTestTelemetry()
         every { telemetry.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
         every { telemetry.subscribeInfo } returns subscribeInfo.asStateFlow()
@@ -381,11 +387,11 @@ class DrinkListViewModelUnlimitedWaterTest {
         val vm =
             DrinkListViewModel(
                 DrinkListViewModelTestSupport.vmConfigRepo(),
-                mockk(relaxed = true),
+                DrinkListViewModelTestSupport.cellsRepositoryMock(),
                 preparing,
                 gateway,
                 com.viwa.android.hardware.controller.FlowTemperatureStore(),
-                mockk(relaxed = true),
+                DrinkListViewModelTestSupport.aqsiManagerMock(),
                 mockk(relaxed = true),
                 telemetry,
                 mockk(relaxed = true),
@@ -394,13 +400,13 @@ class DrinkListViewModelUnlimitedWaterTest {
                 mockk(relaxed = true),
                 mockk(relaxed = true),
                 mockk(relaxed = true),
-                mockk(relaxed = true),
-                mockk(relaxed = true),
+                DrinkListViewModelTestSupport.sbpRepositoryMock(),
+                DrinkListViewModelTestSupport.nanoKassaRepositoryMock(),
                 mockk(relaxed = true),
                 mockk(relaxed = true),
                 mockk(relaxed = true),
                 holdPour,
-            )
+            ).also { DrinkListViewModelTestSupport.trackViewModel(it) }
         flushMain(24)
         vm.setUiStateForUnitTests(
             DrinkListUiState(
@@ -445,7 +451,7 @@ class DrinkListViewModelUnlimitedWaterTest {
             )
         val holdPour = mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true)
         coEvery { holdPour.finalizeHoldPourSession() } returns 60
-        val telemetry = mockk<ViwaTelemetryService>(relaxUnitFun = true)
+        val telemetry = DrinkListViewModelTestSupport.createTestTelemetry()
         every { telemetry.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
         every { telemetry.subscribeInfo } returns subscribeInfo.asStateFlow()

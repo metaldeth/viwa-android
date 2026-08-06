@@ -28,14 +28,49 @@ import com.viwa.android.domain.telemetry.HoldPourTelemetryCoordinator
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 internal object DrinkListViewModelTestSupport {
+    private val activeViewModels = mutableListOf<DrinkListViewModel>()
+
+    fun nanoKassaRepositoryMock(): NanoKassaRepository =
+        mockk<NanoKassaRepository>(relaxed = true).also { nano ->
+            coEvery { nano.hasNanoFiscalConfig() } returns false
+        }
+
+    fun sbpRepositoryMock(): SBPRepository =
+        mockk<SBPRepository>(relaxed = true).also { repo ->
+            coEvery { repo.getSettings() } returns SBPSettings(timeoutInSeconds = 120)
+            coEvery { repo.cancelSBPLink(any()) } returns Result.success(Unit)
+        }
+
+    fun trackViewModel(vm: DrinkListViewModel) {
+        synchronized(activeViewModels) {
+            activeViewModels.add(vm)
+        }
+    }
+
+    suspend fun clearTrackedViewModels(mainDispatcher: CoroutineDispatcher) {
+        withContext(mainDispatcher) {
+            synchronized(activeViewModels) {
+                activeViewModels.forEach { runCatching { it.clearForUnitTests() } }
+                activeViewModels.clear()
+            }
+        }
+        repeat(256) {
+            withContext(mainDispatcher) {}
+            yield()
+        }
+    }
+
     fun createTestTelemetry(): ViwaTelemetryService {
-        val mock = mockk<ViwaTelemetryService>(relaxUnitFun = true)
+        val mock = mockk<ViwaTelemetryService>(relaxed = true)
         every { mock.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Disconnected()).asStateFlow()
         every { mock.subscribeInfo } returns MutableStateFlow(null).asStateFlow()
@@ -74,13 +109,23 @@ internal object DrinkListViewModelTestSupport {
             }
         }
 
+    fun aqsiManagerMock(): AqsiUsbPaymentManager =
+        mockk<AqsiUsbPaymentManager>(relaxed = true).also {
+            every { it.terminalStatusFlow } returns MutableStateFlow("").asStateFlow()
+        }
+
+    fun cellsRepositoryMock(): TelemetryCellsRepository =
+        mockk<TelemetryCellsRepository>(relaxUnitFun = true).also {
+            every { it.snapshotFlow } returns MutableStateFlow(null).asStateFlow()
+        }
+
     fun createViewModel(
         getSBPLinkUseCase: GetSBPLinkUseCase = mockk(relaxed = true),
         checkSBPStatusUseCase: CheckSBPStatusUseCase = mockk(relaxed = true),
         subscriptionUseCases: SubscriptionPaymentUseCaseMocks = relaxedSubscriptionPaymentUseCases(),
         cardPaymentOrchestrator: CardPaymentOrchestrator = mockk(relaxed = true),
         preparingManager: PreparingManager = mockk(relaxed = true),
-        sbpRepository: SBPRepository = mockk(relaxUnitFun = true),
+        sbpRepository: SBPRepository = sbpRepositoryMock(),
         telemetryService: ViwaTelemetryService = createTestTelemetry(),
         cancelUseCaseOverride: CancelMachineSubscriptionUseCase? = null,
     ): Pair<DrinkListViewModel, SubscriptionPaymentUseCaseMocks> {
@@ -90,17 +135,12 @@ internal object DrinkListViewModelTestSupport {
         every { gateway.isPhysicalControllerConnected } returns MutableStateFlow(true).asStateFlow()
         coEvery { gateway.simulateResponseForTests(any(), any()) } returns Unit
         val sbpNotify = mockk<ControllerSbpNotifyService>(relaxUnitFun = true)
-        val aqsi = mockk<AqsiUsbPaymentManager>(relaxed = true)
-        every { aqsi.terminalStatusFlow } returns MutableStateFlow("").asStateFlow()
-        val cellsRepo = mockk<TelemetryCellsRepository>(relaxUnitFun = true)
-        every { cellsRepo.snapshotFlow } returns MutableStateFlow(null).asStateFlow()
-        val sbpRepository = sbpRepository.also {
-            coEvery { it.getSettings() } returns SBPSettings(timeoutInSeconds = 120)
-        }
+        val aqsi = aqsiManagerMock()
+        val cellsRepo = cellsRepositoryMock()
         val preparing = preparingManager
         every { preparing.customerPhase } returns
             MutableStateFlow(CustomerPreparingPhase.Idle).asStateFlow()
-        val nano = mockk<NanoKassaRepository>(relaxUnitFun = true)
+        val nano = nanoKassaRepositoryMock()
         val networkTraffic = mockk<NetworkTrafficLogger>(relaxUnitFun = true)
         every { networkTraffic.entries } returns MutableStateFlow<List<NetworkTrafficEntry>>(emptyList()).asStateFlow()
         val controllerTraffic = mockk<ViwaControllerTrafficLogger>(relaxUnitFun = true)
@@ -129,6 +169,7 @@ internal object DrinkListViewModelTestSupport {
                 cardPaymentOrchestrator,
                 mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
             )
+        trackViewModel(vm)
         return vm to subscriptionUseCases
     }
 }

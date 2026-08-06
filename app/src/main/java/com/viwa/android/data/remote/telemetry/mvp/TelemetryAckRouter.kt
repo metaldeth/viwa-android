@@ -4,6 +4,8 @@ import com.viwa.android.data.local.outbox.MachineOutboxEntryEntity
 import com.viwa.android.data.local.outbox.MachineOutboxKind
 import com.viwa.android.data.local.outbox.MachineOutboxStatus
 import com.viwa.android.data.local.outbox.MachineOutboxStore
+import com.viwa.android.data.remote.telemetry.mvp.cells.CellsContentReportAckSemantics
+import com.viwa.android.data.remote.telemetry.mvp.cells.RecipeMessageCodec
 import com.viwa.android.domain.telemetry.PourKind
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -29,6 +31,7 @@ class TelemetryAckRouter
 @Inject
 constructor(
     private val outboxStore: MachineOutboxStore,
+    private val recipeCodec: RecipeMessageCodec,
 ) {
     suspend fun routeAck(
         envelope: MvpWsEnvelopeDto,
@@ -37,6 +40,8 @@ constructor(
         loyaltyHandler: (suspend (String, JsonObject) -> Unit)?,
         technicianHandler: (suspend (String, JsonObject) -> Unit)? = null,
         pourBalanceHandler: (suspend (JsonObject) -> Unit)? = null,
+        cellsContentAckHandler: (suspend (String, JsonObject) -> Unit)? = null,
+        recipeAckHandler: (suspend (String, JsonObject) -> Unit)? = null,
         onUnprovenPourDedupAck: (suspend (MachineOutboxEntryEntity) -> Unit)? = null,
     ): AckRouteOutcome {
         val payload = envelope.payload?.jsonObject ?: return AckRouteOutcome.ORPHAN
@@ -112,6 +117,33 @@ constructor(
             return AckRouteOutcome.HANDLED
         }
 
+        if (
+            !correlation.isNullOrBlank() &&
+            recipeAckHandler != null &&
+            recipeCodec.isRecipeCommandAckPayload(payload)
+        ) {
+            recipeAckHandler(correlation, payload)
+            return AckRouteOutcome.HANDLED
+        }
+
+        if (
+            !correlation.isNullOrBlank() &&
+            recipeAckHandler != null &&
+            recipeCodec.isRecipeReportAckPayload(payload)
+        ) {
+            recipeAckHandler(correlation, payload)
+            return AckRouteOutcome.HANDLED
+        }
+
+        if (
+            !correlation.isNullOrBlank() &&
+            cellsContentAckHandler != null &&
+            CellsContentReportAckSemantics.isContentReportAckPayload(payload)
+        ) {
+            cellsContentAckHandler(correlation, payload)
+            return AckRouteOutcome.HANDLED
+        }
+
         val dailyRemaining = payload["dailyRemainingMl"]
         val volumeAfter = payload["volumeAfterMl"]
         if (dailyRemaining != null || volumeAfter != null) {
@@ -147,6 +179,7 @@ constructor(
         outboxErrorHandler: (suspend (MachineOutboxEntryEntity, String, String) -> Unit)?,
         loyaltyErrorHandler: (suspend (String?, String, String) -> Unit)?,
         technicianErrorHandler: (suspend (String?, String, String) -> Unit)? = null,
+        cellsContentErrorHandler: (suspend (String?, String, String) -> Unit)? = null,
     ): AckRouteOutcome {
         val correlation = envelope.correlationId
         val payload = envelope.payload?.jsonObject ?: return AckRouteOutcome.ORPHAN
@@ -160,6 +193,7 @@ constructor(
             outboxErrorHandler?.invoke(entry, code, message)
             return AckRouteOutcome.HANDLED
         }
+        cellsContentErrorHandler?.invoke(correlation, code, message)
         if (isTechnicianErrorPayload(payload, code)) {
             technicianErrorHandler?.invoke(correlation, code, message)
             return AckRouteOutcome.HANDLED

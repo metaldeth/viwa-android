@@ -11,7 +11,6 @@ import com.viwa.android.domain.model.SBPSettings
 import com.viwa.android.domain.model.SBPStatus
 import com.viwa.android.domain.model.CardPaymentResult
 import com.viwa.android.domain.offline.OfflineAuthorizationReason
-import com.viwa.android.domain.repository.NanoKassaRepository
 import com.viwa.android.domain.repository.SBPRepository
 import com.viwa.android.domain.repository.MachineSubscriptionPaymentRepository
 import com.viwa.android.domain.repository.TelemetryCellsRepository
@@ -58,6 +57,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -82,8 +82,14 @@ class DrinkListViewModelTest {
 
     @After
     fun tearDown() {
+        runBlocking {
+            DrinkListViewModelTestSupport.clearTrackedViewModels(mainDispatcher)
+        }
         Dispatchers.resetMain()
-        executor.shutdownNow()
+        executor.shutdown()
+        if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+            executor.shutdownNow()
+        }
     }
 
     private suspend fun awaitCondition(
@@ -132,7 +138,7 @@ class DrinkListViewModelTest {
         }
 
     private fun createTestTelemetry(): ViwaTelemetryService {
-        val mock = mockk<ViwaTelemetryService>(relaxUnitFun = true)
+        val mock = mockk<ViwaTelemetryService>(relaxed = true)
         every { mock.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Disconnected()).asStateFlow()
         every { mock.subscribeInfo } returns MutableStateFlow(null).asStateFlow()
@@ -168,12 +174,11 @@ class DrinkListViewModelTest {
         every { aqsi.terminalStatusFlow } returns MutableStateFlow("").asStateFlow()
         val cellsRepo = mockk<TelemetryCellsRepository>(relaxUnitFun = true)
         every { cellsRepo.snapshotFlow } returns MutableStateFlow(null).asStateFlow()
-        val sbpRepository = mockk<SBPRepository>(relaxUnitFun = true)
-        coEvery { sbpRepository.getSettings() } returns SBPSettings(timeoutInSeconds = 120)
+        val sbpRepository = DrinkListViewModelTestSupport.sbpRepositoryMock()
         val preparing = mockk<PreparingManager>(relaxUnitFun = true)
         every { preparing.customerPhase } returns
             MutableStateFlow(CustomerPreparingPhase.Idle).asStateFlow()
-        val nano = mockk<NanoKassaRepository>(relaxUnitFun = true)
+        val nano = DrinkListViewModelTestSupport.nanoKassaRepositoryMock()
         val networkTraffic = mockk<NetworkTrafficLogger>(relaxUnitFun = true)
         every { networkTraffic.entries } returns MutableStateFlow<List<NetworkTrafficEntry>>(emptyList()).asStateFlow()
         val controllerTraffic = mockk<ViwaControllerTrafficLogger>(relaxUnitFun = true)
@@ -202,6 +207,7 @@ class DrinkListViewModelTest {
                 cardPaymentOrchestrator,
                 mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
             )
+        DrinkListViewModelTestSupport.trackViewModel(vm)
         return vm to subscriptionUseCases
     }
 
@@ -421,5 +427,56 @@ class DrinkListViewModelTest {
             // then
             assertEquals(1, vm.state.value.subscriptionLevelsList?.size)
             assertEquals("Стандарт", vm.state.value.subscriptionLevelsList?.first()?.name)
+        }
+
+    @Test
+    fun loyaltyScan_resetsSubscriptionExitTimerOnlyForValidScan() =
+        runBlocking {
+            val validScans = MutableSharedFlow<String>(extraBufferCapacity = 1)
+            val invalidScans = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+            val telemetry = createTestTelemetry()
+            every { telemetry.loyaltyCardClientScans } returns validScans.asSharedFlow()
+            every { telemetry.invalidLoyaltyCardScans } returns invalidScans.asSharedFlow()
+            val (vm, _) = createViewModel(telemetryService = telemetry)
+            flushMain(24)
+            vm.setUiStateForUnitTests(
+                DrinkListUiState(
+                    scannedSubscriptionClientId = "660e8400-e29b-41d4-a716-446655440010",
+                    subscriptionExitRemainingSeconds = 3,
+                ),
+            )
+
+            invalidScans.emit(Unit)
+            flushMain()
+            assertEquals(3, vm.state.value.subscriptionExitRemainingSeconds)
+
+            validScans.emit("660e8400-e29b-41d4-a716-446655440010")
+            assertTrue(
+                awaitCondition {
+                    vm.state.value.subscriptionExitRemainingSeconds == 10
+                },
+            )
+        }
+
+    @Test
+    fun waterPourHold_pausesSubscriptionExitAndRestartsItOnRelease() =
+        runBlocking {
+            val (vm, _) = createViewModel()
+            flushMain(24)
+            vm.setUiStateForUnitTests(
+                DrinkListUiState(
+                    scannedSubscriptionClientId = "660e8400-e29b-41d4-a716-446655440010",
+                ),
+            )
+            vm.resetSubscriptionExitTimer()
+            assertTrue(vm.isSubscriptionExitTimerRunningForUnitTests())
+
+            vm.waterPourPointerDown()
+            assertFalse(vm.isSubscriptionExitTimerRunningForUnitTests())
+            assertEquals(10, vm.state.value.subscriptionExitRemainingSeconds)
+
+            vm.waterPourPointerUp()
+            assertTrue(vm.isSubscriptionExitTimerRunningForUnitTests())
+            assertEquals(10, vm.state.value.subscriptionExitRemainingSeconds)
         }
 }

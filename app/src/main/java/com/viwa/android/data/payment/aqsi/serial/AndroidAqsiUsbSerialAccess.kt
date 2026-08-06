@@ -6,13 +6,11 @@ import com.hoho.android.usbserial.driver.CdcAcmSerialDriver
 import com.hoho.android.usbserial.driver.ProbeTable
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialProber
+import com.viwa.android.hardware.serial.AqsiPillUsbIdentifiers
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import timber.log.Timber
-
-private const val AQSI_VENDOR_ID = 0x0FB9
-private const val AQSI_PRODUCT_ID = 0x2606
 
 @Singleton
 class AndroidAqsiUsbSerialAccess
@@ -25,7 +23,11 @@ constructor(
     private val serialProber: UsbSerialProber =
         UsbSerialProber(
             ProbeTable().apply {
-                addProduct(AQSI_VENDOR_ID, AQSI_PRODUCT_ID, CdcAcmSerialDriver::class.java)
+                addProduct(
+                    AqsiPillUsbIdentifiers.VENDOR_ID,
+                    AqsiPillUsbIdentifiers.PRODUCT_ID,
+                    CdcAcmSerialDriver::class.java,
+                )
             },
         )
 

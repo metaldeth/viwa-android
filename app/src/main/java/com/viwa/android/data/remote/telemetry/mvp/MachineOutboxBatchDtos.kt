@@ -16,6 +16,7 @@ data class MvpHelloCapabilitiesDto(
     val outboxBatch: MvpOutboxBatchCapabilityDto? = null,
     val offlineEntitlement: MvpOfflineEntitlementCapabilityDto? = null,
     val technicianKeys: com.viwa.android.data.remote.telemetry.mvp.offline.MvpTechnicianKeysCapabilityDto? = null,
+    val recipeSync: com.viwa.android.data.remote.telemetry.mvp.cells.MvpRecipeSyncCapabilityDto? = null,
 )
 
 @Serializable

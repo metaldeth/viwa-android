@@ -10,15 +10,17 @@ import com.viwa.android.data.remote.telemetry.mvp.EpochMillisClock
 import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryApiClient
 import com.viwa.android.data.remote.telemetry.mvp.TelemetryIsoTimestamps
 import com.viwa.android.data.repository.ConfigRepository
+import com.viwa.android.test.OkHttpTestClientRegistry
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.Dispatchers
-import okhttp3.OkHttpClient
+import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -28,6 +30,9 @@ import org.junit.rules.TemporaryFolder
 class AppUpdateCoordinatorTest {
     @get:Rule
     val tempDir = TemporaryFolder()
+
+    private val okHttpRegistry = OkHttpTestClientRegistry()
+    private val coordinatorScopes = mutableListOf<CoroutineScope>()
 
     private val configRepository = mockk<ConfigRepository>(relaxed = true)
     private val tokenProvider = mockk<com.viwa.android.data.remote.telemetry.mvp.MachineOutboxBearerTokenProvider>()
@@ -55,6 +60,13 @@ class AppUpdateCoordinatorTest {
         coEvery { tokenProvider.resolveBearerToken() } returns "jwt-test"
         every { criticalGuard.isCriticalOperationActive() } returns false
         coEvery { apkVerifier.readInstalledVersionCode() } returns 100
+    }
+
+    @After
+    fun tearDown() {
+        coordinatorScopes.forEach { it.cancel() }
+        coordinatorScopes.clear()
+        okHttpRegistry.shutdownAll()
     }
 
     @Test
@@ -88,12 +100,13 @@ class AppUpdateCoordinatorTest {
         every { context.packageName } returns "com.viwa.android"
         every { context.filesDir } returns tempDir.newFolder("files")
         val coordinatorScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        coordinatorScopes += coordinatorScope
         return AppUpdateCoordinator(
             context = context,
             configRepository = configRepository,
             tokenProvider = tokenProvider,
             apiClient = apiClient,
-            okHttpClient = OkHttpClient(),
+            okHttpClient = okHttpRegistry.newClient(),
             manifestVerifier = manifestVerifier,
             apkVerifier = apkVerifier,
             installLauncher = installLauncher,

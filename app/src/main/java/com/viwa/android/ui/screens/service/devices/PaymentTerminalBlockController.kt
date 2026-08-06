@@ -5,6 +5,9 @@ import com.viwa.android.data.payment.aqsi.UsbPaymentResult
 import com.viwa.android.data.payment.aqsi.UsbPaymentStatus
 import com.viwa.android.hardware.serial.SerialDeviceInfo
 import com.viwa.android.hardware.serial.ViwaSerialPort
+import com.viwa.android.services.payment.PillUsbLeaseResult
+import com.viwa.android.services.payment.PillUsbOwner
+import com.viwa.android.services.payment.PillUsbSessionOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -31,6 +34,7 @@ data class PaymentTerminalBlockState(
 class PaymentTerminalBlockController(
     private val aqsiUsbPaymentManager: AqsiUsbPaymentManager,
     private val serialPort: ViwaSerialPort,
+    private val pillUsbSessionOwner: PillUsbSessionOwner,
     parentScope: CoroutineScope,
 ) {
     private val supervisor = SupervisorJob(parentScope.coroutineContext.job)
@@ -100,18 +104,34 @@ class PaymentTerminalBlockController(
             testResult.update { null }
             isTestRunning.update { true }
             val message =
-                when (val result = aqsiUsbPaymentManager.testPayment()) {
-                    is UsbPaymentResult.Success ->
-                        "Успех: ${result.transactionId}, ${result.amountKopecks} коп."
-                    is UsbPaymentResult.Failure ->
-                        "Ошибка (${result.errorCode}): ${result.message}"
-                    UsbPaymentResult.Cancelled -> "Отменено"
-                    UsbPaymentResult.Timeout -> "Таймаут"
+                when {
+                    pillUsbSessionOwner.activeOwner.value == PillUsbOwner.PROVISIONING ->
+                        formatFailure(
+                            PAYMENT_TERMINAL_BUSY,
+                            "Терминал занят настройкой Pill",
+                        )
+                    else ->
+                        when (val result = aqsiUsbPaymentManager.testPayment()) {
+                            is UsbPaymentResult.Success ->
+                                "Успех: ${result.transactionId}, ${result.amountKopecks} коп."
+                            is UsbPaymentResult.Failure ->
+                                formatFailure(mapPaymentErrorCode(result.errorCode), result.message)
+                            UsbPaymentResult.Cancelled -> "Отменено"
+                            UsbPaymentResult.Timeout -> "Таймаут"
+                        }
                 }
             testResult.update { message }
             isTestRunning.update { false }
         }
     }
+
+    private fun mapPaymentErrorCode(errorCode: String): String =
+        when (errorCode) {
+            PillUsbLeaseResult.USB_SESSION_BUSY_CODE -> PAYMENT_TERMINAL_BUSY
+            else -> errorCode
+        }
+
+    private fun formatFailure(code: String, message: String): String = "Ошибка ($code): $message"
 
     fun close() {
         supervisor.cancel()
@@ -119,5 +139,6 @@ class PaymentTerminalBlockController(
 
     private companion object {
         const val EXCHANGE_TAIL_SIZE = 18
+        const val PAYMENT_TERMINAL_BUSY = "PAYMENT_TERMINAL_BUSY"
     }
 }

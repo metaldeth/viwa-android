@@ -62,7 +62,6 @@ private val GaugeTickMinorColor = Color.White.copy(alpha = 0.16f)
 private val GaugeScaleTextColor = Color(0xFFA3A3A3)
 private val GaugeCenterMuted = Color(0xFFA3A3A3)
 private val GaugeMetricColor = Color(0xFFF5F5F5)
-private val GaugeUnitColor = Color(0xFFF5F5F5).copy(alpha = 0.85f)
 
 private const val WebGaugeWidth = 300f
 private const val WebGaugeHeight = 250f
@@ -290,6 +289,7 @@ fun ViwaSubscribePromoCard(
                                 onPrimaryClick = onOpenSubscriptionPurchase,
                                 onDismiss = onDismiss,
                                 remainingSeconds = state.subscriptionExitRemainingSeconds,
+                                showPrimary = false,
                             )
                         }
                     }
@@ -617,16 +617,12 @@ private fun ViwaSubscriptionVolumeGauge(
                 }
             }
 
-            // Центр = только цифра. «л» — оверлей справа (не участвует в центре).
+            // Центр = только цифра; единица остаётся в подписи лимита.
             // Вертикаль: метрика в cy дуги; подписи — спутники выше/ниже (не тянут блок вверх).
             val arcCenterYFrac = (WebCenterY - WebVisualTop) / WebVisualHeight
             val toArcFromBoxCenter = gaugeHeightDp * (arcCenterYFrac - 0.5f)
-            val metricSp = (72f * typoScale).coerceAtLeast(38f * s)
-            val unitSp = (30f * typoScale).coerceAtLeast(18f * s)
+            val metricSp = (72f * typoScale).coerceAtLeast(38f * s) * 0.9f
             val captionSp = (15f * typoScale).coerceAtLeast(11f * s)
-            // Половина ширины числа ≈ 0.32em на символ (Montserrat SemiBold).
-            val unitOffsetX = metricSp * (0.32f * remainingLiters.length + 0.12f)
-            val unitOffsetY = metricSp * 0.14f
             Box(modifier = Modifier.fillMaxWidth().height(gaugeHeightDp.dp)) {
                 Box(
                     modifier =
@@ -647,28 +643,16 @@ private fun ViwaSubscriptionVolumeGauge(
                         maxLines = 1,
                         modifier = Modifier.offset(y = (-(metricSp * 0.72f)).dp),
                     )
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = remainingLiters,
-                            fontSize = metricSp.sp,
-                            lineHeight = metricSp.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            fontFamily = MontserratFamily,
-                            color = GaugeMetricColor,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                        )
-                        Text(
-                            text = "л",
-                            fontSize = unitSp.sp,
-                            lineHeight = unitSp.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            fontFamily = MontserratFamily,
-                            color = GaugeUnitColor,
-                            maxLines = 1,
-                            modifier = Modifier.offset(x = unitOffsetX.dp, y = unitOffsetY.dp),
-                        )
-                    }
+                    Text(
+                        text = remainingLiters,
+                        fontSize = metricSp.sp,
+                        lineHeight = metricSp.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = MontserratFamily,
+                        color = GaugeMetricColor,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                    )
                     Text(
                         text = "ИЗ $limitLiters Л",
                         fontSize = captionSp.sp,

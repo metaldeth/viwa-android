@@ -10,9 +10,19 @@ plugins {
 import java.io.FileInputStream
 import java.util.Properties
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 android {
     namespace = "com.viwa.android"
     compileSdk = 35
+
+    sourceSets {
+        getByName("test") {
+            assets.srcDir("$projectDir/schemas")
+        }
+    }
 
     signingConfigs {
         create("release") {
@@ -51,8 +61,8 @@ android {
         applicationId = "com.viwa.android"
         minSdk = 25
         targetSdk = 35
-        versionCode = 203
-        versionName = "26.08.05.01"
+        versionCode = 204
+        versionName = "26.08.05.02"
 
         testInstrumentationRunner = "com.viwa.android.ViwaHiltTestRunner"
 
@@ -141,7 +151,10 @@ android {
         unitTests {
             isReturnDefaultValues = true
             all {
-                it.maxHeapSize = "1024m"
+                // Single fork: avoids OkHttp TaskRunner / coroutine accumulation across parallel JVMs on Windows.
+                it.maxParallelForks = 1
+                it.maxHeapSize = "1536m"
+                it.systemProperty("junit.jupiter.execution.parallel.enabled", "false")
             }
         }
     }
@@ -204,6 +217,8 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.mockwebserver)
     testImplementation(libs.room.testing)
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
 
     androidTestImplementation(libs.hilt.android.testing)
     androidTestImplementation(libs.androidx.test.junit)

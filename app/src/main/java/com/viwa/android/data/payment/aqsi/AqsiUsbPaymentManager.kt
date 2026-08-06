@@ -12,6 +12,11 @@ import com.viwa.android.data.payment.aqsi.network.AqsiPillNetworkRouter
 import com.viwa.android.data.payment.aqsi.serial.AqsiSerialConfig
 import com.viwa.android.data.payment.aqsi.serial.AqsiSerialLink
 import com.viwa.android.data.payment.aqsi.serial.AqsiUsbSerialAccess
+import com.viwa.android.hardware.serial.AqsiPillUsbIdentifiers
+import com.viwa.android.services.payment.ConcurrentPaymentGuard
+import com.viwa.android.services.payment.PillUsbLeaseResult
+import com.viwa.android.services.payment.PillUsbOwner
+import com.viwa.android.services.payment.PillUsbSessionOwner
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.Socket
@@ -28,8 +33,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 
-private const val AQSI_VENDOR_ID = 0x0FB9
-private const val AQSI_PRODUCT_ID = 0x2606
 private const val AQSI_BAUD_RATE = 115200
 private const val AQSI_PROBE_TIMEOUT_MS = 5_000L
 private const val AQSI_PAYMENT_TIMEOUT_MS = 180_000L
@@ -57,6 +60,8 @@ constructor(
     private val audit: AqsiPaymentAuditLogger,
     private val pillNetworkRouter: AqsiPillNetworkRouter,
     private val hostNetworkBootstrap: AqsiPillHostNetworkBootstrap,
+    private val pillUsbSessionOwner: PillUsbSessionOwner,
+    private val concurrentPaymentGuard: ConcurrentPaymentGuard,
 ) {
     private val _stateFlow = MutableStateFlow(UsbPaymentStatus.IDLE)
     private val _terminalStatusFlow = MutableStateFlow("")
@@ -73,9 +78,11 @@ constructor(
     val terminalStatusFlow: StateFlow<String> = _terminalStatusFlow.asStateFlow()
     val exchangeLogFlow: StateFlow<List<String>> = _exchangeLogFlow.asStateFlow()
 
-    suspend fun pay(amountKopecks: Int): UsbPaymentResult = runArcus2Payment(amountKopecks)
+    suspend fun pay(amountKopecks: Int): UsbPaymentResult =
+        concurrentPaymentGuard.runPayment { runArcus2Payment(amountKopecks) }
 
-    suspend fun testPayment(): UsbPaymentResult = runArcus2Payment(100)
+    suspend fun testPayment(): UsbPaymentResult =
+        concurrentPaymentGuard.runPayment { runArcus2Payment(100) }
 
     suspend fun cancel() {
         cancelRequested = true
@@ -181,16 +188,21 @@ constructor(
             cancelRequested = false
             _stateFlow.value = UsbPaymentStatus.CONNECTING
             _terminalStatusFlow.value = "Подключаемся к платёжному терминалу"
-            val networkStatus = hostNetworkBootstrap.runWhenPillPresent()
+            val networkStatus = hostNetworkBootstrap.runForPayment()
             appendExchangeLog(
-                "NET proxyCleared=${networkStatus.httpProxyCleared} ncm=${networkStatus.ncmReady} " +
+                "NET paymentFastPath=${networkStatus.paymentFastPath} " +
+                    "proxyCleared=${networkStatus.httpProxyCleared} ncm=${networkStatus.ncmReady} " +
                     "wifiBound=${networkStatus.wifiProcessBound} wifiProbe=${networkStatus.wifiInternetProbe} " +
                     "socks=${networkStatus.socksStarted}",
             )
-            if (!networkStatus.ncmReady) {
+            if (!networkStatus.paymentFastPath && !networkStatus.ncmReady) {
                 Timber.tag(TAG_AQSI).w(
                     "Arcus2: NCM host link not ready (eth2 без %s) — CONNECT к SOCKS может не пройти",
                     AqsiPillNetworkConstants.PILL_GATEWAY_HOST,
+                )
+            } else if (networkStatus.paymentFastPath && !networkStatus.ncmReady) {
+                Timber.tag(TAG_AQSI).i(
+                    "Arcus2 payment fast-path: NCM not ready, direct CONNECT over Wi‑Fi expected",
                 )
             }
             if (!networkStatus.wifiInternetProbe) {
@@ -204,6 +216,18 @@ constructor(
                 return@withContext fail(driverResult.errorCode, driverResult.message)
             }
             val driver = (driverResult as AssignedDriverResult.Success).driver
+            val leaseResult =
+                pillUsbSessionOwner.acquire(
+                    PillUsbOwner.CUSTOMER_PAYMENT,
+                    "Arcus2 payment amountKopecks=$amountKopecks",
+                )
+            val grantedLease =
+                when (leaseResult) {
+                    is PillUsbLeaseResult.Denied ->
+                        return@withContext fail(leaseResult.code, leaseResult.message)
+                    is PillUsbLeaseResult.Granted -> leaseResult.lease
+                }
+            try {
             val opened =
                 usbSerialAccess.openConnection(
                     driver = driver,
@@ -290,6 +314,9 @@ constructor(
                 usbConnection.close()
             }
             result ?: fail("AQSI_EXCEPTION", "Неизвестный результат оплаты")
+            } finally {
+                pillUsbSessionOwner.release(grantedLease)
+            }
         }
 
     private suspend fun findAssignedAqsiDriver(): AssignedDriverResult {
@@ -307,10 +334,7 @@ constructor(
                     errorCode = "AQSI_DEVICE_NOT_FOUND",
                     message = "Назначенный порт платёжника не найден: $assignedName",
                 )
-        if (
-            driver.device.vendorId != AQSI_VENDOR_ID ||
-            driver.device.productId != AQSI_PRODUCT_ID
-        ) {
+        if (!AqsiPillUsbIdentifiers.isAqsiPill(driver.device)) {
             return AssignedDriverResult.Failure(
                 errorCode = "AQSI_WRONG_DEVICE",
                 message =

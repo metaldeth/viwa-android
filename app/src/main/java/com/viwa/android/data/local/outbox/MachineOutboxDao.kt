@@ -19,7 +19,14 @@ interface MachineOutboxDao {
         SELECT * FROM machine_outbox
         WHERE status IN ('PENDING', 'IN_FLIGHT')
         AND next_retry_at_ms <= :nowMs
-        ORDER BY created_at_ms ASC
+        ORDER BY
+            CASE kind
+                WHEN 'cells.recipe.report' THEN 0
+                WHEN 'cells.recipe.command.ack' THEN 1
+                ELSE 2
+            END ASC,
+            created_at_ms ASC,
+            local_id ASC
         LIMIT :limit
         """,
     )
@@ -39,6 +46,31 @@ interface MachineOutboxDao {
 
     @Query("SELECT COUNT(*) FROM machine_outbox WHERE status IN ('PENDING', 'IN_FLIGHT')")
     suspend fun countPendingOrInFlight(): Int
+
+    @Query(
+        """
+        SELECT EXISTS(
+            SELECT 1 FROM machine_outbox
+            WHERE kind IN ('cells.recipe.report', 'cells.recipe.command.ack')
+            AND status = 'PENDING'
+            AND next_retry_at_ms <= :nowMs
+        )
+        """,
+    )
+    suspend fun hasUnsentRecipeEntries(nowMs: Long): Boolean
+
+    @Query(
+        """
+        SELECT EXISTS(
+            SELECT 1 FROM machine_outbox
+            WHERE kind = 'cells.recipe.report'
+            AND status IN ('PENDING', 'IN_FLIGHT')
+            AND next_retry_at_ms <= :nowMs
+            AND idempotency_key LIKE :cellIdPrefix || '|%'
+        )
+        """,
+    )
+    suspend fun hasUnsentRecipeReportForCell(cellIdPrefix: String, nowMs: Long): Boolean
 
     @Query(
         """

@@ -13,6 +13,7 @@ import com.viwa.android.domain.telemetry.PlainWaterType
 import com.viwa.android.domain.telemetry.PourKind
 
 import com.viwa.android.domain.telemetry.TelemetryPourMath
+import com.viwa.android.domain.telemetry.WaterUsageReportSnapshot
 
 import kotlinx.serialization.json.int
 
@@ -29,6 +30,39 @@ import org.junit.Test
 
 
 class TelemetryPourMessageCodecTest {
+
+    @Test
+    fun `encodePayload contains optional recipe fields when present`() {
+        val pour =
+            DispenseTelemetryFactory.flavoredPourEvent(
+                requestUuid = "880e8400-e29b-41d4-a716-446655440099",
+                volumeMl = 300,
+                productId = "prod-uuid",
+                productNameSnapshot = "Cola",
+                concentration = DrinkConcentration.Standard,
+                dosage = DrinkDosage(conversionFactor = 5.5, drinkVolume = 300, product = 30.0, water = 270.0),
+                clientId = "client-1",
+            )
+        val payload = TelemetryPourMessageCodec.encodePayload(pour)
+        assertEquals(300, payload["recipeDrinkVolumeMl"]!!.jsonPrimitive.int)
+        assertEquals(270.0, payload["recipeWaterMl"]!!.jsonPrimitive.content.toDouble(), 0.001)
+        assertEquals(30.0, payload["recipeProductMl"]!!.jsonPrimitive.content.toDouble(), 0.001)
+        assertEquals(5.5, payload["conversionFactor"]!!.jsonPrimitive.content.toDouble(), 0.001)
+    }
+
+    @Test
+    fun `encodePayload omits recipe fields for plain hold`() {
+        val pour =
+            DispenseTelemetryFactory.plainPourEvent(
+                requestUuid = "req-plain",
+                volumeMl = 142,
+                clientId = "client-1",
+                plainWaterType = PlainWaterType.COLD,
+            )
+        val payload = TelemetryPourMessageCodec.encodePayload(pour)
+        assertFalse(payload.containsKey("recipeDrinkVolumeMl"))
+        assertFalse(payload.containsKey("conversionFactor"))
+    }
 
     @Test
 
@@ -170,6 +204,14 @@ class TelemetryPaidCompleteMessageCodecTest {
 
         assertEquals(77, payload["syrupMlActual"]!!.jsonPrimitive.int)
 
+        assertEquals(300, payload["recipeDrinkVolumeMl"]!!.jsonPrimitive.int)
+
+        assertEquals(270.0, payload["recipeWaterMl"]!!.jsonPrimitive.content.toDouble(), 0.001)
+
+        assertEquals(30.0, payload["recipeProductMl"]!!.jsonPrimitive.content.toDouble(), 0.001)
+
+        assertEquals(0.5, payload["conversionFactor"]!!.jsonPrimitive.content.toDouble(), 0.001)
+
         assertFalse(payload.containsKey("pour"))
 
         assertFalse(payload.containsKey("soldAt"))
@@ -182,12 +224,22 @@ class TelemetryPaidCompleteMessageCodecTest {
 
 
 
-class TelemetryPourMathTest {
-
+class TelemetryWaterUsageMessageCodecTest {
     @Test
+    fun `encodePayload contains absolute total and reportedAt`() {
+        val payload =
+            TelemetryWaterUsageMessageCodec.encodePayload(
+                WaterUsageReportSnapshot(totalMl = 4321, reportedAt = "2026-08-05T12:34:56.789Z"),
+            )
+        assertEquals("machine.water.usage.report", TelemetryWaterUsageMessageCodec.WIRE_TYPE)
+        assertEquals(4321, payload["totalMl"]!!.jsonPrimitive.int)
+        assertEquals("2026-08-05T12:34:56.789Z", payload["reportedAt"]!!.jsonPrimitive.content)
+    }
+}
 
+class TelemetryPourMathTest {
+    @Test
     fun `syrup ml matches canonical 300 base table`() {
-
         val dosage = 30.0
 
         assertEquals(27, TelemetryPourMath.syrupMlActual(dosage, 300, 300, 0.9))
@@ -201,9 +253,7 @@ class TelemetryPourMathTest {
         assertEquals(70, TelemetryPourMath.syrupMlActual(dosage, 300, 700, 1.0))
 
         assertEquals(77, TelemetryPourMath.syrupMlActual(dosage, 300, 700, 1.1))
-
     }
-
 }
 
 

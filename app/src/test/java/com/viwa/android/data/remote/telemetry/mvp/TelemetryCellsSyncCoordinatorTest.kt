@@ -1,7 +1,24 @@
 package com.viwa.android.data.remote.telemetry.mvp
 
+import com.viwa.android.data.local.outbox.RecipeOutboxTestFixtures
+import com.viwa.android.data.local.recipe.CellAssignmentBaseStore
+import com.viwa.android.data.local.recipe.CellEffectiveRecipeStore
+import com.viwa.android.data.local.recipe.FakeCellAssignmentBaseDao
+import com.viwa.android.data.local.recipe.FakeCellEffectiveRecipeDao
 import com.viwa.android.data.remote.telemetry.mvp.cells.CellVolumeUpdateWire
+import com.viwa.android.data.remote.telemetry.mvp.cells.CellsContentReportAckAwaiter
+import com.viwa.android.data.remote.telemetry.mvp.cells.RecipeMessageCodec
+import com.viwa.android.data.remote.telemetry.mvp.cells.RecipeSyncCoordinator
 import com.viwa.android.data.remote.telemetry.mvp.cells.TelemetryCellsMessageCodec
+import com.viwa.android.data.remote.telemetry.mvp.cells.RECIPE_WS_MAX_REPORT_CELLS
+import com.viwa.android.data.remote.telemetry.mvp.cells.RECIPE_WS_TYPE_REPORT
+import com.viwa.android.data.remote.telemetry.mvp.cells.RECIPE_WS_TYPE_SYNC_REQUEST
+import com.viwa.android.data.remote.telemetry.mvp.cells.MvpRecipeSyncCapabilityDto
+import com.viwa.android.data.local.recipe.CellEffectiveRecipeEntity
+import com.viwa.android.domain.recipe.CellEffectiveRecipe
+import com.viwa.android.domain.recipe.CellEffectiveRecipeDefaults
+import com.viwa.android.domain.recipe.RecipeCanonical
+import com.viwa.android.domain.recipe.CellEffectiveRecipeSource
 import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.hardware.controller.FlowTemperatureStore
 import com.viwa.android.data.repository.TelemetryCellsRepositoryImpl
@@ -18,6 +35,12 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
+import com.viwa.android.domain.recipe.RecipeCommandAckEmitter
+import com.viwa.android.domain.recipe.RecipeCommandApplier
+import com.viwa.android.domain.recipe.RecipeCommandInbox
+import com.viwa.android.domain.recipe.RecipeSyncOrchestrator
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -49,7 +72,32 @@ class TelemetryCellsSyncCoordinatorTest {
     private lateinit var waterCalibrationService: WaterCalibrationService
     private lateinit var conversionFactorMigration: SyrupConversionFactorMigration
     private lateinit var syrupCalibrationInventory: SyrupCalibrationInventory
+    private lateinit var contentReportAckAwaiter: CellsContentReportAckAwaiter
+    private lateinit var recipeDao: FakeCellEffectiveRecipeDao
+    private lateinit var outboxStack: RecipeOutboxTestFixtures.RecipeOutboxTestStack
+    private lateinit var outboxDrainCoordinator: MachineOutboxDrainCoordinator
+    private lateinit var effectiveRecipeStore: CellEffectiveRecipeStore
+    private lateinit var recipeMessageCodec: RecipeMessageCodec
+    private lateinit var recipeSyncCoordinator: RecipeSyncCoordinator
+    private lateinit var recipeSyncOrchestrator: RecipeSyncOrchestrator
+    private lateinit var testScope: TestScope
     private lateinit var coordinator: TelemetryCellsSyncCoordinator
+
+    private val defaultHello =
+        MvpHelloPayloadDto(
+            serialNumber = "VIWA-TEST",
+            protocolVersion = 3,
+        )
+
+    private val recipeHello =
+        MvpHelloPayloadDto(
+            serialNumber = "VIWA-TEST",
+            protocolVersion = 4,
+            capabilities =
+                MvpHelloCapabilitiesDto(
+                    recipeSync = MvpRecipeSyncCapabilityDto(),
+                ),
+        )
 
     @Before
     fun setUp() {
@@ -63,6 +111,40 @@ class TelemetryCellsSyncCoordinatorTest {
         coEvery { waterCalibrationService.resolvePumpTenthsForUplink() } returns 3
         coEvery { waterCalibrationService.readPumpTenths() } returns Result.failure(IllegalStateException("offline"))
         coEvery { waterCalibrationService.writePumpTenths(any()) } returns Result.success(Unit)
+        contentReportAckAwaiter = CellsContentReportAckAwaiter()
+        recipeMessageCodec = RecipeMessageCodec()
+        testScope = TestScope(UnconfinedTestDispatcher())
+        recipeDao = FakeCellEffectiveRecipeDao()
+        outboxStack = RecipeOutboxTestFixtures.createOutboxStack(recipeDao = recipeDao)
+        outboxDrainCoordinator =
+            MachineOutboxDrainCoordinator(
+                outboxStore = outboxStack.machineOutboxStore,
+                wsManagerLazy =
+                    object : dagger.Lazy<MvpTelemetryWebSocketManager> {
+                        override fun get(): MvpTelemetryWebSocketManager = wsManager
+                    },
+                apiClient = mockk(relaxed = true),
+                bearerTokenProvider = mockk(relaxed = true),
+                recipeOutboxStore = outboxStack.recipeOutboxStore,
+                appScope = testScope,
+            )
+        effectiveRecipeStore =
+            CellEffectiveRecipeStore(
+                dao = recipeDao,
+                featureEnabled = { false },
+            )
+        recipeSyncCoordinator = RecipeSyncCoordinator.forTests(recipeMessageCodec)
+        val applier = RecipeCommandApplier(effectiveRecipeStore)
+        recipeSyncOrchestrator =
+            RecipeSyncOrchestrator(
+                wsCoordinator = recipeSyncCoordinator,
+                inbox = outboxStack.inbox(applier, effectiveRecipeStore),
+                effectiveRecipeStore = effectiveRecipeStore,
+                assignmentBaseStore =
+                    CellAssignmentBaseStore.forTests(
+                        dao = FakeCellAssignmentBaseDao(),
+                    ),
+            )
         coordinator =
             TelemetryCellsSyncCoordinator(
                 repository = repository,
@@ -70,10 +152,20 @@ class TelemetryCellsSyncCoordinatorTest {
                 schemaProvider = schemaProvider,
                 uuidAllocator = uuidAllocator,
                 wsManager = wsManager,
+                contentReportAckAwaiter = contentReportAckAwaiter,
                 waterCalibrationService = waterCalibrationService,
                 conversionFactorMigration = conversionFactorMigration,
                 syrupCalibrationInventory = syrupCalibrationInventory,
+                effectiveRecipeStore = effectiveRecipeStore,
+                recipeMessageCodec = recipeMessageCodec,
+                recipeSyncCoordinator = recipeSyncCoordinator,
+                recipeSyncOrchestrator = recipeSyncOrchestrator,
+                recipeOutboxStore = outboxStack.recipeOutboxStore,
+                outboxDrainCoordinator = outboxDrainCoordinator,
+                appScope = testScope,
             )
+        coEvery { wsManager.fsmPhase() } returns TelemetryConnectionPhase.Active
+        coEvery { wsManager.currentSessionGeneration() } returns 1L
         coEvery { wsManager.sendEnvelope(any(), any(), any()) } returns Result.success("test-message-id")
     }
 
@@ -101,7 +193,7 @@ class TelemetryCellsSyncCoordinatorTest {
         coEvery { wsManager.sendEnvelope("cells.content.report", any(), any()) } returns Result.success("test-message-id")
 
         // when
-        coordinator.onWebSocketHello()
+        coordinator.onWebSocketHello(defaultHello)
 
         // then
         coVerify { wsManager.sendEnvelope("cells.schema.report", any(), any()) }
@@ -183,6 +275,157 @@ class TelemetryCellsSyncCoordinatorTest {
         assertEquals("prod-cherry", cellJson["productUuid"]!!.jsonPrimitive.content)
         assertFalse(cellJson.containsKey("productName"))
         assertFalse(cellJson.containsKey("tasteMediaKey"))
+        assertFalse(cellJson.containsKey("operatorOverride"))
+    }
+
+    @Test
+    fun `operator taste override persists only after applied ack`() = runTest {
+        // given
+        repository.replaceSnapshot(
+            TelemetryCellsSnapshot(
+                cells = listOf(sampleCell(uuid = "u1", cellNumber = 1, productUuid = "old")),
+            ),
+        )
+        val messageIdSlot = slot<String>()
+        coEvery {
+            wsManager.sendEnvelope("cells.content.report", any(), capture(messageIdSlot))
+        } answers {
+            val messageId = messageIdSlot.captured
+            contentReportAckAwaiter.completeAck(
+                messageId,
+                buildJsonObject {
+                    put("ok", true)
+                    put("applied", 1)
+                },
+            )
+            Result.success(messageId)
+        }
+        val edited = sampleCell(uuid = "u1", cellNumber = 1, productUuid = "new-prod", dosage1Price = 9900)
+
+        // when
+        val result = coordinator.sendOperatorTasteOverrideAwaitingAck(edited)
+
+        // then
+        assertTrue(result.isSuccess)
+        assertEquals("new-prod", repository.getSnapshot()!!.cells.single().productUuid)
+        assertEquals(9900, repository.getSnapshot()!!.cells.single().dosage1Price)
+    }
+
+    @Test
+    fun `operator taste override does not persist when applied is zero`() = runTest {
+        // given
+        repository.replaceSnapshot(
+            TelemetryCellsSnapshot(
+                cells = listOf(sampleCell(uuid = "u1", cellNumber = 1, productUuid = "old")),
+            ),
+        )
+        val messageIdSlot = slot<String>()
+        coEvery {
+            wsManager.sendEnvelope("cells.content.report", any(), capture(messageIdSlot))
+        } answers {
+            val messageId = messageIdSlot.captured
+            contentReportAckAwaiter.completeAck(
+                messageId,
+                buildJsonObject {
+                    put("ok", true)
+                    put("applied", 0)
+                },
+            )
+            Result.success(messageId)
+        }
+        val edited = sampleCell(uuid = "u1", cellNumber = 1, productUuid = "new-prod")
+
+        // when
+        val result = coordinator.sendOperatorTasteOverrideAwaitingAck(edited)
+
+        // then
+        assertTrue(result.isFailure)
+        assertEquals("old", repository.getSnapshot()!!.cells.single().productUuid)
+    }
+
+    @Test
+    fun `operator assign A4 sends content override only without embedded recipe`() = runTest {
+        // given
+        repository.replaceSnapshot(
+            TelemetryCellsSnapshot(
+                cells = listOf(sampleCell(uuid = "u1", cellNumber = 1, productUuid = "old-prod")),
+            ),
+        )
+        val typeSlot = slot<String>()
+        val payloadSlot = slot<kotlinx.serialization.json.JsonObject>()
+        val messageIdSlot = slot<String>()
+        coEvery {
+            wsManager.sendEnvelope(capture(typeSlot), capture(payloadSlot), capture(messageIdSlot))
+        } answers {
+            contentReportAckAwaiter.completeAck(
+                messageIdSlot.captured,
+                buildJsonObject {
+                    put("ok", true)
+                    put("applied", 1)
+                },
+            )
+            Result.success(messageIdSlot.captured)
+        }
+        val edited =
+            sampleCell(
+                uuid = "u1",
+                cellNumber = 1,
+                productUuid = "new-prod",
+                productName = "New taste",
+                dosage1Price = 9900,
+            )
+
+        // when
+        val result = coordinator.sendOperatorTasteOverrideAwaitingAck(edited)
+
+        // then
+        assertTrue(result.isSuccess)
+        assertEquals("cells.content.report", typeSlot.captured)
+        val cellJson = payloadSlot.captured["cells"]!!.jsonArray.single().jsonObject
+        assertEquals("true", cellJson["operatorOverride"]!!.jsonPrimitive.content)
+        assertFalse(cellJson.containsKey("effectiveRecipe"))
+        assertFalse(cellJson.containsKey("recipe"))
+        coVerify(exactly = 0) { wsManager.sendEnvelope(RECIPE_WS_TYPE_REPORT, any(), any()) }
+    }
+
+    @Test
+    fun `operator taste override does not persist when websocket send fails`() = runTest {
+        // given
+        repository.replaceSnapshot(
+            TelemetryCellsSnapshot(
+                cells = listOf(sampleCell(uuid = "u1", cellNumber = 1, productUuid = "old")),
+            ),
+        )
+        coEvery { wsManager.sendEnvelope(any(), any(), any()) } returns
+            Result.failure(IllegalStateException("WebSocket not connected"))
+        val edited = sampleCell(uuid = "u1", cellNumber = 1, productUuid = "new-prod")
+
+        // when
+        val result = coordinator.sendOperatorTasteOverrideAwaitingAck(edited)
+
+        // then
+        assertTrue(result.isFailure)
+        assertEquals("old", repository.getSnapshot()!!.cells.single().productUuid)
+    }
+
+    @Test
+    fun `content change returns failure when websocket send fails but keeps local snapshot`() = runTest {
+        // given
+        repository.replaceSnapshot(
+            TelemetryCellsSnapshot(
+                cells = listOf(sampleCell(uuid = "u1", cellNumber = 1)),
+            ),
+        )
+        coEvery { wsManager.sendEnvelope(any(), any(), any()) } returns
+            Result.failure(IllegalStateException("WebSocket not connected"))
+        val edited = sampleCell(uuid = "u1", cellNumber = 1, productUuid = "prod")
+
+        // when
+        val result = coordinator.onLocalContentChange(listOf(edited))
+
+        // then
+        assertTrue(result.isFailure)
+        assertEquals("prod", repository.getSnapshot()!!.cells.single().productUuid)
     }
 
     @Test
@@ -246,9 +489,9 @@ class TelemetryCellsSyncCoordinatorTest {
         coEvery { wsManager.sendEnvelope("machine.calibration.report", any(), any()) } returns Result.success("test-message-id")
 
         // when — first reconnect
-        coordinator.onWebSocketHello()
+        coordinator.onWebSocketHello(defaultHello)
         // when — second reconnect
-        coordinator.onWebSocketHello()
+        coordinator.onWebSocketHello(defaultHello)
 
         // then
         coVerify(exactly = 2) { wsManager.sendEnvelope("cells.schema.report", any(), any()) }
@@ -281,10 +524,10 @@ class TelemetryCellsSyncCoordinatorTest {
         telemetryCoordinator.saveTelemetryConfig(TelemetryConfig())
 
         // when — simulate WS hello callback
-        ws.cellsSyncHandler?.onWebSocketHello()
+        ws.cellsSyncHandler?.onWebSocketHello(defaultHello)
 
         // then
-        coVerify(exactly = 1) { cellsSync.onWebSocketHello() }
+            coVerify(exactly = 1) { cellsSync.onWebSocketHello(any<MvpHelloPayloadDto>()) }
     }
 
     @Test
@@ -362,7 +605,7 @@ class TelemetryCellsSyncCoordinatorTest {
         } returns Result.success("test-message-id")
 
         // when
-        coordinator.onWebSocketHello()
+        coordinator.onWebSocketHello(defaultHello)
 
         // then
         coVerify { waterCalibrationService.writePumpTenths(180) }
@@ -428,6 +671,177 @@ class TelemetryCellsSyncCoordinatorTest {
 
         // then
         assertEquals(5.5, repository.getSnapshot()!!.cells.single().conversionFactor, 0.0001)
+    }
+
+    @Test
+    fun `recipe reconnect sends sync request when no complete effective rows`() = runTest {
+        val dao = FakeCellEffectiveRecipeDao()
+        val localRecipeSync = RecipeSyncCoordinator.forTests(recipeMessageCodec)
+        val recipeCoordinatorWithSync =
+            createCoordinator(
+                recipeStore =
+                    CellEffectiveRecipeStore(
+                        dao = dao,
+                        featureEnabled = { true },
+                    ),
+                recipeSync = localRecipeSync,
+                recipeDao = dao,
+            )
+        coEvery { wsManager.sendEnvelope(any(), any(), any()) } returns Result.success("mid")
+
+        recipeCoordinatorWithSync.onWebSocketHello(recipeHello)
+
+        coVerify { wsManager.sendEnvelope(RECIPE_WS_TYPE_SYNC_REQUEST, any(), any()) }
+        coVerify(exactly = 0) { wsManager.sendEnvelope(RECIPE_WS_TYPE_REPORT, any(), any()) }
+        assertTrue(localRecipeSync.isManagedModeActive())
+        assertTrue(localRecipeSync.isUplinkPhaseComplete())
+    }
+
+    @Test
+    fun `recipe reconnect sends report batches after schema with integer generations`() = runTest {
+        val dao = FakeCellEffectiveRecipeDao()
+        val recipeStore =
+            CellEffectiveRecipeStore(
+                dao = dao,
+                featureEnabled = { true },
+                clock = { 1_000L },
+            )
+        val recipeCoordinator =
+            createCoordinator(
+                recipeStore = recipeStore,
+                recipeSync = RecipeSyncCoordinator.forTests(recipeMessageCodec),
+                recipeDao = dao,
+            )
+        val complete =
+            CellEffectiveRecipe(
+                cellId = "cell-1",
+                baseDrinkVolumeMl = 300,
+                waterDeciMl = 2700,
+                productDeciMl = 300,
+                fingerprint = CellEffectiveRecipeDefaults.legacyFingerprint,
+                source = CellEffectiveRecipeSource.COMMAND,
+                productId = "prod-1",
+                baseVersionId = "base-1",
+                lastAppliedCommandGeneration = 7L,
+                cancelThroughGeneration = 5L,
+                updatedAtMs = 1_000L,
+            )
+        dao.upsert(CellEffectiveRecipeEntity.fromDomain(complete))
+        val payloadSlot = slot<kotlinx.serialization.json.JsonObject>()
+        coEvery {
+            wsManager.sendEnvelope(RECIPE_WS_TYPE_REPORT, capture(payloadSlot), any())
+        } returns Result.success("mid")
+        coEvery { wsManager.sendEnvelope("cells.schema.report", any(), any()) } returns Result.success("mid")
+        coEvery { wsManager.sendEnvelope("machine.calibration.report", any(), any()) } returns Result.success("mid")
+
+        recipeCoordinator.onWebSocketHello(recipeHello)
+
+        coVerify { wsManager.sendEnvelope(RECIPE_WS_TYPE_REPORT, any(), any()) }
+        val cellJson = payloadSlot.captured["cells"]!!.jsonArray.single().jsonObject
+        assertEquals("7", cellJson["lastAppliedCommandGeneration"]!!.jsonPrimitive.content)
+        assertEquals("5", cellJson["cancelThroughGeneration"]!!.jsonPrimitive.content)
+        assertEquals("0", cellJson["deviceReportRevision"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `recipe report splits into batches of 64 cells`() = runTest {
+        val dao = FakeCellEffectiveRecipeDao()
+        val recipeStore =
+            CellEffectiveRecipeStore(
+                dao = dao,
+                featureEnabled = { true },
+            )
+        val triple = CellEffectiveRecipeDefaults.legacyTriple
+        val fingerprint = RecipeCanonical.fingerprint(triple)
+        repeat(RECIPE_WS_MAX_REPORT_CELLS + 1) { index ->
+            dao.upsert(
+                CellEffectiveRecipeEntity.fromDomain(
+                    CellEffectiveRecipe(
+                        cellId = "cell-$index",
+                        baseDrinkVolumeMl = triple.baseDrinkVolumeMl,
+                        waterDeciMl = triple.waterDeciMl,
+                        productDeciMl = triple.productDeciMl,
+                        fingerprint = fingerprint,
+                        source = CellEffectiveRecipeSource.COMMAND,
+                        productId = null,
+                        baseVersionId = null,
+                        lastAppliedCommandGeneration = 0L,
+                        cancelThroughGeneration = 0L,
+                        updatedAtMs = 0L,
+                    ),
+                ),
+            )
+        }
+        val recipeCoordinator =
+            createCoordinator(
+                recipeStore = recipeStore,
+                recipeSync = RecipeSyncCoordinator.forTests(recipeMessageCodec),
+                recipeDao = dao,
+            )
+        coEvery { wsManager.sendEnvelope(RECIPE_WS_TYPE_REPORT, any(), any()) } returns Result.success("mid")
+        coEvery { wsManager.sendEnvelope("cells.schema.report", any(), any()) } returns Result.success("mid")
+        coEvery { wsManager.sendEnvelope("machine.calibration.report", any(), any()) } returns Result.success("mid")
+
+        recipeCoordinator.onWebSocketHello(recipeHello)
+
+        coVerify(atLeast = RECIPE_WS_MAX_REPORT_CELLS + 1) {
+            wsManager.sendEnvelope(RECIPE_WS_TYPE_REPORT, any(), any())
+        }
+    }
+
+    private fun createRecipeEnabledCoordinator(): TelemetryCellsSyncCoordinator {
+        val recipeStore =
+            CellEffectiveRecipeStore(
+                dao = FakeCellEffectiveRecipeDao(),
+                featureEnabled = { true },
+            )
+        return createCoordinator(recipeStore = recipeStore, recipeSync = recipeSyncCoordinator)
+    }
+
+    private fun createCoordinator(
+        recipeStore: CellEffectiveRecipeStore = effectiveRecipeStore,
+        recipeSync: RecipeSyncCoordinator = recipeSyncCoordinator,
+        recipeDao: FakeCellEffectiveRecipeDao = this.recipeDao,
+    ): TelemetryCellsSyncCoordinator {
+        val outboxStack = RecipeOutboxTestFixtures.createOutboxStack(recipeDao = recipeDao)
+        val drainCoordinator =
+            MachineOutboxDrainCoordinator(
+                outboxStore = outboxStack.machineOutboxStore,
+                wsManagerLazy =
+                    object : dagger.Lazy<MvpTelemetryWebSocketManager> {
+                        override fun get(): MvpTelemetryWebSocketManager = wsManager
+                    },
+                apiClient = mockk(relaxed = true),
+                bearerTokenProvider = mockk(relaxed = true),
+                recipeOutboxStore = outboxStack.recipeOutboxStore,
+                appScope = testScope,
+            )
+        val applier = RecipeCommandApplier(recipeStore)
+        val orchestrator =
+            RecipeSyncOrchestrator(
+                wsCoordinator = recipeSync,
+                inbox = outboxStack.inbox(applier, recipeStore),
+                effectiveRecipeStore = recipeStore,
+                assignmentBaseStore = CellAssignmentBaseStore.forTests(FakeCellAssignmentBaseDao()),
+            )
+        return TelemetryCellsSyncCoordinator(
+            repository = repository,
+            codec = codec,
+            schemaProvider = schemaProvider,
+            uuidAllocator = uuidAllocator,
+            wsManager = wsManager,
+            contentReportAckAwaiter = contentReportAckAwaiter,
+            waterCalibrationService = waterCalibrationService,
+            conversionFactorMigration = conversionFactorMigration,
+            syrupCalibrationInventory = syrupCalibrationInventory,
+            effectiveRecipeStore = recipeStore,
+            recipeMessageCodec = recipeMessageCodec,
+            recipeSyncCoordinator = recipeSync,
+            recipeSyncOrchestrator = orchestrator,
+            recipeOutboxStore = outboxStack.recipeOutboxStore,
+            outboxDrainCoordinator = drainCoordinator,
+            appScope = testScope,
+        )
     }
 
     private fun sampleCell(

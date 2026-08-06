@@ -1,6 +1,5 @@
 package com.viwa.android.domain.technician
 
-import androidx.room.withTransaction
 import com.viwa.android.data.local.technician.FakeTechnicianAllowlistDao
 import com.viwa.android.data.local.technician.FakeTechnicianAllowlistStateDao
 import com.viwa.android.data.local.technician.FakeTechnicianAuditOutboxDao
@@ -17,7 +16,6 @@ import com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianAllowlistWir
 import com.viwa.android.data.remote.telemetry.mvp.offline.OfflineSigningPublicKeyDto
 import com.viwa.android.domain.offline.BoundedTelemetryClock
 import com.viwa.android.domain.offline.OfflineSigningKeysStore
-import io.mockk.coEvery
 import io.mockk.mockk
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
@@ -400,10 +398,6 @@ class TechnicianAllowlistStoreDeltaTest {
     fun `applyDelta preserves persisted server policy while updating sync cursor`() = runTest {
         val allowlistDao = FakeTechnicianAllowlistDao()
         val stateDao = FakeTechnicianAllowlistStateDao()
-        val db = mockk<com.viwa.android.data.local.db.ViwaDatabase>()
-        coEvery { db.withTransaction(any<suspend () -> Unit>()) } coAnswers {
-            firstArg<suspend () -> Unit>()()
-        }
         val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
         val capability =
             MvpTechnicianKeysCapabilityDto(
@@ -425,7 +419,7 @@ class TechnicianAllowlistStoreDeltaTest {
                 policyUpdatedAtMs = 1000L,
             ),
         )
-        val store = TechnicianAllowlistStore(db, allowlistDao, stateDao)
+        val store = TechnicianAllowlistStore(allowlistDao, stateDao)
         store.applyDeltaTransactionally(
             records = emptyList(),
             tombstones = emptyList(),
@@ -448,12 +442,8 @@ class TechnicianAllowlistStoreDeltaTest {
         val allowlistDao = FakeTechnicianAllowlistDao()
         val stateDao = FakeTechnicianAllowlistStateDao()
         val auditDao = FakeTechnicianAuditOutboxDao()
-        val db = mockk<com.viwa.android.data.local.db.ViwaDatabase>()
-        coEvery { db.withTransaction(any<suspend () -> Unit>()) } coAnswers {
-            firstArg<suspend () -> Unit>()()
-        }
         val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-        val allowlistStore = TechnicianAllowlistStore(db, allowlistDao, stateDao)
+        val allowlistStore = TechnicianAllowlistStore(allowlistDao, stateDao)
         val auditStore = TechnicianAuditOutboxStore(auditDao)
         val policyStore = TechnicianKeyPolicyStore(stateDao)
         val clock = BoundedTelemetryClock().apply { updateFromServer("2026-07-27T10:00:00.000Z") }

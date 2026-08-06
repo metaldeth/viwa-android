@@ -10,7 +10,7 @@ object TelemetryPourMessageCodec {
 
     fun encodePayload(pour: PourEventSnapshot): JsonObject =
         buildJsonObject {
-            put("clientId", pour.clientId)
+            pour.clientId?.let { put("clientId", it) }
             put("requestUuid", pour.requestUuid)
             put("pouredAt", pour.pouredAt)
             put("pourKind", pour.pourKind)
@@ -21,5 +21,9 @@ object TelemetryPourMessageCodec {
             pour.strength?.let { put("strength", it) }
             pour.strengthRatio?.let { put("strengthRatio", it) }
             pour.syrupMlActual?.let { put("syrupMlActual", it) }
+            pour.recipeDrinkVolumeMl?.let { put("recipeDrinkVolumeMl", it) }
+            pour.recipeWaterMl?.let { put("recipeWaterMl", it) }
+            pour.recipeProductMl?.let { put("recipeProductMl", it) }
+            pour.conversionFactor?.let { put("conversionFactor", it) }
         }
 }

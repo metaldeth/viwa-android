@@ -2,10 +2,12 @@ package com.viwa.android.hardware.serial
 
 import com.viwa.android.data.local.db.JsonStoreKeys
 import com.viwa.android.data.repository.ConfigRepository
+import com.viwa.android.services.payment.PillUsbSessionOwner
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 
 @Singleton
 class ViwaSerialPortImpl
@@ -15,11 +17,14 @@ constructor(
     private val serialPortManager: SerialPortManager,
     private val configRepository: ConfigRepository,
     private val assignmentEvents: SerialPortAssignmentEvents,
+    private val pillUsbSessionOwner: PillUsbSessionOwner,
 ) : ViwaSerialPort {
 
     override suspend fun availableDevices(): List<SerialDeviceInfo> =
         withContext(Dispatchers.IO) {
-            usbSerialManager.enumerateSerialDevices()
+            usbSerialManager.enumerateSerialDevices().sortedWith(
+                compareBy({ it.vendorId }, { it.productId }, { it.deviceName }),
+            )
         }
 
     override suspend fun assignments(): Map<String, PortRole> =
@@ -48,26 +53,43 @@ constructor(
         }
 
     override suspend fun assignedDeviceName(role: PortRole): String? {
-        val normalized =
-            when (role) {
-                PortRole.UNKNOWN -> PortRole.UNASSIGNED
-                else -> role.toAssignmentStorage()
+        val devices = availableDevices()
+        val assignments = serialPortManager.getPortAssignments()
+        val assignedKey =
+            assignments.entries.firstOrNull { (path, assignedRole) ->
+                assignedRole == role ||
+                    assignedRole.toAssignmentStorage() == role.toAssignmentStorage() ||
+                    (role == PortRole.CONTROLLER && assignedRole == PortRole.CONTROLLER)
+            }?.key
+        if (assignedKey == null) {
+            if (role == PortRole.CONTROLLER) {
+                return controllerDevicePath()
             }
-        val fromAssignments =
-            serialPortManager.getPortAssignments().entries
-                .firstOrNull { it.value == normalized || it.value == role }
-                ?.key
-        if (fromAssignments != null) return fromAssignments
-        if (role == PortRole.CONTROLLER) {
-            return controllerDevicePath()
+            return null
         }
-        return null
+        if (devices.any { it.deviceName == assignedKey }) return assignedKey
+        val replacement =
+            UsbAssignmentMigration.findReplacementDevice(role, assignedKey, devices, assignments)
+                ?: return null
+        assign(replacement.deviceName, role).getOrThrow()
+        Timber.i("Serial: migrated %s from %s to %s", role, assignedKey, replacement.deviceName)
+        return replacement.deviceName
     }
 
     override suspend fun probeOpen(deviceName: String): Result<Unit> =
         withContext(Dispatchers.IO) {
             if (deviceName.startsWith("/dev/tty")) {
                 return@withContext Result.success(Unit)
+            }
+            val deviceMeta =
+                usbSerialManager.enumerateSerialDevices()
+                    .firstOrNull { it.deviceName == deviceName }
+            if (deviceMeta != null && AqsiPillUsbIdentifiers.isAqsiPill(deviceMeta)) {
+                if (pillUsbSessionOwner.activeOwner.value != null) {
+                    return@withContext Result.failure(
+                        IllegalStateException("Pill USB session busy"),
+                    )
+                }
             }
             val driver =
                 usbSerialManager.getAvailableDevices()

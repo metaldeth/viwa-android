@@ -150,14 +150,23 @@ class TechnicianAllowlistSyncCoordinatorDisconnectTest {
 class MvpTelemetryWebSocketManagerDisconnectLifecycleTest {
     @Test
     fun `disconnect clears capabilities and stops periodic jobs`() {
+        val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val outboxDrain = mockk<MachineOutboxDrainCoordinator>(relaxed = true)
         val technicianCoordinator = mockk<TechnicianKeySessionCoordinator>(relaxed = true)
+        val ackAwaiter = com.viwa.android.data.remote.telemetry.mvp.cells.CellsContentReportAckAwaiter()
         val manager =
             MvpTelemetryWebSocketManager(
-                appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+                appScope = appScope,
                 networkTrafficLogger = mockk(relaxed = true),
                 ackRouter = mockk(relaxed = true),
+                cellsContentReportAckAwaiter = ackAwaiter,
+                recipeSyncCoordinator = com.viwa.android.data.remote.telemetry.mvp.cells.RecipeSyncCoordinator(
+                    com.viwa.android.data.remote.telemetry.mvp.cells.RecipeMessageCodec(),
+                ),
                 outboxDrainCoordinator = outboxDrain,
+                outboxStore = mockk(relaxed = true),
+                recipeOutboxStore = mockk(relaxed = true),
+                recipeMessageCodec = com.viwa.android.data.remote.telemetry.mvp.cells.RecipeMessageCodec(),
                 offlineEntitlementCoordinator = mockk(relaxed = true),
                 technicianKeySessionCoordinator = technicianCoordinator,
                 appUpdateCoordinatorProvider = mockOtaCoordinatorProvider(),
@@ -169,5 +178,6 @@ class MvpTelemetryWebSocketManagerDisconnectLifecycleTest {
         assertNull(manager.technicianKeysCapability())
         verify(exactly = 1) { outboxDrain.stopPeriodicFlush() }
         verify(exactly = 1) { technicianCoordinator.onDisconnect() }
+        appScope.cancel()
     }
 }

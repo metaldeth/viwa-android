@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.viwa.android.R
 import com.viwa.android.ui.components.QRCodeView
 import com.viwa.android.ui.theme.MontserratFamily
+import kotlinx.coroutines.delay
 
 private val OfferBackground = Color(0xFF09090C)
 private val OfferSurface = Color(0xE617171C)
@@ -57,6 +59,7 @@ private val OfferAccentMuted = Color(0xFF422050)
 private val OfferText = Color(0xFFF7F5F8)
 private val OfferTextMuted = Color(0xFFB7B1BA)
 private val OfferQrPlaceholder = Color(0xFF3B3440)
+private const val OFFER_AUTO_CLOSE_MS = 20_000L
 
 private data class Benefit(
     val icon: ImageVector,
@@ -81,6 +84,11 @@ fun FreeDrinkOfferScreen(
     viewModel: FreeDrinkOfferViewModel = hiltViewModel(),
 ) {
     val qrUrl by viewModel.qrUrl.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        delay(OFFER_AUTO_CLOSE_MS)
+        onClose()
+    }
 
     BoxWithConstraints(
         modifier =

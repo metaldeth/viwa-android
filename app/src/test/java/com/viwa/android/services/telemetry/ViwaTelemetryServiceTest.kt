@@ -12,6 +12,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -29,6 +30,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViwaTelemetryServiceTest {
     private fun createService(
+        scope: CoroutineScope,
         wsManager: MvpTelemetryWebSocketManager = mockk(relaxed = true),
         configRepository: ConfigRepository = mockk(relaxed = true),
     ): Pair<ViwaTelemetryService, MvpTelemetryLoyaltySyncHandler> {
@@ -46,7 +48,7 @@ class ViwaTelemetryServiceTest {
                 wsManager = wsManager,
                 dispenseSyncCoordinator = mockk(relaxed = true),
                 offlinePourAuthorizationService = mockk(relaxed = true),
-                scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
+                scope = scope,
             )
         return service to requireNotNull(handler)
     }
@@ -60,7 +62,7 @@ class ViwaTelemetryServiceTest {
         coEvery { wsManager.sendEnvelope(capture(typeSlot), capture(payloadSlot), any()) } returns
             Result.success("msg-status")
 
-        val (service, _) = createService(wsManager)
+        val (service, _) = createService(this, wsManager)
         advanceUntilIdle()
 
         // when
@@ -80,7 +82,7 @@ class ViwaTelemetryServiceTest {
     fun T11_5_inboundStatusAck_updatesSubscribeInfoStateFlow() = runTest {
         // given
         val wsManager = mockk<MvpTelemetryWebSocketManager>(relaxed = true)
-        val (service, handler) = createService(wsManager)
+        val (service, handler) = createService(this, wsManager)
         advanceUntilIdle()
         val messageIdSlot = slot<String>()
         coEvery {
@@ -113,7 +115,7 @@ class ViwaTelemetryServiceTest {
     fun T11_8_levelsListAck_populatesSubscriptionLevelsStateFlow() = runTest {
         // given
         val wsManager = mockk<MvpTelemetryWebSocketManager>(relaxed = true)
-        val (service, handler) = createService(wsManager)
+        val (service, handler) = createService(this, wsManager)
         advanceUntilIdle()
         val messageIdSlot = slot<String>()
         coEvery {
@@ -173,7 +175,7 @@ class ViwaTelemetryServiceTest {
                 wsManager = wsManager,
                 dispenseSyncCoordinator = dispenseSyncCoordinator,
                 offlinePourAuthorizationService = mockk(relaxed = true),
-                scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()),
+                scope = this,
             )
         advanceUntilIdle()
 
@@ -212,7 +214,7 @@ class ViwaTelemetryServiceTest {
     fun T12_9_inboundStatusChanged_updatesSubscribeInfoWithoutRescan() = runTest {
         // given
         val wsManager = mockk<MvpTelemetryWebSocketManager>(relaxed = true)
-        val (service, handler) = createService(wsManager)
+        val (service, handler) = createService(this, wsManager)
         advanceUntilIdle()
 
         val payload =
@@ -247,7 +249,7 @@ class ViwaTelemetryServiceTest {
         coEvery {
             wsManager.sendEnvelope(capture(typeSlot), capture(payloadSlot), capture(messageIdSlot))
         } returns Result.success("msg-cancel")
-        val (service, handler) = createService(wsManager)
+        val (service, handler) = createService(this, wsManager)
         advanceUntilIdle()
 
         val ackPayload =
@@ -292,7 +294,7 @@ class ViwaTelemetryServiceTest {
         coEvery {
             wsManager.sendEnvelope(capture(typeSlot), capture(payloadSlot), capture(messageIdSlot))
         } returns Result.success("msg-pay-init")
-        val (service, handler) = createService(wsManager)
+        val (service, handler) = createService(this, wsManager)
         advanceUntilIdle()
 
         val ackPayload =
@@ -341,7 +343,7 @@ class ViwaTelemetryServiceTest {
         coEvery {
             wsManager.sendEnvelope(LoyaltyWsCodec.TYPE_STATUS_GET, any(), capture(messageIdSlot))
         } returns Result.success("unused")
-        val (service, handler) = createService(wsManager)
+        val (service, handler) = createService(this, wsManager)
         advanceUntilIdle()
         service.sendStatusGet("660e8400-e29b-41d4-a716-446655440010")
         val statusPayload =
@@ -378,7 +380,7 @@ class ViwaTelemetryServiceTest {
         coEvery {
             wsManager.sendEnvelope(LoyaltyWsCodec.TYPE_STATUS_GET, any(), capture(messageIdSlot))
         } returns Result.success("unused")
-        val (service, handler) = createService(wsManager)
+        val (service, handler) = createService(this, wsManager)
         advanceUntilIdle()
         service.sendStatusGet("660e8400-e29b-41d4-a716-446655440010")
         handler.onLoyaltyAck(

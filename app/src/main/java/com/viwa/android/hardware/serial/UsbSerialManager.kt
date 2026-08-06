@@ -9,6 +9,7 @@ import com.hoho.android.usbserial.driver.CdcAcmSerialDriver
 import com.hoho.android.usbserial.driver.ProbeTable
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialProber
+import com.viwa.android.hardware.serial.AqsiPillUsbIdentifiers
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -57,13 +58,14 @@ constructor(
         private val aqsiPillProber: UsbSerialProber by lazy {
             UsbSerialProber(
                 ProbeTable().apply {
-                    addProduct(AQSI_PILL_VENDOR_ID, AQSI_PILL_PRODUCT_ID, CdcAcmSerialDriver::class.java)
+                    addProduct(
+                        AqsiPillUsbIdentifiers.VENDOR_ID,
+                        AqsiPillUsbIdentifiers.PRODUCT_ID,
+                        CdcAcmSerialDriver::class.java,
+                    )
                 },
             )
         }
-
-        private const val AQSI_PILL_VENDOR_ID = 0x0FB9
-        private const val AQSI_PILL_PRODUCT_ID = 0x2606
     }
 
     fun openConnection(driver: UsbSerialDriver, portIndex: Int = 0): Pair<SerialConnection, UsbDeviceConnection>? {

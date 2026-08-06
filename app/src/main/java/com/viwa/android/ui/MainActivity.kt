@@ -57,9 +57,11 @@ import com.viwa.android.platform.ViwaSystemUiPolicy
 import com.viwa.android.ui.navigation.ViwaNavGraph
 import com.viwa.android.ui.navigation.Routes
 import com.viwa.android.ui.screens.service.ServiceScreenLaunch
-import com.viwa.android.ui.screens.idle.IdleVideoOverlay
+import com.viwa.android.ui.screens.idle.IdlePhase
+import com.viwa.android.ui.screens.idle.IdleVideoHost
 import com.viwa.android.ui.screens.idle.IdleVideoViewModel
 import com.viwa.android.domain.technician.ServiceMenuNavigationGate
+import com.viwa.android.services.controller.ControllerUiModeCoordinator
 import com.viwa.android.services.telemetry.TechnicianKeyServiceMenuCoordinator
 import com.viwa.android.services.telemetry.LoyaltyCardScanCoordinator
 import com.viwa.android.services.telemetry.TelemetryDebugBootstrap
@@ -133,6 +135,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var configRepository: ConfigRepository
 
+    @Inject
+    lateinit var controllerUiModeCoordinator: ControllerUiModeCoordinator
+
     private val themeViewModel: ThemeViewModel by viewModels()
     private val idleVideoViewModel: IdleVideoViewModel by viewModels()
 
@@ -153,6 +158,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserInteraction() {
         super.onUserInteraction()
+        onCustomerUserActivity()
+    }
+
+    private fun onCustomerUserActivity() {
         idleVideoViewModel.resetTimer()
         applyKioskWindowPolicy(forceLegacyNavHide = false)
         requestImmediateKioskCollapse()
@@ -203,7 +212,7 @@ class MainActivity : ComponentActivity() {
             val brandPrimaryColor = Color(brandPrimaryArgb)
             val colorScheme =
                 (if (isDark) DarkScheme else LightScheme).copy(primary = brandPrimaryColor)
-            val isIdleVisible by idleVideoViewModel.isVisible.collectAsStateWithLifecycle()
+            val idlePhase by idleVideoViewModel.phase.collectAsStateWithLifecycle()
             val enabledVideoIds by idleVideoViewModel.enabledVideoIds.collectAsStateWithLifecycle()
             val baseDensity = LocalDensity.current
             CompositionLocalProvider(
@@ -249,22 +258,42 @@ class MainActivity : ComponentActivity() {
                         }
 
                         LaunchedEffect(Unit) {
+                            telemetryService.loyaltyCardClientScans.collect {
+                                onCustomerUserActivity()
+                            }
+                        }
+
+                        LaunchedEffect(Unit) {
                             withContext(Dispatchers.IO) {
                                 runCatching { nanoKassaRepository.verifyIntegration() }
                             }
                         }
 
+                        val currentRoute = backStackEntry?.destination?.route
+
+                        // Контроллер: сервисный режим только внутри сервисного меню, Auto — на клиентском экране.
+                        LaunchedEffect(currentRoute) {
+                            when (currentRoute) {
+                                Routes.Service -> controllerUiModeCoordinator.enterServiceMode()
+                                Routes.Home -> controllerUiModeCoordinator.enterAutoMode()
+                            }
+                        }
+
                         // Idle-таймер работает только на экране выбора напитков
-                        LaunchedEffect(backStackEntry) {
-                            val route = backStackEntry?.destination?.route
+                        LaunchedEffect(currentRoute) {
+                            val route = currentRoute
                             idleVideoViewModel.setActive(route == Routes.Home)
                         }
 
-                        // Idle overlay отключён (IdleVideoViewModel.IDLE_OVERLAY_ENABLED=false):
-                        // на плате давал белый экран после видео. NavGraph всегда смонтирован.
+                        var homeIdleBlocked by remember { mutableStateOf(false) }
+                        LaunchedEffect(homeIdleBlocked) {
+                            idleVideoViewModel.setCustomerFlowBlocked(homeIdleBlocked)
+                        }
+
                         Box(modifier = Modifier.fillMaxSize()) {
                             ViwaNavGraph(
                                 navController = navController,
+                                onHomeIdleBlockingChanged = { homeIdleBlocked = it },
                                 onOpenService = {
                                     // Password "studio" only — KEY scan uses navigateIfAuthorized above.
                                     serviceMenuNavigationGate.navigateAfterLocalStudioPassword {
@@ -272,9 +301,11 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                             )
-                            if (isIdleVisible) {
-                                IdleVideoOverlay(
+                            if (idlePhase != IdlePhase.Hidden) {
+                                IdleVideoHost(
+                                    phase = idlePhase,
                                     enabledVideoIds = enabledVideoIds,
+                                    onPrewarmReady = { idleVideoViewModel.onPrewarmReady() },
                                     onDismiss = { idleVideoViewModel.resetTimer() },
                                 )
                             }

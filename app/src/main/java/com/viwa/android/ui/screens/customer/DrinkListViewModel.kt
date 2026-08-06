@@ -74,6 +74,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -172,6 +174,16 @@ data class DrinkListUiState(
     /** Обратный отсчёт автовыхода из подписки при отсутствии касаний (сек). */
     val subscriptionExitRemainingSeconds: Int = 0,
 )
+
+/** Full-screen or blocking customer flows on Home — idle overlay must stay hidden. */
+fun DrinkListUiState.blocksIdleVideoOverlay(): Boolean =
+    paymentSheetVisible ||
+        subscriptionLevelPickerVisible ||
+        invalidSubscriptionCardVisible ||
+        isProcessingPay ||
+        isWaterPourActive ||
+        !subscriptionReceiptUrl.isNullOrBlank() ||
+        subscriptionReceiptLoading
 
 @HiltViewModel
 class DrinkListViewModel
@@ -397,6 +409,7 @@ constructor(
     private fun observeLoyaltyCardScansForDrinkListUi() {
         viewModelScope.launch {
             telemetryService.loyaltyCardClientScans.collect {
+                resetSubscriptionExitTimer()
                 tariffsLoadTimeoutJob?.cancel()
                 tariffsLoadTimeoutJob = null
                 _state.update {
@@ -632,6 +645,7 @@ constructor(
  * дебаунс [WATER_POUR_DEBOUNCE_MS], старт D0 (twf/SelW по состоянию), стоп [0…0], лимит [WATER_POUR_MAX_MS].
  */
     fun waterPourPointerDown() {
+        pauseSubscriptionExitTimerForWaterPour()
         waterPourDebounceJob?.cancel()
         waterPourDebounceJob =
             viewModelScope.launch {
@@ -653,6 +667,7 @@ constructor(
                             waterPourError = e.message ?: "Ошибка старта налива воды",
                         )
                     }
+                    resumeSubscriptionExitTimerAfterWaterPour()
                     return@launch
                 }
                 beginHoldPourTelemetryIfNeeded()
@@ -668,6 +683,7 @@ constructor(
                             )
                         }.onFailure { Timber.w(it, "waterPour stop (max hold)") }
                         abortActiveWaterPour(finalizeTelemetry = true, sendHardwareStop = false)
+                        resumeSubscriptionExitTimerAfterWaterPour()
                         _state.update { it.copy(waterPourLimitBanner = true) }
                         waterPourLimitHideJob?.cancel()
                         waterPourLimitHideJob =
@@ -684,7 +700,10 @@ constructor(
         waterPourDebounceJob = null
         waterPourMaxHoldJob?.cancel()
         waterPourMaxHoldJob = null
-        if (!waterPourStarted && holdPourRequestUuid == null) return
+        if (!waterPourStarted && holdPourRequestUuid == null) {
+            resumeSubscriptionExitTimerAfterWaterPour()
+            return
+        }
         viewModelScope.launch {
             runCatching {
                 controllerGateway.sendCommand(
@@ -698,6 +717,7 @@ constructor(
                 }
             }
             abortActiveWaterPour(finalizeTelemetry = true, sendHardwareStop = false)
+            resumeSubscriptionExitTimerAfterWaterPour()
         }
     }
 
@@ -719,7 +739,9 @@ constructor(
                 abortActiveWaterPour(finalizeTelemetry = true, sendHardwareStop = false)
             }
         } else {
-            holdPourTelemetryCoordinator.cancelHoldPourSession()
+            viewModelScope.launch {
+                holdPourTelemetryCoordinator.cancelHoldPourSession()
+            }
             holdPourRequestUuid = null
             _state.update {
                 it.copy(isWaterPourActive = false, waterPourLimitBanner = false, waterPourError = null)
@@ -987,6 +1009,17 @@ constructor(
 
     /** Сброс idle-таймера выхода из подписки при любом касании экрана. */
     fun resetSubscriptionExitTimer() {
+        if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) return
+        startSubscriptionExitTimer()
+    }
+
+    private fun pauseSubscriptionExitTimerForWaterPour() {
+        if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) return
+        stopSubscriptionExitTimer()
+        _state.update { it.copy(subscriptionExitRemainingSeconds = SUBSCRIPTION_EXIT_TIMEOUT_SECONDS) }
+    }
+
+    private fun resumeSubscriptionExitTimerAfterWaterPour() {
         if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) return
         startSubscriptionExitTimer()
     }
@@ -2581,6 +2614,13 @@ constructor(
         cancelSbpFlow()
         subscriptionReceiptTimerJob?.cancel()
         paymentJob?.cancel()
+        runCatching {
+            runBlocking {
+                withTimeout(2_000) {
+                    cardPaymentOrchestrator.cancelActivePayment()
+                }
+            }
+        }
         paymentClearingScope.cancel()
         super.onCleared()
     }
@@ -2596,6 +2636,9 @@ constructor(
         holdPourRequestUuid = holdRequestUuid
         _state.update { it.copy(isWaterPourActive = true) }
     }
+
+    internal fun isSubscriptionExitTimerRunningForUnitTests(): Boolean =
+        subscriptionExitTimerJob?.isActive == true
 
     internal fun waterPourStartPayloadForUnitTests(): ByteArray = waterPourStartPayload()
 
@@ -2625,6 +2668,20 @@ constructor(
         clearSelectionInternal()
     }
 
+    /** Unit-test seam: cancel viewModelScope jobs without blocking payment cancel. */
+    internal fun clearForUnitTests() {
+        cancelWaterPourGestures()
+        releaseCombinedPaymentSession()
+        cancelSbpFlow()
+        subscriptionReceiptTimerJob?.cancel()
+        subscriptionReceiptTimerJob = null
+        paymentJob?.cancel()
+        paymentJob = null
+        subscriptionExitTimerJob?.cancel()
+        paymentClearingScope.cancel()
+        super.onCleared()
+    }
+
     internal fun applyTerminalBannerForCombinedStatusTest(terminalBanner: String) {
         _state.update { st ->
             st.copy(
@@ -2647,7 +2704,7 @@ constructor(
         }
 
     companion object {
-        const val COMBINED_PAYMENT_TIMEOUT_SECONDS = 120
+        const val COMBINED_PAYMENT_TIMEOUT_SECONDS = 60
         const val COMBINED_PAID_PREPARE_FAILED_MESSAGE =
             "Оплата прошла, но напиток не приготовлен. Обратитесь к оператору."
         const val SUBSCRIPTION_EXIT_TIMEOUT_SECONDS = 10

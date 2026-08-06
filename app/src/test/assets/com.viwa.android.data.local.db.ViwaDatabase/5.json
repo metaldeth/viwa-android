@@ -1,0 +1,760 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 5,
+    "identityHash": "b5ec0fecef43c13c6299608b1d043b19",
+    "entities": [
+      {
+        "tableName": "json_data",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`name` TEXT NOT NULL, `data` TEXT NOT NULL, PRIMARY KEY(`name`))",
+        "fields": [
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "data",
+            "columnName": "data",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "name"
+          ]
+        }
+      },
+      {
+        "tableName": "machine_outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`local_id` TEXT NOT NULL, `kind` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `message_id` TEXT NOT NULL, `payload_json` TEXT NOT NULL, `status` TEXT NOT NULL, `attempts` INTEGER NOT NULL, `ws_ack_failures` INTEGER NOT NULL, `next_retry_at_ms` INTEGER NOT NULL, `last_error` TEXT, `session_generation_at_send` INTEGER, `created_at_ms` INTEGER NOT NULL, `acked_at_ms` INTEGER, `in_flight_since_ms` INTEGER, PRIMARY KEY(`local_id`))",
+        "fields": [
+          {
+            "fieldPath": "localId",
+            "columnName": "local_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "idempotencyKey",
+            "columnName": "idempotency_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "messageId",
+            "columnName": "message_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadJson",
+            "columnName": "payload_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attempts",
+            "columnName": "attempts",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "wsAckFailures",
+            "columnName": "ws_ack_failures",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextRetryAtMs",
+            "columnName": "next_retry_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "last_error",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sessionGenerationAtSend",
+            "columnName": "session_generation_at_send",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "created_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ackedAtMs",
+            "columnName": "acked_at_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "inFlightSinceMs",
+            "columnName": "in_flight_since_ms",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "local_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_machine_outbox_kind_idempotency_key",
+            "unique": true,
+            "columnNames": [
+              "kind",
+              "idempotency_key"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_machine_outbox_kind_idempotency_key` ON `${TABLE_NAME}` (`kind`, `idempotency_key`)"
+          },
+          {
+            "name": "index_machine_outbox_status_next_retry_at_ms",
+            "unique": false,
+            "columnNames": [
+              "status",
+              "next_retry_at_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_machine_outbox_status_next_retry_at_ms` ON `${TABLE_NAME}` (`status`, `next_retry_at_ms`)"
+          },
+          {
+            "name": "index_machine_outbox_message_id",
+            "unique": false,
+            "columnNames": [
+              "message_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_machine_outbox_message_id` ON `${TABLE_NAME}` (`message_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "entitlement_cache",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`subject_hash` TEXT NOT NULL, `machine_id` TEXT NOT NULL, `grant_id` TEXT NOT NULL, `subscription_level_id` TEXT NOT NULL, `issued_at_ms` INTEGER NOT NULL, `expires_at_ms` INTEGER NOT NULL, `daily_remaining_ml_at_issue` INTEGER NOT NULL, `max_offline_pours` INTEGER NOT NULL, `max_offline_volume_ml` INTEGER NOT NULL, `signing_key_id` TEXT NOT NULL, `revocation_epoch` INTEGER NOT NULL, `revision` TEXT NOT NULL, `signature` TEXT NOT NULL, `grant_json` TEXT NOT NULL, `revoked` INTEGER NOT NULL, `updated_at_ms` INTEGER NOT NULL, PRIMARY KEY(`subject_hash`, `machine_id`))",
+        "fields": [
+          {
+            "fieldPath": "subjectHash",
+            "columnName": "subject_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "machineId",
+            "columnName": "machine_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grantId",
+            "columnName": "grant_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subscriptionLevelId",
+            "columnName": "subscription_level_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "issuedAtMs",
+            "columnName": "issued_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expiresAtMs",
+            "columnName": "expires_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dailyRemainingMlAtIssue",
+            "columnName": "daily_remaining_ml_at_issue",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxOfflinePours",
+            "columnName": "max_offline_pours",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxOfflineVolumeMl",
+            "columnName": "max_offline_volume_ml",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "signingKeyId",
+            "columnName": "signing_key_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revocationEpoch",
+            "columnName": "revocation_epoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revision",
+            "columnName": "revision",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "signature",
+            "columnName": "signature",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grantJson",
+            "columnName": "grant_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revoked",
+            "columnName": "revoked",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMs",
+            "columnName": "updated_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "subject_hash",
+            "machine_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_entitlement_cache_grant_id",
+            "unique": true,
+            "columnNames": [
+              "grant_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_entitlement_cache_grant_id` ON `${TABLE_NAME}` (`grant_id`)"
+          },
+          {
+            "name": "index_entitlement_cache_expires_at_ms",
+            "unique": false,
+            "columnNames": [
+              "expires_at_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_entitlement_cache_expires_at_ms` ON `${TABLE_NAME}` (`expires_at_ms`)"
+          },
+          {
+            "name": "index_entitlement_cache_revoked",
+            "unique": false,
+            "columnNames": [
+              "revoked"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_entitlement_cache_revoked` ON `${TABLE_NAME}` (`revoked`)"
+          }
+        ]
+      },
+      {
+        "tableName": "offline_usage_ledger",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`request_uuid` TEXT NOT NULL, `grant_id` TEXT NOT NULL, `subject_hash` TEXT NOT NULL, `machine_id` TEXT NOT NULL, `sale_id` TEXT NOT NULL, `drink_id` INTEGER, `requested_volume_ml` INTEGER NOT NULL, `finalized_volume_ml` INTEGER, `state` TEXT NOT NULL, `sold_at_ms` INTEGER NOT NULL, `created_at_ms` INTEGER NOT NULL, `updated_at_ms` INTEGER NOT NULL, `reconcile_code` TEXT, `reconcile_message` TEXT, PRIMARY KEY(`request_uuid`))",
+        "fields": [
+          {
+            "fieldPath": "requestUuid",
+            "columnName": "request_uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grantId",
+            "columnName": "grant_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subjectHash",
+            "columnName": "subject_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "machineId",
+            "columnName": "machine_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "saleId",
+            "columnName": "sale_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "drinkId",
+            "columnName": "drink_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "requestedVolumeMl",
+            "columnName": "requested_volume_ml",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "finalizedVolumeMl",
+            "columnName": "finalized_volume_ml",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "soldAtMs",
+            "columnName": "sold_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "created_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMs",
+            "columnName": "updated_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reconcileCode",
+            "columnName": "reconcile_code",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "reconcileMessage",
+            "columnName": "reconcile_message",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "request_uuid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_offline_usage_ledger_grant_id",
+            "unique": false,
+            "columnNames": [
+              "grant_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_offline_usage_ledger_grant_id` ON `${TABLE_NAME}` (`grant_id`)"
+          },
+          {
+            "name": "index_offline_usage_ledger_subject_hash",
+            "unique": false,
+            "columnNames": [
+              "subject_hash"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_offline_usage_ledger_subject_hash` ON `${TABLE_NAME}` (`subject_hash`)"
+          },
+          {
+            "name": "index_offline_usage_ledger_state",
+            "unique": false,
+            "columnNames": [
+              "state"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_offline_usage_ledger_state` ON `${TABLE_NAME}` (`state`)"
+          },
+          {
+            "name": "index_offline_usage_ledger_sale_id",
+            "unique": false,
+            "columnNames": [
+              "sale_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_offline_usage_ledger_sale_id` ON `${TABLE_NAME}` (`sale_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "technician_allowlist_cache",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`fingerprint` TEXT NOT NULL, `key_id` TEXT NOT NULL, `machine_id` TEXT, `scopes_json` TEXT NOT NULL, `expires_at_ms` INTEGER, `expires_at_iso` TEXT, `revocation_epoch` INTEGER NOT NULL, `revision` TEXT NOT NULL, `signature` TEXT NOT NULL, `record_json` TEXT NOT NULL, `revoked` INTEGER NOT NULL, `updated_at_ms` INTEGER NOT NULL, PRIMARY KEY(`fingerprint`))",
+        "fields": [
+          {
+            "fieldPath": "fingerprint",
+            "columnName": "fingerprint",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keyId",
+            "columnName": "key_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "machineId",
+            "columnName": "machine_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "scopesJson",
+            "columnName": "scopes_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expiresAtMs",
+            "columnName": "expires_at_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "expiresAtIso",
+            "columnName": "expires_at_iso",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "revocationEpoch",
+            "columnName": "revocation_epoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revision",
+            "columnName": "revision",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "signature",
+            "columnName": "signature",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordJson",
+            "columnName": "record_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revoked",
+            "columnName": "revoked",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMs",
+            "columnName": "updated_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "fingerprint"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_technician_allowlist_cache_key_id",
+            "unique": true,
+            "columnNames": [
+              "key_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_technician_allowlist_cache_key_id` ON `${TABLE_NAME}` (`key_id`)"
+          },
+          {
+            "name": "index_technician_allowlist_cache_expires_at_ms",
+            "unique": false,
+            "columnNames": [
+              "expires_at_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_technician_allowlist_cache_expires_at_ms` ON `${TABLE_NAME}` (`expires_at_ms`)"
+          },
+          {
+            "name": "index_technician_allowlist_cache_revoked",
+            "unique": false,
+            "columnNames": [
+              "revoked"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_technician_allowlist_cache_revoked` ON `${TABLE_NAME}` (`revoked`)"
+          }
+        ]
+      },
+      {
+        "tableName": "technician_allowlist_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `delta_cursor` TEXT NOT NULL, `revocation_epoch` INTEGER NOT NULL, `last_sync_at_ms` INTEGER NOT NULL, `server_technician_keys_enabled` INTEGER, `offline_scopes_json` TEXT NOT NULL, `online_only_scopes_json` TEXT NOT NULL, `capability_json` TEXT, `has_trusted_allowlist_sync` INTEGER NOT NULL, `policy_updated_at_ms` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deltaCursor",
+            "columnName": "delta_cursor",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revocationEpoch",
+            "columnName": "revocation_epoch",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncAtMs",
+            "columnName": "last_sync_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverTechnicianKeysEnabled",
+            "columnName": "server_technician_keys_enabled",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "offlineScopesJson",
+            "columnName": "offline_scopes_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "onlineOnlyScopesJson",
+            "columnName": "online_only_scopes_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "capabilityJson",
+            "columnName": "capability_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "hasTrustedAllowlistSync",
+            "columnName": "has_trusted_allowlist_sync",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "policyUpdatedAtMs",
+            "columnName": "policy_updated_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "technician_audit_outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`request_uuid` TEXT NOT NULL, `fingerprint` TEXT NOT NULL, `technician_key_id` TEXT, `action` TEXT NOT NULL, `channel` TEXT NOT NULL, `outcome` TEXT NOT NULL, `failure_code` TEXT, `created_at_ms` INTEGER NOT NULL, `synced_at_ms` INTEGER, `sync_status` TEXT NOT NULL, PRIMARY KEY(`request_uuid`))",
+        "fields": [
+          {
+            "fieldPath": "requestUuid",
+            "columnName": "request_uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fingerprint",
+            "columnName": "fingerprint",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "technicianKeyId",
+            "columnName": "technician_key_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "action",
+            "columnName": "action",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "channel",
+            "columnName": "channel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outcome",
+            "columnName": "outcome",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "failureCode",
+            "columnName": "failure_code",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtMs",
+            "columnName": "created_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncedAtMs",
+            "columnName": "synced_at_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "sync_status",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "request_uuid"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_technician_audit_outbox_sync_status",
+            "unique": false,
+            "columnNames": [
+              "sync_status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_technician_audit_outbox_sync_status` ON `${TABLE_NAME}` (`sync_status`)"
+          }
+        ]
+      },
+      {
+        "tableName": "cell_effective_recipe",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`cell_id` TEXT NOT NULL, `base_drink_volume_ml` INTEGER, `water_deci_ml` INTEGER, `product_deci_ml` INTEGER, `fingerprint` TEXT, `source` TEXT NOT NULL, `product_id` TEXT, `base_version_id` TEXT, `last_applied_command_generation` INTEGER NOT NULL, `cancel_through_generation` INTEGER NOT NULL, `updated_at_ms` INTEGER NOT NULL, PRIMARY KEY(`cell_id`))",
+        "fields": [
+          {
+            "fieldPath": "cellId",
+            "columnName": "cell_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "baseDrinkVolumeMl",
+            "columnName": "base_drink_volume_ml",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "waterDeciMl",
+            "columnName": "water_deci_ml",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "productDeciMl",
+            "columnName": "product_deci_ml",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "fingerprint",
+            "columnName": "fingerprint",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "productId",
+            "columnName": "product_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "baseVersionId",
+            "columnName": "base_version_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastAppliedCommandGeneration",
+            "columnName": "last_applied_command_generation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cancelThroughGeneration",
+            "columnName": "cancel_through_generation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMs",
+            "columnName": "updated_at_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "cell_id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b5ec0fecef43c13c6299608b1d043b19')"
+    ]
+  }
+}

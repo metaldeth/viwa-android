@@ -2,15 +2,16 @@
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.net.InetSocketAddress
 import java.net.Socket
 import javax.inject.Inject
 import javax.inject.Singleton
 import timber.log.Timber
 
 /**
- * Full Pill host network setup from app code — no adb.
- * Order: clear stale proxy → NCM IP → Wi‑Fi bind → SOCKS :1080 → NAT (if su allows).
+ * Pill host network setup from app code — no adb.
+ *
+ * [HostNetworkBootstrapMode.STARTUP_FULL]: clear stale proxy → NCM IP (incl. DHCP wait) → Wi‑Fi bind → SOCKS :1080.
+ * [HostNetworkBootstrapMode.PAYMENT_FAST]: clear proxy → quick NCM snapshot → Wi‑Fi probe only (no NCM wait / SOCKS).
  */
 @Singleton
 class AqsiPillHostNetworkBootstrap
@@ -21,15 +22,36 @@ constructor(
     private val networkRouter: AqsiPillNetworkRouter,
     private val socksForwarder: AqsiPillSocksForwarder,
 ) {
-    suspend fun runWhenPillPresent(): HostNetworkStatus {
+    suspend fun runWhenPillPresent(): HostNetworkStatus = run(HostNetworkBootstrapMode.STARTUP_FULL)
+
+    suspend fun runForPayment(): HostNetworkStatus = run(HostNetworkBootstrapMode.PAYMENT_FAST)
+
+    private suspend fun run(mode: HostNetworkBootstrapMode): HostNetworkStatus {
+        val paymentFastPath = mode == HostNetworkBootstrapMode.PAYMENT_FAST
         val proxyCleared = AqsiPillShellRunner.clearStaleHttpProxy(context)
-        val ncmReady = ncmConfigurator.ensureHostLinkReady(networkRouter)
         networkRouter.refreshNetworks()
-        if (ncmReady) {
-            socksForwarder.ensureStarted()
-        } else if (ncmConfigurator.hasHostGatewayAddress()) {
-            socksForwarder.ensureStarted()
-        }
+
+        val ncmReady =
+            when (mode) {
+                HostNetworkBootstrapMode.STARTUP_FULL -> {
+                    val ready = ncmConfigurator.ensureHostLinkReady(networkRouter)
+                    if (ready) {
+                        socksForwarder.ensureStarted()
+                    } else if (ncmConfigurator.hasHostGatewayAddress()) {
+                        socksForwarder.ensureStarted()
+                    }
+                    ready
+                }
+                HostNetworkBootstrapMode.PAYMENT_FAST -> {
+                    val current = ncmConfigurator.hasHostGatewayAddress()
+                    Timber.tag(TAG).i(
+                        "payment fast-path NCM snapshot ncmReady=%s (no DHCP wait)",
+                        current,
+                    )
+                    current
+                }
+            }
+
         val wifiReachable = probeWifiInternet()
         val status =
             HostNetworkStatus(
@@ -37,9 +59,14 @@ constructor(
                 ncmReady = ncmReady,
                 wifiProcessBound = networkRouter.isProcessBoundToWifi(),
                 wifiInternetProbe = wifiReachable,
-                socksStarted = ncmReady,
+                socksStarted =
+                    when (mode) {
+                        HostNetworkBootstrapMode.STARTUP_FULL -> ncmReady
+                        HostNetworkBootstrapMode.PAYMENT_FAST -> false
+                    },
+                paymentFastPath = paymentFastPath,
             )
-        Timber.tag(TAG).i("host network bootstrap: %s", status)
+        Timber.tag(TAG).i("host network bootstrap mode=%s: %s", mode, status)
         return status
     }
 
@@ -54,12 +81,18 @@ constructor(
             false
         }
 
+    enum class HostNetworkBootstrapMode {
+        STARTUP_FULL,
+        PAYMENT_FAST,
+    }
+
     data class HostNetworkStatus(
         val httpProxyCleared: Boolean,
         val ncmReady: Boolean,
         val wifiProcessBound: Boolean,
         val wifiInternetProbe: Boolean,
         val socksStarted: Boolean,
+        val paymentFastPath: Boolean = false,
     ) {
         val readyForJpay: Boolean
             get() = ncmReady && wifiProcessBound && wifiInternetProbe

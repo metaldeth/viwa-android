@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "function": "scaleRecipeDeci",
+  "architectureSection": "3.3",
+  "syncNote": "Canonical telemetry source for scale vectors; Android copy/sync is a subsequent step.",
+  "paritySha256": "4b91bdc6379c441a33506abad9f3841e0042e127d8c649ea15f34fa505e3c797",
+  "roundHalfUpVectors": [
+    {
+      "id": "half-up-nine-halves",
+      "numerator": 9,
+      "denominator": 2,
+      "expect": 5
+    },
+    {
+      "id": "half-up-ten-halves",
+      "numerator": 10,
+      "denominator": 2,
+      "expect": 5
+    },
+    {
+      "id": "half-up-seven-halves",
+      "numerator": 7,
+      "denominator": 2,
+      "expect": 4
+    },
+    {
+      "id": "edge-round-water-at-700",
+      "numerator": 1893500,
+      "denominator": 300,
+      "expect": 6312
+    },
+    {
+      "id": "edge-round-product-at-700",
+      "numerator": 206500,
+      "denominator": 300,
+      "expect": 688
+    }
+  ],
+  "vectors": [
+    {
+      "id": "default-at-300",
+      "baseDrinkVolumeMl": 300,
+      "waterDeciMl": 2700,
+      "productDeciMl": 300,
+      "targetDrinkVolumeMl": 300,
+      "expectSuccess": true,
+      "scaledBaseDrinkVolumeMl": 300,
+      "scaledWaterDeciMl": 2700,
+      "scaledProductDeciMl": 300,
+      "sumDeltaFromTarget": 0
+    },
+    {
+      "id": "default-at-700",
+      "baseDrinkVolumeMl": 300,
+      "waterDeciMl": 2700,
+      "productDeciMl": 300,
+      "targetDrinkVolumeMl": 700,
+      "expectSuccess": true,
+      "scaledBaseDrinkVolumeMl": 700,
+      "scaledWaterDeciMl": 6300,
+      "scaledProductDeciMl": 700,
+      "sumDeltaFromTarget": 0
+    },
+    {
+      "id": "edge-round-at-700",
+      "baseDrinkVolumeMl": 300,
+      "waterDeciMl": 2705,
+      "productDeciMl": 295,
+      "targetDrinkVolumeMl": 700,
+      "expectSuccess": true,
+      "scaledBaseDrinkVolumeMl": 700,
+      "scaledWaterDeciMl": 6312,
+      "scaledProductDeciMl": 688,
+      "sumDeltaFromTarget": 0
+    },
+    {
+      "id": "drift-one-deci",
+      "baseDrinkVolumeMl": 100,
+      "waterDeciMl": 1,
+      "productDeciMl": 999,
+      "targetDrinkVolumeMl": 150,
+      "expectSuccess": true,
+      "scaledBaseDrinkVolumeMl": 150,
+      "scaledWaterDeciMl": 2,
+      "scaledProductDeciMl": 1499,
+      "sumDeltaFromTarget": 1
+    },
+    {
+      "id": "product-max-boundary",
+      "baseDrinkVolumeMl": 100,
+      "waterDeciMl": 0,
+      "productDeciMl": 1000,
+      "targetDrinkVolumeMl": 1000,
+      "expectSuccess": true,
+      "scaledBaseDrinkVolumeMl": 1000,
+      "scaledWaterDeciMl": 0,
+      "scaledProductDeciMl": 10000,
+      "sumDeltaFromTarget": 0
+    },
+    {
+      "id": "invalid-base-sum",
+      "baseDrinkVolumeMl": 300,
+      "waterDeciMl": 2700,
+      "productDeciMl": 301,
+      "targetDrinkVolumeMl": 700,
+      "expectSuccess": false,
+      "rejectReasons": ["BASE_INVALID"]
+    },
+    {
+      "id": "target-drink-min",
+      "baseDrinkVolumeMl": 300,
+      "waterDeciMl": 2700,
+      "productDeciMl": 300,
+      "targetDrinkVolumeMl": 99,
+      "expectSuccess": false,
+      "rejectReasons": ["TARGET_BASE_DRINK_VOLUME_ML_MIN"]
+    },
+    {
+      "id": "target-drink-max",
+      "baseDrinkVolumeMl": 300,
+      "waterDeciMl": 2700,
+      "productDeciMl": 300,
+      "targetDrinkVolumeMl": 1001,
+      "expectSuccess": false,
+      "rejectReasons": ["TARGET_BASE_DRINK_VOLUME_ML_MAX"]
+    }
+  ]
+}

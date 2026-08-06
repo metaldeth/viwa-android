@@ -21,5 +21,9 @@ object TelemetryPaidCompleteMessageCodec {
             put("syrupMlActual", paid.syrupMlActual)
             put("amountKopecks", paid.amountKopecks)
             put("payMethod", paid.payMethod)
+            paid.recipeDrinkVolumeMl?.let { put("recipeDrinkVolumeMl", it) }
+            paid.recipeWaterMl?.let { put("recipeWaterMl", it) }
+            paid.recipeProductMl?.let { put("recipeProductMl", it) }
+            paid.conversionFactor?.let { put("conversionFactor", it) }
         }
 }

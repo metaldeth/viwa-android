@@ -71,7 +71,7 @@ fun ViwaUpdaterSection(
                     label = "Legacy URL сервера",
                     value = legacyHost,
                     onValueChange = { legacyHost = it },
-                    placeholder = "http://83.166.246.158:9083",
+                    placeholder = "https://tl.vitamin-water.ru/android-ota",
                 )
                 Button(onClick = { viewModel.setUpdateHost(legacyHost) }) {
                     Text("Сохранить legacy URL")

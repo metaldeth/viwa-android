@@ -34,12 +34,13 @@ class ViwaServiceMenuStructureTest {
     }
 
     @Test
-    fun debugSubTabs_keepWsLogsAndControllerOnly() {
+    fun debugSubTabs_keepWsLogsControllerAndSubscription() {
         val debug = findViwaServiceGroup(ViwaServiceGroupId.Debug)
         assertEquals(
             listOf(
                 ViwaServiceSubTabId.DebugWsLogs,
                 ViwaServiceSubTabId.DebugController,
+                ViwaServiceSubTabId.DebugSubscription,
             ),
             debug.subTabs.map { it.id },
         )

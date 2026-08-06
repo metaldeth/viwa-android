@@ -5,9 +5,9 @@ package com.viwa.android.ui.screens.customer
  */
 enum class CardPaymentUiStatus(val label: String) {
     AttachCard("Приложите карту"),
-    Processing("Обрабатываю"),
-    BankProcessing("В обработке у банка"),
+    Processing("Обрабатываем"),
     Success("Успех"),
+    Failure("Не получилось"),
 }
 
 /** Статус карты в combined-overlay: Success не понижается после достижения Success. */
@@ -28,27 +28,29 @@ fun normalizeCardPaymentUiStatus(terminalBanner: String): CardPaymentUiStatus {
     if (raw.isEmpty()) return CardPaymentUiStatus.AttachCard
     val t = raw.lowercase()
     return when {
+        t.contains("отменя") ||
+            t.contains("таймаут") ||
+            t.contains("отклон") ||
+            t.contains("ошиб") ||
+            t.contains("неуспеш") ||
+            t.contains("отказ") -> CardPaymentUiStatus.Failure
         t.contains("успех") ||
             t.contains("успешно") ||
             t.contains("оплата прошла") ||
             t.contains("подтвержден") && t.contains("оплат") -> CardPaymentUiStatus.Success
+        t.contains("приложите") ||
+            t.contains("ожидание карты") ||
+            t.contains("ожидани") && t.contains("карт") -> CardPaymentUiStatus.AttachCard
         t.contains("банк") ||
             t.contains("связь с банком") ||
-            t.contains("банком") && t.contains("обрабатыва") -> CardPaymentUiStatus.BankProcessing
+            t.contains("банком") && t.contains("обрабатыва") ||
         t.contains("pin") ||
             t.contains("пин") ||
             t.contains("обрабатыва") ||
             t.contains("получен результат") ||
             t.contains("итоговый код") ||
             t.contains("завершает операцию") ||
-            t.contains("отменя") ||
-            t.contains("таймаут") ||
-            t.contains("отклон") ||
-            t.contains("ошиб") ||
             t.contains("aqsi:") && !t.contains("приложите") -> CardPaymentUiStatus.Processing
-        t.contains("приложите") ||
-            t.contains("ожидание карты") ||
-            t.contains("ожидани") && t.contains("карт") -> CardPaymentUiStatus.AttachCard
         else -> CardPaymentUiStatus.Processing
     }
 }

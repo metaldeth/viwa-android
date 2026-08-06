@@ -20,6 +20,7 @@ object DispenseTelemetryFactory {
     ): PourEventSnapshot {
         val strength = concentration.toDrinkStrength()
         val ratio = concentration.toRatio()
+        val recipeFields = recipeFieldsFromDosage(dosage)
         return PourEventSnapshot(
             requestUuid = requestUuid,
             pouredAt = pouredAt,
@@ -37,6 +38,10 @@ object DispenseTelemetryFactory {
                     volumeMl = volumeMl,
                     strengthRatio = ratio,
                 ),
+            recipeDrinkVolumeMl = recipeFields.recipeDrinkVolumeMl,
+            recipeWaterMl = recipeFields.recipeWaterMl,
+            recipeProductMl = recipeFields.recipeProductMl,
+            conversionFactor = recipeFields.conversionFactor,
         )
     }
 
@@ -83,6 +88,7 @@ object DispenseTelemetryFactory {
                 strengthRatio = ratio,
             )
         val amountKopecks = (amountRub * 100.0).roundToInt().coerceAtLeast(1)
+        val recipeFields = recipeFieldsFromDosage(dosage)
         return PaidCompleteSnapshot(
             transactionId = transactionId,
             requestUuid = requestUuid,
@@ -95,10 +101,29 @@ object DispenseTelemetryFactory {
             syrupMlActual = syrupMlActual,
             amountKopecks = amountKopecks,
             payMethod = normalizedPayMethod,
+            recipeDrinkVolumeMl = recipeFields.recipeDrinkVolumeMl,
+            recipeWaterMl = recipeFields.recipeWaterMl,
+            recipeProductMl = recipeFields.recipeProductMl,
+            conversionFactor = recipeFields.conversionFactor,
         )
     }
 
     fun newStableUuid(): String = UUID.randomUUID().toString()
+
+    private data class RecipeWireFields(
+        val recipeDrinkVolumeMl: Int,
+        val recipeWaterMl: Double,
+        val recipeProductMl: Double,
+        val conversionFactor: Double?,
+    )
+
+    private fun recipeFieldsFromDosage(dosage: DrinkDosage): RecipeWireFields =
+        RecipeWireFields(
+            recipeDrinkVolumeMl = dosage.drinkVolume,
+            recipeWaterMl = dosage.water,
+            recipeProductMl = dosage.product,
+            conversionFactor = dosage.conversionFactor.takeIf { it > 0.0 },
+        )
 
     private val PAID_PAY_METHODS = setOf("CASH", "CARD", "SBP", "OTHER")
 }
