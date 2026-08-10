@@ -1,7 +1,9 @@
 package com.viwa.android.domain.telemetry
 
 import com.viwa.android.domain.model.customer.DrinkConcentration
+import com.viwa.android.domain.model.customer.DrinkWaterOption
 import com.viwa.android.domain.model.customer.FlowWaterPourType
+import com.viwa.android.domain.model.customer.toFlowWaterPourType
 import kotlinx.serialization.Serializable
 
 /** Wire `pourKind` for `telemetry.pour.report`. */
@@ -24,6 +26,9 @@ enum class PlainWaterType(val wireValue: String) {
                 FlowWaterPourType.Cold -> COLD
                 FlowWaterPourType.Sparkling -> SPARKLING
             }
+
+        fun fromDrinkWaterOption(option: DrinkWaterOption): PlainWaterType =
+            fromFlowWaterPourType(option.toFlowWaterPourType())
     }
 }
 
@@ -84,4 +89,5 @@ data class PaidCompleteSnapshot(
     val recipeWaterMl: Double? = null,
     val recipeProductMl: Double? = null,
     val conversionFactor: Double? = null,
+    val plainWaterType: String? = null,
 )

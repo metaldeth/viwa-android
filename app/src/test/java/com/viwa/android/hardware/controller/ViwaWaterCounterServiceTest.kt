@@ -1,4 +1,4 @@
-package com.viwa.android.hardware.controller
+﻿package com.viwa.android.hardware.controller
 
 import com.viwa.android.data.local.db.JsonStoreKeys
 import com.viwa.android.data.local.outbox.FakeMachineOutboxPersistence
@@ -97,6 +97,26 @@ class ViwaWaterCounterServiceTest {
         assertNull(configRepository.get(JsonStoreKeys.WATER_USAGE_ML))
         coVerify(exactly = 0) { drainCoordinator.onEnqueue() }
         coVerify(exactly = 1) { hardware.sendCommand(RequestCommand.ResetWaterCounter, any()) }
+    }
+
+    @Test
+    fun `read timeout does not reset controller or treat as zero ml`() = runTest {
+        coEvery { hardware.sendCommand(any(), any()) } coAnswers {
+            val command = firstArg<RequestCommand>()
+            if (command == RequestCommand.ReadWaterCounter) {
+                // Never emit WaterCounterAnswer — force timeout
+            }
+        }
+        configRepository.set(JsonStoreKeys.WATER_USAGE_ML, "250.0")
+
+        val result = service.readAccumulateAndResetController()
+
+        assertEquals(0, result.deltaMl)
+        assertEquals(250.0, result.lifetimeTotalMl, 0.001)
+        assertEquals(false, result.controllerResetSent)
+        assertEquals("250.0", configRepository.get(JsonStoreKeys.WATER_USAGE_ML))
+        coVerify(exactly = 0) { hardware.sendCommand(RequestCommand.ResetWaterCounter, any()) }
+        coVerify(exactly = 0) { drainCoordinator.onEnqueue() }
     }
 
     @Test

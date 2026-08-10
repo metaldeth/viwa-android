@@ -23,7 +23,8 @@ object ControllerConstants {
     const val CONTROLLER_STARTUP_DELAY_MS = 0L
     const val EXPECTED_MODE_AUTO = 1
 
-    const val WATER_COUNTER_TIMEOUT_MS = 3_000L
+    /** Short wait for WaterCounterAnswer; on timeout do not reset (avoid silent ml loss). */
+    const val WATER_COUNTER_TIMEOUT_MS = 100L
 
  /** Как `START_DRINK_PREPARING_BODY` в DrinkPreparingService.ts */
     val START_DRINK_PREPARING_BODY: ByteArray = byteArrayOf(0, 0, 1, 1, 0)

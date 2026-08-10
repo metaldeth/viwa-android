@@ -9,6 +9,7 @@
 | BT-005 | medium | `TelemetryPourMessageCodecTest > encodePayload anonymous plain hold allows null clientId` — `TelemetryV3CodecTest.kt:107` | `open` |
 | BT-002 | medium | `TechnicianAllowlistSyncCoordinatorDisconnectTest` — `UncompletedCoroutinesError` | `open` |
 | BT-004 | high | `assembleRelease` падает до R8 — signing env / keystore не настроены | `open` |
+| BT-006 | high | Windows `mergeDebugResources` / `merged_res_blame_folder` missing JSON after interrupted builds | `open` |
 
 ---
 
@@ -75,3 +76,17 @@
 - **Workaround / fix:** `OkHttpTestClientRegistry` + shutdown в `@After`; tearDown WS/coordinator scopes; `CellsContentReportAckAwaiter.cancelAll()` из `MvpTelemetryWebSocketManager.disconnect()`; синхронный `completeAck` в `TelemetryCellsSyncCoordinatorTest`; `testOptions`: `maxParallelForks=1`, `maxHeapSize=1536m`, JUnit parallel disabled. Retry full suite: `--max-workers=1`.
 - **Статус:** `resolved`
 - **Связи:** inventory ack tests (`TelemetryAckRouterTest`, `TelemetryCellsSyncCoordinatorTest`, `CellsContentReportAckSemanticsTest`); BT-003 закрыт тем же фиксом (OkHttp lifecycle + single fork)
+### 2026-08-10 — mergeDebugResources blame folder (Windows, post-interrupt)
+
+- **Repo:** `wiva-android` (`c:\wiva\wiva-android`)
+- **Команда:** `gradlew.bat --stop`; `:app:clean --max-workers=1`; `:app:testDebugUnitTest` (ViwaWaterCounterServiceTest, TelemetryV3CodecTest) `--max-workers=1`; retry after `Remove-Item app\build -Recurse -Force`
+- **Симптом:**
+  `
+  :app:mergeDebugResources FAILED
+  Failed to create MD5 hash for file '...\merged_res_blame_folder\debug\mergeDebugResources\out\multi-v2\mergeDebugResources.json' as it does not exist.
+  `
+  Earlier attempt: missing `merged.dir\values\values.xml` under incremental mergeDebugResources.
+- **Причина:** AGP/Gradle incremental state for `blameLogOutputFolder` inconsistent after interrupted builds (prior KSP byRounds / partial intermediates). `:app:clean` OK; full `app\build` delete did not unblock targeted unit tests.
+- **Workaround / fix:** `gradlew --stop`; kill repo-scoped Java/GradleWrapper only; `:app:clean` or delete `app\build` plus `merged_res_blame_folder`, `generated/ksp`, `kspCaches`. If still failing: `--no-daemon`, `--max-workers=1`, consider project `.gradle` cleanup or AGP bump. Tests did not execute.
+- **Статус:** `open`
+- **Связи:** BT-006; agent clean-rebuild 2026-08-10

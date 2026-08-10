@@ -25,5 +25,6 @@ object TelemetryPaidCompleteMessageCodec {
             paid.recipeWaterMl?.let { put("recipeWaterMl", it) }
             paid.recipeProductMl?.let { put("recipeProductMl", it) }
             paid.conversionFactor?.let { put("conversionFactor", it) }
+            paid.plainWaterType?.let { put("plainWaterType", it) }
         }
 }

@@ -46,6 +46,11 @@ constructor(
     suspend fun beginHoldPourSession() {
         counterMutex.withLock {
             val preExisting = readCounterMlWithoutReset()
+            if (preExisting == null) {
+                Timber.tag(TAG).w("hold begin: water counter read timeout — skip flush/reset")
+                holdPourBaselineMl = 0
+                return@withLock
+            }
             if (preExisting > 0) {
                 accumulateDeltaToLifetime(preExisting)
                 resetControllerCounter()
@@ -58,7 +63,11 @@ constructor(
         counterMutex.withLock {
             val baseline = holdPourBaselineMl ?: return@withLock 0
             holdPourBaselineMl = null
-            val after = readCounterMlWithoutReset()
+            val after =
+                readCounterMlWithoutReset() ?: run {
+                    Timber.tag(TAG).w("hold end: water counter read timeout — skip reset")
+                    return@withLock 0
+                }
             val delta = (after - baseline).coerceAtLeast(0)
             if (delta > 0) {
                 accumulateDeltaToLifetime(delta)
@@ -79,12 +88,20 @@ constructor(
         readAccumulateAndResetController().deltaMl
 
     /**
-     * Service operator path: read controller, add delta to lifetime when > 0, always reset controller.
-     * Lifetime total is never cleared.
+     * Service operator path: read controller, add delta to lifetime when > 0, reset only after successful read.
+     * Lifetime total is never cleared. Read timeout → no reset (controller keeps ml for a later flush).
      */
     suspend fun readAccumulateAndResetController(): AccumulateResult =
         counterMutex.withLock {
-            val delta = readCounterMlWithoutReset()
+            val delta =
+                readCounterMlWithoutReset() ?: run {
+                    Timber.tag(TAG).w("water counter read timeout — skip reset")
+                    return@withLock AccumulateResult(
+                        deltaMl = 0,
+                        lifetimeTotalMl = readAccumulatedWaterUsageMl(),
+                        controllerResetSent = false,
+                    )
+                }
             val lifetimeTotalMl =
                 if (delta > 0) {
                     accumulateDeltaToLifetime(delta).also {
@@ -101,7 +118,7 @@ constructor(
             )
         }
 
-    /** Alias for operator reset — always sends controller reset even when delta is 0. */
+    /** Alias for operator reset — resets controller only when hardware read succeeded (incl. 0 ml). */
     suspend fun resetControllerAfterAccumulating(): AccumulateResult = readAccumulateAndResetController()
 
     suspend fun getAccumulatedWaterUsageMl(): Double = readAccumulatedWaterUsageMl()
@@ -128,7 +145,8 @@ constructor(
         }.onFailure { Timber.tag(TAG).w(it, "enqueue machine.water.usage.report failed totalMl=$totalMl") }
     }
 
-    private suspend fun readCounterMlWithoutReset(): Int =
+    /** `null` = no WaterCounterAnswer within timeout (do not treat as 0 ml). */
+    private suspend fun readCounterMlWithoutReset(): Int? =
         coroutineScope {
             val awaitAnswer =
                 async {
@@ -138,11 +156,15 @@ constructor(
                 }
             yield()
             hardware.sendCommand(RequestCommand.ReadWaterCounter, ControllerConstants.DEFAULT_BODY)
-            val answer =
+            val event =
                 withTimeoutOrNull(ControllerConstants.WATER_COUNTER_TIMEOUT_MS) {
                     awaitAnswer.await()
-                } ?: return@coroutineScope 0
-            decodeCounterPayload(answer.payload)
+                }
+            if (event == null) {
+                awaitAnswer.cancel()
+                return@coroutineScope null
+            }
+            decodeCounterPayload(event.payload)
         }
 
     private suspend fun resetControllerCounter() {

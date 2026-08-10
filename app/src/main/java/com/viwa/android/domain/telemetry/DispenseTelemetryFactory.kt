@@ -3,6 +3,7 @@ package com.viwa.android.domain.telemetry
 import com.viwa.android.data.remote.telemetry.mvp.TelemetryIsoTimestamps
 import com.viwa.android.domain.model.customer.DrinkConcentration
 import com.viwa.android.domain.model.customer.DrinkDosage
+import com.viwa.android.domain.model.customer.DrinkWaterOption
 import com.viwa.android.domain.model.customer.toRatio
 import java.util.UUID
 import kotlin.math.roundToInt
@@ -71,6 +72,7 @@ object DispenseTelemetryFactory {
         productNameSnapshot: String,
         concentration: DrinkConcentration,
         dosage: DrinkDosage,
+        waterOption: DrinkWaterOption = DrinkWaterOption.STANDARD,
         occurredAt: String = TelemetryIsoTimestamps.nowUtc(),
     ): PaidCompleteSnapshot {
         require(volumeMl == 300 || volumeMl == 700) { "Paid volume must be 300 or 700 ml, got $volumeMl" }
@@ -105,6 +107,7 @@ object DispenseTelemetryFactory {
             recipeWaterMl = recipeFields.recipeWaterMl,
             recipeProductMl = recipeFields.recipeProductMl,
             conversionFactor = recipeFields.conversionFactor,
+            plainWaterType = PlainWaterType.fromDrinkWaterOption(waterOption).wireValue,
         )
     }
 

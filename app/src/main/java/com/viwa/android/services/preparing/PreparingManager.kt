@@ -263,6 +263,7 @@ constructor(
                     subscriptionPourContext = subscriptionPourContext,
                     pourRequestUuid = pourRequestUuid,
                     transactionId = transactionId,
+                    waterOption = waterOption,
                 )
 
             if (subscriptionPourContext?.offlineMode == true) {
@@ -350,6 +351,7 @@ constructor(
                         productNameSnapshot = context.drinkName,
                         concentration = context.concentration,
                         dosage = dosage,
+                        waterOption = context.waterOption,
                     )
                 runCatching {
                     dispenseSyncCoordinator.enqueuePaidComplete(paid)
@@ -425,6 +427,7 @@ constructor(
         val subscriptionPourContext: SubscriptionPourContext? = null,
         val pourRequestUuid: String,
         val transactionId: String? = null,
+        val waterOption: DrinkWaterOption = DrinkWaterOption.STANDARD,
     )
 
     private suspend fun persistPreparingTimeRecord() {

@@ -212,6 +212,8 @@ class TelemetryPaidCompleteMessageCodecTest {
 
         assertEquals(0.5, payload["conversionFactor"]!!.jsonPrimitive.content.toDouble(), 0.001)
 
+        assertEquals("FILTERED", payload["plainWaterType"]!!.jsonPrimitive.content)
+
         assertFalse(payload.containsKey("pour"))
 
         assertFalse(payload.containsKey("soldAt"))
