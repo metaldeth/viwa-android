@@ -14,11 +14,6 @@ import com.viwa.android.domain.offline.OfflineAuthorizationReason
 import com.viwa.android.domain.offline.OfflinePourAuthorizationService
 import com.viwa.android.data.telemetry.loyalty.LoyaltyWaterUseRequest
 import com.viwa.android.data.telemetry.loyalty.LoyaltyWsCodec
-import com.viwa.android.domain.subscription.LoyaltyPaymentException
-import com.viwa.android.domain.subscription.SubscriptionPaymentInit
-import com.viwa.android.domain.subscription.SubscriptionPaymentInitParams
-import com.viwa.android.domain.subscription.SubscriptionPaymentStatusResult
-import com.viwa.android.domain.subscription.SubscriptionSaleParams
 import com.viwa.android.di.AppIoScope
 import com.viwa.android.domain.model.MachineRegistration
 import com.viwa.android.domain.model.TelemetryConfig
@@ -28,7 +23,6 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -62,19 +56,9 @@ constructor(
     private val offlinePourAuthorizationService: OfflinePourAuthorizationService,
     @AppIoScope private val scope: CoroutineScope,
 ) {
-    private companion object {
-        const val SUBSCRIPTION_SALE_TIMEOUT_MS = 60_000L
-    }
-
     private enum class PendingLoyaltyKind {
         STATUS_GET,
-        LEVELS_LIST,
         WATER_USE,
-        PAYMENT_INIT,
-        PAYMENT_STATUS_GET,
-        PAYMENT_COMPLETE,
-        SUBSCRIBE_SALE,
-        SUBSCRIBE_CANCEL,
     }
 
     private val json =
@@ -85,13 +69,8 @@ constructor(
 
     val connectionState: StateFlow<ConnectionState> = mvpCoordinator.connectionState
 
-    private val subscriptionSaleTimers = mutableMapOf<String, Job>()
-
     private val _subscribeInfo = MutableStateFlow<SubscribeInformationState?>(null)
     val subscribeInfo: StateFlow<SubscribeInformationState?> = _subscribeInfo
-
-    private val _subscriptionLevels = MutableStateFlow<List<SubscriptionLevelItem>?>(null)
-    val subscriptionLevels: StateFlow<List<SubscriptionLevelItem>?> = _subscriptionLevels
 
     private val _loyaltyCardClientScans =
         MutableSharedFlow<String>(
@@ -118,7 +97,6 @@ constructor(
     val offlineLoyaltyDenyReason: SharedFlow<OfflineAuthorizationReason> = _offlineLoyaltyDenyReason.asSharedFlow()
 
     private val pendingLoyaltyRequests = ConcurrentHashMap<String, PendingLoyaltyKind>()
-    private val pendingLoyaltyAcks = ConcurrentHashMap<String, CompletableDeferred<Result<JsonObject>>>()
     private val sentWaterUseRequestUuids = ConcurrentHashMap.newKeySet<String>()
     private var lastStatusClientId: String? = null
 
@@ -147,21 +125,11 @@ constructor(
                 override suspend fun onLoyaltyError(correlationId: String?, code: String, message: String) {
                     Timber.w("ViwaTelemetry: loyalty WS error correlationId=$correlationId code=$code message=$message")
                     if (correlationId != null) {
-                        pendingLoyaltyAcks.remove(correlationId)?.complete(
-                            Result.failure(LoyaltyPaymentException(code, message)),
-                        )
                         when (pendingLoyaltyRequests.remove(correlationId)) {
                             PendingLoyaltyKind.STATUS_GET -> {
                                 scope.launch { _invalidLoyaltyCardScans.emit(Unit) }
                             }
-                            PendingLoyaltyKind.LEVELS_LIST -> Unit
                             PendingLoyaltyKind.WATER_USE -> Unit
-                            PendingLoyaltyKind.PAYMENT_INIT,
-                            PendingLoyaltyKind.PAYMENT_STATUS_GET,
-                            PendingLoyaltyKind.PAYMENT_COMPLETE,
-                            PendingLoyaltyKind.SUBSCRIBE_SALE,
-                            PendingLoyaltyKind.SUBSCRIBE_CANCEL,
-                            -> Unit
                             null -> Unit
                         }
                     }
@@ -206,17 +174,11 @@ constructor(
     }
 
     private fun handleLoyaltyAck(correlationId: String, payload: JsonObject) {
-        pendingLoyaltyAcks.remove(correlationId)?.complete(Result.success(payload))
         when (pendingLoyaltyRequests.remove(correlationId)) {
             PendingLoyaltyKind.STATUS_GET ->
                 runCatching {
                     _subscribeInfo.value = LoyaltyWsCodec.decodeStatusAck(payload)
                 }.onFailure { Timber.w(it, "ViwaTelemetry: status ack decode failed") }
-
-            PendingLoyaltyKind.LEVELS_LIST ->
-                runCatching {
-                    _subscriptionLevels.value = LoyaltyWsCodec.decodeLevelsAck(payload)
-                }.onFailure { Timber.w(it, "ViwaTelemetry: levels ack decode failed") }
 
             PendingLoyaltyKind.WATER_USE -> {
                 runCatching {
@@ -229,45 +191,8 @@ constructor(
                 }
             }
 
-            PendingLoyaltyKind.PAYMENT_INIT,
-            PendingLoyaltyKind.PAYMENT_STATUS_GET,
-            PendingLoyaltyKind.PAYMENT_COMPLETE,
-            -> Unit
-
-            PendingLoyaltyKind.SUBSCRIBE_SALE ->
-                runCatching {
-                    _subscribeInfo.value = LoyaltyWsCodec.decodeStatusAck(payload)
-                }.onFailure { Timber.w(it, "ViwaTelemetry: subscribe.sale ack decode failed") }
-
-            PendingLoyaltyKind.SUBSCRIBE_CANCEL ->
-                runCatching {
-                    _subscribeInfo.value = LoyaltyWsCodec.decodeStatusAck(payload)
-                }.onFailure { Timber.w(it, "ViwaTelemetry: subscribe.cancel ack decode failed") }
-
             null -> Timber.d("ViwaTelemetry: orphan loyalty ack correlationId=$correlationId")
         }
-    }
-
-    private suspend fun sendLoyaltyRequest(
-        type: String,
-        payload: JsonObject,
-        kind: PendingLoyaltyKind,
-    ): Result<JsonObject> {
-        val messageId = UUID.randomUUID().toString()
-        val deferred = CompletableDeferred<Result<JsonObject>>()
-        pendingLoyaltyRequests[messageId] = kind
-        pendingLoyaltyAcks[messageId] = deferred
-        return wsManager
-            .sendEnvelope(type = type, payload = payload, messageId = messageId)
-            .map { messageId }
-            .recoverCatching { error ->
-                pendingLoyaltyRequests.remove(messageId)
-                pendingLoyaltyAcks.remove(messageId)
-                throw error
-            }.fold(
-                onSuccess = { deferred.await() },
-                onFailure = { Result.failure(it) },
-            )
     }
 
     suspend fun loadTelemetryConfig(): TelemetryConfig = mvpCoordinator.loadTelemetryConfig()
@@ -379,30 +304,15 @@ constructor(
     /** Backward-compatible alias for legacy callers. */
     suspend fun sendStatusSubscribeTopic(userUuid: String): Result<Unit> = sendStatusGet(userUuid)
 
-    /** UC-7 prep: `loyalty.levels.list` global tier catalog. */
-    suspend fun sendSubscriptionLevelRequest(): Result<Unit> {
-        val messageId = UUID.randomUUID().toString()
-        pendingLoyaltyRequests[messageId] = PendingLoyaltyKind.LEVELS_LIST
-        return wsManager
-            .sendEnvelope(
-                type = LoyaltyWsCodec.TYPE_LEVELS_LIST,
-                payload = LoyaltyWsCodec.encodeLevelsList(),
-                messageId = messageId,
-            ).map { Unit }
-            .onFailure { pendingLoyaltyRequests.remove(messageId) }
-    }
-
     fun onLoyaltyCardScanned(clientUuid: String) {
         val id = clientUuid.trim()
         if (id.isEmpty()) return
         scope.launch {
-            _subscriptionLevels.value = null
             _loyaltyCardClientScans.emit(id)
             val connected = connectionState.value is ConnectionState.Connected
             if (connected) {
                 sendStatusGet(id)
-                sendSubscriptionLevelRequest()
-                Timber.d("ViwaTelemetry: loyalty scan $id → status.get + levels.list")
+                Timber.d("ViwaTelemetry: loyalty scan $id → status.get")
             } else {
                 handleOfflineLoyaltyCardScan(id)
             }
@@ -440,82 +350,14 @@ constructor(
     @OptIn(ExperimentalCoroutinesApi::class)
     fun clearSubscribeUiState() {
         _subscribeInfo.value = null
-        _subscriptionLevels.value = null
         _loyaltyCardClientScans.resetReplayCache()
         lastStatusClientId = null
     }
 
-    /** UC-7: `loyalty.payment.init` — create server-side SubscriptionPayment. */
-    suspend fun sendPaymentInit(params: SubscriptionPaymentInitParams): Result<SubscriptionPaymentInit> =
-        sendLoyaltyRequest(
-            type = LoyaltyWsCodec.TYPE_PAYMENT_INIT,
-            payload = LoyaltyWsCodec.encodePaymentInit(params),
-            kind = PendingLoyaltyKind.PAYMENT_INIT,
-        ).mapCatching { payload -> LoyaltyWsCodec.decodePaymentInitAck(payload) }
-
-    /** UC-7: poll SBP payment until PAID/FAILED/EXPIRED. */
-    suspend fun sendPaymentStatusGet(paymentId: String): Result<SubscriptionPaymentStatusResult> =
-        sendLoyaltyRequest(
-            type = LoyaltyWsCodec.TYPE_PAYMENT_STATUS_GET,
-            payload = LoyaltyWsCodec.encodePaymentStatusGet(paymentId),
-            kind = PendingLoyaltyKind.PAYMENT_STATUS_GET,
-        ).mapCatching { payload -> LoyaltyWsCodec.decodePaymentStatusAck(payload) }
-
-    /** UC-7: confirm CARD POS success on server. */
-    suspend fun sendPaymentComplete(
-        paymentId: String,
-        requestUuid: String,
-        externalRef: String?,
-    ): Result<SubscriptionPaymentStatusResult> =
-        sendLoyaltyRequest(
-            type = LoyaltyWsCodec.TYPE_PAYMENT_COMPLETE,
-            payload = LoyaltyWsCodec.encodePaymentComplete(paymentId, requestUuid, externalRef),
-            kind = PendingLoyaltyKind.PAYMENT_COMPLETE,
-        ).mapCatching { payload -> LoyaltyWsCodec.decodePaymentStatusAck(payload) }
-
-    /** UC-7: apply subscription only when payment is PAID on server. */
-    suspend fun sendSubscribeSale(params: SubscriptionSaleParams): Result<Unit> {
-        lastStatusClientId = params.clientId
-        return sendLoyaltyRequest(
-            type = LoyaltyWsCodec.TYPE_SUBSCRIBE_SALE,
-            payload = LoyaltyWsCodec.encodeSubscribeSale(params),
-            kind = PendingLoyaltyKind.SUBSCRIBE_SALE,
-        ).map { Unit }
-    }
-
-    /** UC-7: cancel pending subscription purchase. */
-    suspend fun sendSubscribeCancel(clientId: String, requestUuid: String): Result<Unit> {
-        lastStatusClientId = clientId
-        return sendLoyaltyRequest(
-            type = LoyaltyWsCodec.TYPE_SUBSCRIBE_CANCEL,
-            payload = LoyaltyWsCodec.encodeSubscribeCancel(clientId, requestUuid),
-            kind = PendingLoyaltyKind.SUBSCRIBE_CANCEL,
-        ).map { Unit }
-    }
-
-    /** Legacy saleSubscribeTopic — routes to `loyalty.subscribe.sale` when paymentId present. */
+    /** Legacy saleSubscribeTopic — removed with kiosk subscription purchase. */
     suspend fun sendSaleSubscribeTopic(body: SaleSubscribeTopicBody): Result<Unit> {
-        Timber.w("ViwaTelemetry: sendSaleSubscribeTopic legacy path — use sendSubscribeSale with paymentId")
-        return Result.failure(IllegalStateException("Legacy saleSubscribeTopic without paymentId is forbidden"))
-    }
-
-    fun startSubscriptionSaleTimer(
-        requestUuid: String,
-        machineClientId: String,
-        userUuid: String,
-        machineId: Int,
-    ) {
-        clearSubscriptionSaleTimer(requestUuid)
-        subscriptionSaleTimers[requestUuid] =
-            scope.launch {
-                delay(SUBSCRIPTION_SALE_TIMEOUT_MS)
-                runCatching { sendSubscribeCancel(userUuid, requestUuid) }
-                    .onFailure { Timber.w(it, "ViwaTelemetry: subscribe.cancel on timer failed") }
-            }
-    }
-
-    fun clearSubscriptionSaleTimer(requestUuid: String) {
-        subscriptionSaleTimers.remove(requestUuid)?.cancel()
+        Timber.w("ViwaTelemetry: sendSaleSubscribeTopic legacy path removed")
+        return Result.failure(IllegalStateException("Legacy saleSubscribeTopic is forbidden"))
     }
 
     /** Legacy API → telemetry v3 `telemetry.pour.report` (plain water, measured ml). */

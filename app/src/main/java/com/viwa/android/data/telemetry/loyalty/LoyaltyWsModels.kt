@@ -1,7 +1,6 @@
 package com.viwa.android.data.telemetry.loyalty
 
 import com.viwa.android.services.telemetry.SubscribeInformationState
-import com.viwa.android.services.telemetry.SubscriptionLevelItem
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -21,19 +20,6 @@ data class LoyaltyStatusAckPayload(
     val subscriptionEndsAt: String? = null,
     val limitExhausted: Boolean = false,
     val limitResetsAt: String? = null,
-)
-
-@Serializable
-data class LoyaltyLevelDto(
-    val id: String,
-    val name: String,
-    val dailyVolumeMl: Int,
-    val priceKopecks: Int,
-)
-
-@Serializable
-data class LoyaltyLevelsAckPayload(
-    val levels: List<LoyaltyLevelDto> = emptyList(),
 )
 
 data class LoyaltyWaterUseRequest(
@@ -71,64 +57,3 @@ fun LoyaltyStatusAckPayload.toSubscribeInformationState(): SubscribeInformationS
         maxVolumeMl = displayMaxMl,
     )
 }
-
-fun LoyaltyLevelDto.toSubscriptionLevelItem(): SubscriptionLevelItem =
-    SubscriptionLevelItem(
-        uuid = id,
-        price = priceKopecks / 100.0,
-        name = name,
-        volume = dailyVolumeMl,
-    )
-
-@Serializable
-data class LoyaltyPaymentInitPayload(
-    val clientId: String,
-    val subscriptionLevelId: String,
-    val payMethod: String,
-    val requestUuid: String,
-)
-
-@Serializable
-data class LoyaltyPaymentInitAckPayload(
-    val paymentId: String,
-    val amountKopecks: Int,
-    val status: String,
-    val sbpQrUrl: String? = null,
-    val expiresAt: String? = null,
-)
-
-@Serializable
-data class LoyaltyPaymentStatusGetPayload(
-    val paymentId: String,
-)
-
-@Serializable
-data class LoyaltyPaymentStatusAckPayload(
-    val paymentId: String,
-    val status: String,
-    val paidAt: String? = null,
-)
-
-@Serializable
-data class LoyaltyPaymentCompletePayload(
-    val paymentId: String,
-    val requestUuid: String,
-    val externalRef: String? = null,
-)
-
-@Serializable
-data class LoyaltySubscribeSalePayload(
-    val paymentId: String,
-    val requestUuid: String,
-    val clientId: String,
-    val subscriptionLevelId: String,
-    val payMethod: String,
-    val operation: String = "SALE",
-)
-
-@Serializable
-data class LoyaltySubscribeCancelPayload(
-    val clientId: String,
-    val requestUuid: String,
-    val operation: String = "CANCEL",
-)

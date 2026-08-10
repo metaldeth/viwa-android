@@ -104,10 +104,6 @@ class DrinkListViewModelUnlimitedWaterTest {
             telemetry,
             mockk(relaxed = true),
             mockk(relaxed = true),
-            mockk(relaxed = true),
-            mockk(relaxed = true),
-            mockk(relaxed = true),
-            mockk(relaxed = true),
             DrinkListViewModelTestSupport.sbpRepositoryMock(),
             DrinkListViewModelTestSupport.nanoKassaRepositoryMock(),
             mockk(relaxed = true),
@@ -119,7 +115,7 @@ class DrinkListViewModelUnlimitedWaterTest {
 
     @Test
     fun setFlowWaterPourType_coercesPremiumWhenSubscriptionInactive() = runBlocking {
-        val (vm, _) = DrinkListViewModelTestSupport.createViewModel()
+        val vm = DrinkListViewModelTestSupport.createViewModel()
         vm.setUiStateForUnitTests(
             DrinkListUiState(
                 isSubscriptionActive = false,
@@ -152,12 +148,11 @@ class DrinkListViewModelUnlimitedWaterTest {
         every { telemetry.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
         every { telemetry.subscribeInfo } returns subscribeInfo.asStateFlow()
-        every { telemetry.subscriptionLevels } returns MutableStateFlow(null).asStateFlow()
         every { telemetry.loyaltyCardClientScans } returns
             MutableSharedFlow<String>(extraBufferCapacity = 16).asSharedFlow()
         every { telemetry.invalidLoyaltyCardScans } returns
             MutableSharedFlow<Unit>(extraBufferCapacity = 16).asSharedFlow()
-        val (vm, _) = DrinkListViewModelTestSupport.createViewModel(telemetryService = telemetry)
+        val vm = DrinkListViewModelTestSupport.createViewModel(telemetryService = telemetry)
         flushMain(24)
 
         vm.setWater(DrinkWaterOption.SPARK)
@@ -175,7 +170,7 @@ class DrinkListViewModelUnlimitedWaterTest {
     @Test
     fun setWater_withActiveDrinkAllowsSparkWithoutSubscription() = runBlocking {
         val telemetry = DrinkListViewModelTestSupport.createTestTelemetry()
-        val (vm, _) = DrinkListViewModelTestSupport.createViewModel(telemetryService = telemetry)
+        val vm = DrinkListViewModelTestSupport.createViewModel(telemetryService = telemetry)
         val taste = DrinkTaste(1, "Cola", null, null)
         val product =
             DrinkProduct(
@@ -229,12 +224,11 @@ class DrinkListViewModelUnlimitedWaterTest {
         every { telemetry.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
         every { telemetry.subscribeInfo } returns subscribeInfo.asStateFlow()
-        every { telemetry.subscriptionLevels } returns MutableStateFlow(null).asStateFlow()
         every { telemetry.loyaltyCardClientScans } returns
             MutableSharedFlow<String>(extraBufferCapacity = 16).asSharedFlow()
         every { telemetry.invalidLoyaltyCardScans } returns
             MutableSharedFlow<Unit>(extraBufferCapacity = 16).asSharedFlow()
-        val (vm, _) = DrinkListViewModelTestSupport.createViewModel(telemetryService = telemetry)
+        val vm = DrinkListViewModelTestSupport.createViewModel(telemetryService = telemetry)
         vm.setUiStateForUnitTests(
             DrinkListUiState(
                 flowWaterPourType = FlowWaterPourType.Cold,
@@ -317,12 +311,11 @@ class DrinkListViewModelUnlimitedWaterTest {
         every { telemetry.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
         every { telemetry.subscribeInfo } returns subscribeInfo.asStateFlow()
-        every { telemetry.subscriptionLevels } returns MutableStateFlow(null).asStateFlow()
         every { telemetry.loyaltyCardClientScans } returns
             MutableSharedFlow<String>(extraBufferCapacity = 16).asSharedFlow()
         every { telemetry.invalidLoyaltyCardScans } returns
             MutableSharedFlow<Unit>(extraBufferCapacity = 16).asSharedFlow()
-        val (vm, _) = DrinkListViewModelTestSupport.createViewModel(telemetryService = telemetry)
+        val vm = DrinkListViewModelTestSupport.createViewModel(telemetryService = telemetry)
         flushMain(24)
 
         vm.setUiStateForUnitTests(
@@ -370,7 +363,6 @@ class DrinkListViewModelUnlimitedWaterTest {
         every { telemetry.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
         every { telemetry.subscribeInfo } returns subscribeInfo.asStateFlow()
-        every { telemetry.subscriptionLevels } returns MutableStateFlow(null).asStateFlow()
         every { telemetry.loyaltyCardClientScans } returns
             MutableSharedFlow<String>(extraBufferCapacity = 16).asSharedFlow()
         every { telemetry.invalidLoyaltyCardScans } returns
@@ -394,10 +386,6 @@ class DrinkListViewModelUnlimitedWaterTest {
                 DrinkListViewModelTestSupport.aqsiManagerMock(),
                 mockk(relaxed = true),
                 telemetry,
-                mockk(relaxed = true),
-                mockk(relaxed = true),
-                mockk(relaxed = true),
-                mockk(relaxed = true),
                 mockk(relaxed = true),
                 mockk(relaxed = true),
                 DrinkListViewModelTestSupport.sbpRepositoryMock(),
@@ -455,7 +443,6 @@ class DrinkListViewModelUnlimitedWaterTest {
         every { telemetry.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
         every { telemetry.subscribeInfo } returns subscribeInfo.asStateFlow()
-        every { telemetry.subscriptionLevels } returns MutableStateFlow(null).asStateFlow()
         every { telemetry.loyaltyCardClientScans } returns
             MutableSharedFlow<String>(extraBufferCapacity = 16).asSharedFlow()
         every { telemetry.invalidLoyaltyCardScans } returns

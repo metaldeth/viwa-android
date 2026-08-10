@@ -14,7 +14,6 @@ import com.viwa.android.domain.customer.TelemetryCellsSnapshotAdapter
 import com.viwa.android.domain.model.SBPLink
 import com.viwa.android.domain.model.SBPStatus
 import com.viwa.android.domain.model.PaymentMethod
-import com.viwa.android.domain.model.ReceiptItem
 import com.viwa.android.domain.model.CardPaymentResult
 import com.viwa.android.domain.model.customer.DrinkConcentration
 import com.viwa.android.domain.model.customer.DrinkContainer
@@ -29,14 +28,6 @@ import com.viwa.android.domain.model.customer.toRatio
 import com.viwa.android.domain.repository.NanoKassaRepository
 import com.viwa.android.domain.repository.SBPRepository
 import com.viwa.android.domain.repository.TelemetryCellsRepository
-import com.viwa.android.domain.subscription.ApplyMachineSubscriptionSaleUseCase
-import com.viwa.android.domain.subscription.CancelMachineSubscriptionUseCase
-import com.viwa.android.domain.subscription.CompleteMachineSubscriptionPaymentUseCase
-import com.viwa.android.domain.subscription.InitMachineSubscriptionPaymentUseCase
-import com.viwa.android.domain.subscription.LoyaltyPaymentException
-import com.viwa.android.domain.subscription.SubscriptionPayMethod
-import com.viwa.android.domain.subscription.SubscriptionPaymentStatus
-import com.viwa.android.domain.subscription.SubscriptionSaleParams
 import com.viwa.android.domain.usecase.CheckSBPStatusUseCase
 import com.viwa.android.domain.usecase.GetSBPLinkUseCase
 import com.viwa.android.hardware.controller.ControllerGateway
@@ -48,9 +39,6 @@ import com.viwa.android.domain.telemetry.HoldPourTelemetryCoordinator
 import com.viwa.android.domain.telemetry.PlainWaterEntitlement
 import com.viwa.android.domain.offline.OfflineAuthorizationReason
 import com.viwa.android.domain.offline.SubscriptionPourContext
-import com.viwa.android.services.telemetry.SubscriptionLevelItem
-import com.viwa.android.services.telemetry.UseSubscriptionPayMethod
-import com.viwa.android.services.telemetry.UseSubscriptionSaleBody
 import com.viwa.android.services.preparing.CustomerPreparingPhase
 import com.viwa.android.services.preparing.PrepareDrinkResult
 import com.viwa.android.services.preparing.PreparingManager
@@ -94,8 +82,6 @@ enum class PaymentSheetStep {
     Combined,
     Card,
     Sbp,
-    Subscription,
-    SubscriptionReceipt,
 }
 
 /** Объём по умолчанию при первом выборе напитка (шапка: 300 / 700 мл). Раньше было 700 мл. */
@@ -129,29 +115,11 @@ data class DrinkListUiState(
     val subscriptionVolumeMl: Int = 0,
     val subscriptionMaxVolumeMl: Int = 0,
     val subscriptionEndDate: String? = null,
-    val subscriptionLevelName: String? = null,
-    val subscriptionLevelUuid: String? = null,
-    val subscriptionPriceRub: Int = 0,
- /** null — ответ ещё не приходил; список — данные с телеметрии. */
-    val subscriptionLevelsList: List<SubscriptionLevelItem>? = null,
-    val subscriptionLevelsLoading: Boolean = false,
- /** Сообщение на экране выбора тарифа, если WS офлайн или запрос не ушёл. */
-    val subscriptionTariffsError: String? = null,
- /** Полноэкранный выбор тарифа перед оплатой (аналог маршрута `/subscribe-now`). */
-    val subscriptionLevelPickerVisible: Boolean = false,
- /** true — шаг оплаты подписки открыт после выбора тарифа; «Назад» возвращает на экран выбора. */
-    val subscriptionPurchaseFlowActive: Boolean = false,
     val invalidSubscriptionCardVisible: Boolean = false,
     val sbpLink: SBPLink? = null,
     val sbpStatus: SBPStatus = SBPStatus.Pending,
     val sbpRemainingSeconds: Int = 0,
     val isSbpLoading: Boolean = false,
- /** QR чека после успешной оплаты подписки. */
-    val subscriptionReceiptUrl: String? = null,
-    val subscriptionReceiptLoading: Boolean = false,
-    val subscriptionReceiptError: String? = null,
- /** Автозакрытие модалки подтверждения оплаты подписки. */
-    val subscriptionReceiptRemainingSeconds: Int = 0,
  /** Как `useTelemetryConnection` / `WS_CONNECTION_STATUS`. */
     val telemetryWsConnected: Boolean = false,
  /** Температура датчика T0 (°C), null до первого опроса. */
@@ -178,12 +146,9 @@ data class DrinkListUiState(
 /** Full-screen or blocking customer flows on Home — idle overlay must stay hidden. */
 fun DrinkListUiState.blocksIdleVideoOverlay(): Boolean =
     paymentSheetVisible ||
-        subscriptionLevelPickerVisible ||
         invalidSubscriptionCardVisible ||
         isProcessingPay ||
-        isWaterPourActive ||
-        !subscriptionReceiptUrl.isNullOrBlank() ||
-        subscriptionReceiptLoading
+        isWaterPourActive
 
 @HiltViewModel
 class DrinkListViewModel
@@ -199,10 +164,6 @@ constructor(
     private val telemetryService: ViwaTelemetryService,
     private val getSBPLinkUseCase: GetSBPLinkUseCase,
     private val checkSBPStatusUseCase: CheckSBPStatusUseCase,
-    private val initMachineSubscriptionPaymentUseCase: InitMachineSubscriptionPaymentUseCase,
-    private val completeMachineSubscriptionPaymentUseCase: CompleteMachineSubscriptionPaymentUseCase,
-    private val applyMachineSubscriptionSaleUseCase: ApplyMachineSubscriptionSaleUseCase,
-    private val cancelMachineSubscriptionUseCase: CancelMachineSubscriptionUseCase,
     private val sbpRepository: SBPRepository,
     private val nanoKassaRepository: NanoKassaRepository,
     private val networkTrafficLogger: NetworkTrafficLogger,
@@ -223,7 +184,6 @@ constructor(
     private var sbpTimerJob: Job? = null
     private var sbpRetryJob: Job? = null
     private var combinedPaymentTimerJob: Job? = null
-    private var subscriptionReceiptTimerJob: Job? = null
     private var subscriptionExitTimerJob: Job? = null
     private val combinedPaymentSettled = AtomicBoolean(false)
     private val combinedPaymentSessionLock = Any()
@@ -251,12 +211,9 @@ constructor(
     private var waterPourDebounceJob: Job? = null
     private var waterPourMaxHoldJob: Job? = null
     private var waterPourLimitHideJob: Job? = null
-    private var tariffsLoadTimeoutJob: Job? = null
     private var waterPourStarted: Boolean = false
     private var holdPourRequestUuid: String? = null
     private var pendingSubscriptionPourRequestUuid: String? = null
-    private var subscriptionPaymentId: String? = null
-    private var subscriptionPaymentRequestUuid: String? = null
     private val paymentClearingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
  /** Последние значения T0/T1, отправленные в телеметрию — для детектирования изменений. */
@@ -298,23 +255,12 @@ constructor(
             var wasConnected = false
             telemetryService.connectionState.collect { cs ->
                 val connected = cs is ConnectionState.Connected
- // После обрыва WS повторно отправить setMachineInfo с теми же T0/T1 (мок/стабильная температура).
                 if (connected && !wasConnected) {
                     lastSentT0 = null
                     lastSentT1 = null
                 }
                 wasConnected = connected
-                _state.update { s ->
-                    val base = s.copy(telemetryWsConnected = connected)
-                    if (!connected && base.subscriptionLevelsLoading && base.subscriptionLevelsList == null) {
-                        base.copy(
-                            subscriptionLevelsLoading = false,
-                            subscriptionTariffsError = TARIFFS_WS_OFFLINE_MESSAGE,
-                        )
-                    } else {
-                        base
-                    }
-                }
+                _state.update { it.copy(telemetryWsConnected = connected) }
             }
         }
         viewModelScope.launch {
@@ -330,11 +276,7 @@ constructor(
                             subscriptionVolumeMl = 0,
                             subscriptionMaxVolumeMl = 0,
                             subscriptionEndDate = null,
-                            subscriptionLevelsLoading = false,
                             invalidSubscriptionCardVisible = false,
-                            subscriptionLevelPickerVisible = false,
-                            subscriptionPurchaseFlowActive = false,
-                            subscriptionTariffsError = null,
                             waterOption = DrinkWaterOption.STANDARD,
                             flowWaterPourType = FlowWaterPourType.Filtered,
                             subscriptionExitRemainingSeconds = 0,
@@ -358,8 +300,6 @@ constructor(
                         subscriptionEndDate = info.subscribeDateEnd,
                         flowWaterPourType = effectiveType,
                         waterOption = effectiveType.toDrinkWaterOption(),
- // Не сбрасываем subscriptionLevelsLoading: тарифы приходят отдельным subscriptionLevelTopic
- // сразу после скана (см. onLoyaltyCardScanned); иначе «Загрузка тарифов» гаснет раньше ответа.
                         invalidSubscriptionCardVisible = false,
                     )
                 }
@@ -368,30 +308,6 @@ constructor(
                 }
                 if (!subscriptionActive) {
                     reactToSubscriptionEntitlementLoss(pourSessionActive)
-                }
-            }
-        }
-        viewModelScope.launch {
-            telemetryService.subscriptionLevels.collect { levels ->
-                if (levels == null) {
-                    _state.update {
-                        it.copy(
-                            subscriptionLevelsList = null,
-                            subscriptionLevelName = null,
-                            subscriptionLevelUuid = null,
-                            subscriptionPriceRub = 0,
-                        )
-                    }
-                    return@collect
-                }
-                tariffsLoadTimeoutJob?.cancel()
-                tariffsLoadTimeoutJob = null
-                _state.update {
-                    it.copy(
-                        subscriptionLevelsLoading = false,
-                        subscriptionLevelsList = levels,
-                        subscriptionTariffsError = null,
-                    )
                 }
             }
         }
@@ -410,39 +326,14 @@ constructor(
         viewModelScope.launch {
             telemetryService.loyaltyCardClientScans.collect {
                 resetSubscriptionExitTimer()
-                tariffsLoadTimeoutJob?.cancel()
-                tariffsLoadTimeoutJob = null
                 _state.update {
                     it.copy(
-                        subscriptionLevelsLoading = true,
-                        subscriptionLevelsList = null,
-                        subscriptionLevelName = null,
-                        subscriptionLevelUuid = null,
-                        subscriptionPriceRub = 0,
-                        subscriptionLevelPickerVisible = false,
-                        subscriptionPurchaseFlowActive = false,
-                        subscriptionTariffsError = null,
                         invalidSubscriptionCardVisible = false,
                         waterOption = DrinkWaterOption.STANDARD,
                         flowWaterPourType = FlowWaterPourType.Filtered,
                     )
                 }
- // Если WS уже был отключён, connectionState не эмитит снова — снимаем вечную загрузку сразу.
-                clearTariffsLoadingIfWsOffline()
             }
-        }
-    }
-
- /** Без ответа subscriptionLevelTopic список остаётся null — показываем ошибку, а не бесконечный спиннер. */
-    private fun clearTariffsLoadingIfWsOffline() {
-        if (telemetryService.connectionState.value is ConnectionState.Connected) return
-        _state.update { s ->
-            if (s.subscriptionLevelsList != null) s
-            else
-                s.copy(
-                    subscriptionLevelsLoading = false,
-                    subscriptionTariffsError = TARIFFS_WS_OFFLINE_MESSAGE,
-                )
         }
     }
 
@@ -453,7 +344,6 @@ constructor(
                     it.copy(
                         flowBanner = offlineSubscriptionDenyMessage(reason),
                         flowBannerIsError = true,
-                        subscriptionLevelsLoading = false,
                         invalidSubscriptionCardVisible = reason != OfflineAuthorizationReason.GRANTED,
                     )
                 }
@@ -481,10 +371,7 @@ constructor(
         viewModelScope.launch {
             telemetryService.invalidLoyaltyCardScans.collect {
                 _state.update {
-                    it.copy(
-                        invalidSubscriptionCardVisible = true,
-                        subscriptionLevelsLoading = false,
-                    )
+                    it.copy(invalidSubscriptionCardVisible = true)
                 }
             }
         }
@@ -842,7 +729,6 @@ constructor(
             paymentJob = null
         }
         releaseCombinedPaymentSession()
-        subscriptionReceiptTimerJob?.cancel()
         _state.update {
             it.copy(
                 activeContainer = null,
@@ -858,15 +744,9 @@ constructor(
                 sbpStatus = SBPStatus.Pending,
                 sbpRemainingSeconds = 0,
                 isSbpLoading = false,
-                subscriptionReceiptUrl = null,
-                subscriptionReceiptLoading = false,
-                subscriptionReceiptError = null,
-                subscriptionReceiptRemainingSeconds = 0,
                 isWaterPourActive = false,
                 waterPourLimitBanner = false,
                 waterPourError = null,
-                subscriptionLevelPickerVisible = false,
-                subscriptionPurchaseFlowActive = false,
             )
         }
     }
@@ -885,7 +765,6 @@ constructor(
         paymentJob?.cancel()
         paymentJob = null
         cancelWaterPourGestures()
-        subscriptionReceiptTimerJob?.cancel()
         releaseCombinedPaymentSession()
         _state.update {
             it.copy(
@@ -902,35 +781,11 @@ constructor(
                 sbpStatus = SBPStatus.Pending,
                 sbpRemainingSeconds = 0,
                 isSbpLoading = false,
-                subscriptionReceiptUrl = null,
-                subscriptionReceiptLoading = false,
-                subscriptionReceiptError = null,
-                subscriptionReceiptRemainingSeconds = 0,
                 isWaterPourActive = false,
                 waterPourLimitBanner = false,
                 waterPourError = null,
-                subscriptionLevelPickerVisible = false,
-                subscriptionPurchaseFlowActive = false,
             )
         }
-    }
-
-    private fun clearSubscriptionPaymentSession() {
-        subscriptionPaymentId = null
-        subscriptionPaymentRequestUuid = null
-    }
-
-    private fun cancelPendingSubscriptionPaymentIfNeeded() {
-        val clientId = _state.value.scannedSubscriptionClientId
-        val requestUuid = subscriptionPaymentRequestUuid
-        val paymentId = subscriptionPaymentId ?: _state.value.sbpLink?.orderId
-        if (!clientId.isNullOrBlank() && !requestUuid.isNullOrBlank() && paymentId != null) {
-            viewModelScope.launch(Dispatchers.IO) {
-                runCatching { cancelMachineSubscriptionUseCase(clientId, requestUuid) }
-                    .onFailure { Timber.w(it, "subscription purchase cancel failed") }
-            }
-        }
-        clearSubscriptionPaymentSession()
     }
 
     fun dismissPaymentSheet() {
@@ -954,32 +809,6 @@ constructor(
             cancelSbpFlowAwaiting()
             resetCombinedPaymentChannelFlags()
         }
-        cancelPendingSubscriptionPaymentIfNeeded()
-        subscriptionReceiptTimerJob?.cancel()
-        val s = _state.value
-        if (s.subscriptionPurchaseFlowActive &&
-            (s.paymentSheetStep == PaymentSheetStep.Subscription ||
-                s.paymentSheetStep == PaymentSheetStep.Sbp ||
-                s.paymentSheetStep == PaymentSheetStep.SubscriptionReceipt)
-        ) {
-            _state.update {
-                it.copy(
-                    paymentSheetVisible = false,
-                    paymentSheetStep = PaymentSheetStep.MethodChoice,
-                    paymentError = null,
-                    isProcessingPay = false,
-                    sbpLink = null,
-                    sbpStatus = SBPStatus.Pending,
-                    sbpRemainingSeconds = 0,
-                    isSbpLoading = false,
-                    subscriptionReceiptUrl = null,
-                    subscriptionReceiptLoading = false,
-                    subscriptionReceiptError = null,
-                    subscriptionReceiptRemainingSeconds = 0,
-                )
-            }
-            return
-        }
         _state.update {
             it.copy(
                 paymentSheetVisible = false,
@@ -991,12 +820,6 @@ constructor(
                 sbpStatus = SBPStatus.Pending,
                 sbpRemainingSeconds = 0,
                 isSbpLoading = false,
-                subscriptionReceiptUrl = null,
-                subscriptionReceiptLoading = false,
-                subscriptionReceiptError = null,
-                subscriptionReceiptRemainingSeconds = 0,
-                subscriptionLevelPickerVisible = false,
-                subscriptionPurchaseFlowActive = false,
             )
         }
     }
@@ -1061,9 +884,7 @@ constructor(
     private fun shouldTickSubscriptionExitTimer(s: DrinkListUiState): Boolean =
         !s.scannedSubscriptionClientId.isNullOrBlank() &&
             !s.paymentSheetVisible &&
-            !s.subscriptionLevelPickerVisible &&
             !s.invalidSubscriptionCardVisible &&
-            s.subscriptionReceiptUrl == null &&
             !s.isWaterPourActive
 
     private suspend fun exitSubscriptionDueToInactivity() {
@@ -1075,112 +896,6 @@ constructor(
         _state.update { it.copy(invalidSubscriptionCardVisible = false) }
     }
 
- /** Как переход на `/subscribe-now`. */
-    fun openSubscriptionOfferSheet() {
-        if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) return
-        val needReload =
-            _state.value.subscriptionLevelsList.isNullOrEmpty() ||
-                !_state.value.subscriptionTariffsError.isNullOrBlank()
-        _state.update {
-            it.copy(
-                subscriptionLevelPickerVisible = true,
-                subscriptionPurchaseFlowActive = true,
-                paymentError = null,
-                subscriptionTariffsError = null,
-                subscriptionLevelsLoading = needReload,
-            )
-        }
-        if (needReload) {
-            requestSubscriptionLevels()
-        } else {
-            clearTariffsLoadingIfWsOffline()
-        }
-    }
-
-    /** Повторный запрос `loyalty.levels.list` с экрана выбора тарифа. */
-    fun retrySubscriptionLevels() {
-        if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) return
-        requestSubscriptionLevels()
-    }
-
-    private fun requestSubscriptionLevels() {
-        tariffsLoadTimeoutJob?.cancel()
-        viewModelScope.launch {
-            if (telemetryService.connectionState.value !is ConnectionState.Connected) {
-                _state.update {
-                    it.copy(
-                        subscriptionLevelsLoading = false,
-                        subscriptionTariffsError = TARIFFS_WS_OFFLINE_MESSAGE,
-                    )
-                }
-                return@launch
-            }
-            _state.update {
-                it.copy(
-                    subscriptionLevelsLoading = true,
-                    subscriptionTariffsError = null,
-                )
-            }
-            telemetryService
-                .sendSubscriptionLevelRequest()
-                .onFailure {
-                    _state.update { s ->
-                        s.copy(
-                            subscriptionLevelsLoading = false,
-                            subscriptionTariffsError = TARIFFS_REQUEST_FAILED_MESSAGE,
-                        )
-                    }
-                    return@launch
-                }
-            tariffsLoadTimeoutJob =
-                viewModelScope.launch {
-                    delay(TARIFFS_LOAD_TIMEOUT_MS)
-                    _state.update { s ->
-                        if (
-                            s.subscriptionLevelPickerVisible &&
-                                s.subscriptionLevelsLoading &&
-                                s.subscriptionLevelsList == null
-                        ) {
-                            s.copy(
-                                subscriptionLevelsLoading = false,
-                                subscriptionTariffsError = TARIFFS_LOAD_TIMEOUT_MESSAGE,
-                            )
-                        } else {
-                            s
-                        }
-                    }
-                }
-        }
-    }
-
-    fun dismissSubscriptionLevelPicker() {
-        tariffsLoadTimeoutJob?.cancel()
-        tariffsLoadTimeoutJob = null
-        _state.update {
-            it.copy(
-                subscriptionLevelPickerVisible = false,
-                subscriptionPurchaseFlowActive = false,
-                subscriptionTariffsError = null,
-            )
-        }
-    }
-
- /** Выбор карточки тарифа — сохраняем UUID/цену и открываем модалку способа оплаты подписки. */
-    fun selectSubscriptionLevelAndOpenPayment(level: SubscriptionLevelItem) {
-        _state.update {
-            it.copy(
- // Экран тарифов остаётся под полупрозрачным скримом — см. CustomerPaymentSheet (анимация как у покупки напитка).
-                subscriptionLevelPickerVisible = true,
-                subscriptionLevelUuid = level.uuid,
-                subscriptionLevelName = level.name,
-                subscriptionPriceRub = level.price.toInt().coerceAtLeast(0),
-                paymentSheetVisible = true,
-                paymentSheetStep = PaymentSheetStep.Subscription,
-                paymentError = null,
-            )
-        }
-    }
-
     fun backToPaymentMethods() {
         if (_state.value.paymentSheetStep == PaymentSheetStep.Combined) {
             dismissPaymentSheet()
@@ -1188,45 +903,6 @@ constructor(
         }
         abandonPaymentJobSlot()
         cancelSbpFlow()
-        cancelPendingSubscriptionPaymentIfNeeded()
-        val s = _state.value
-        if (s.subscriptionPurchaseFlowActive && s.paymentSheetStep == PaymentSheetStep.Sbp) {
-            _state.update {
-                it.copy(
-                    paymentSheetStep = PaymentSheetStep.Subscription,
-                    paymentError = null,
-                    isProcessingPay = false,
-                    sbpLink = null,
-                    sbpStatus = SBPStatus.Pending,
-                    sbpRemainingSeconds = 0,
-                    isSbpLoading = false,
-                )
-            }
-            return
-        }
-        if (s.paymentSheetStep == PaymentSheetStep.SubscriptionReceipt) {
-            dismissPaymentSheet()
-            return
-        }
-        if (s.paymentSheetStep == PaymentSheetStep.Subscription) {
-            if (s.subscriptionPurchaseFlowActive) {
-                _state.update {
-                    it.copy(
-                        paymentSheetVisible = false,
-                        paymentSheetStep = PaymentSheetStep.MethodChoice,
-                        paymentError = null,
-                        isProcessingPay = false,
-                        sbpLink = null,
-                        sbpStatus = SBPStatus.Pending,
-                        sbpRemainingSeconds = 0,
-                        isSbpLoading = false,
-                    )
-                }
-            } else {
-                dismissPaymentSheet()
-            }
-            return
-        }
         _state.update {
             it.copy(
                 paymentSheetStep = PaymentSheetStep.MethodChoice,
@@ -1890,13 +1566,8 @@ constructor(
  * Дублирующий заказ на стороне Paymaster раньше лечился «выйти и зайти» — здесь тот же сценарий в один тап.
  */
     fun retrySbpPayment(onNavigateToPreparing: (tasteId: Int, productName: String, estSeconds: Int, mediaKey: String?, payMethod: String, priceRub: Int) -> Unit) {
-        val s = _state.value
-        if (s.paymentSheetStep != PaymentSheetStep.Sbp) return
-        if (s.subscriptionPurchaseFlowActive) {
-            startSubscriptionPayment(isSbp = true)
-        } else {
-            openSbpStep(onNavigateToPreparing)
-        }
+        if (_state.value.paymentSheetStep != PaymentSheetStep.Sbp) return
+        openSbpStep(onNavigateToPreparing)
     }
 
  /** Несколько попыток [getSBPLinkUseCase] при ответе про дубликат заказа (см. [PaymasterQPayHelper.generateReqn]). */
@@ -2203,405 +1874,6 @@ constructor(
         }
     }
 
- /**
- * Покупка подписки (UC-7): payment.init → локальная оплата → status/complete → subscribe.sale.
- */
-    fun startSubscriptionPayment(isSbp: Boolean) {
-        val previousPaymentJob = paymentJob
-        val s0 = _state.value
-        val userUuid = s0.scannedSubscriptionClientId
-        val levelUuid = s0.subscriptionLevelUuid
-        val priceRub = s0.subscriptionPriceRub.coerceAtLeast(0)
-        SubscriptionPurchaseGuards.validationErrorForStart(userUuid, levelUuid, priceRub)?.let { msg ->
-            _state.update { it.copy(paymentError = msg) }
-            return
-        }
-        val clientId = userUuid!!
-        val tariffUuid = levelUuid!!
-        val requestUuid = subscriptionPaymentRequestUuid ?: UUID.randomUUID().toString().also {
-            subscriptionPaymentRequestUuid = it
-        }
-        if (isSbp) {
-            startSubscriptionSbpPaymentFlow(
-                clientId = clientId,
-                tariffUuid = tariffUuid,
-                priceRub = priceRub,
-                requestUuid = requestUuid,
-                previousPaymentJob = previousPaymentJob,
-            )
-            return
-        }
-        paymentJob =
-            viewModelScope.launch {
-                finishPaymentJobForReplacement(previousPaymentJob)
-                _state.update {
-                    it.copy(
-                        paymentSheetStep = PaymentSheetStep.Card,
-                        isProcessingPay = true,
-                        paymentError = null,
-                    )
-                }
-                val initResult =
-                    initMachineSubscriptionPaymentUseCase(
-                        com.viwa.android.domain.subscription.SubscriptionPaymentInitParams(
-                            clientId = clientId,
-                            subscriptionLevelId = tariffUuid,
-                            payMethod = SubscriptionPayMethod.CARD,
-                            requestUuid = requestUuid,
-                        ),
-                    )
-                val paymentInit =
-                    initResult.getOrElse { e ->
-                        _state.update {
-                            it.copy(
-                                isProcessingPay = false,
-                                paymentError = e.message ?: "Не удалось инициализировать оплату подписки",
-                                paymentSheetStep = PaymentSheetStep.Subscription,
-                            )
-                        }
-                        return@launch
-                    }
-                subscriptionPaymentId = paymentInit.paymentId
-                when (
-                    val payResult =
-                        DrinkListCardPaymentFlow.paySubscriptionWithCard(
-                            priceRub = priceRub,
-                            cardPaymentOrchestrator = cardPaymentOrchestrator,
-                        )
-                ) {
-                    CardPaymentResult.Success -> Unit
-                    is CardPaymentResult.Failed -> {
-                        _state.update {
-                            it.copy(
-                                isProcessingPay = false,
-                                paymentError =
-                                    payResult.reason.ifBlank { "Оплата картой не прошла" },
-                                paymentSheetStep = PaymentSheetStep.Subscription,
-                            )
-                        }
-                        return@launch
-                    }
-
-                    CardPaymentResult.Cancelled -> {
-                        _state.update {
-                            it.copy(
-                                isProcessingPay = false,
-                                paymentError = "Оплата отменена",
-                                paymentSheetStep = PaymentSheetStep.Subscription,
-                            )
-                        }
-                        return@launch
-                    }
-                }
-                val completeRequestUuid = UUID.randomUUID().toString()
-                val completeResult =
-                    completeMachineSubscriptionPaymentUseCase(
-                        paymentId = paymentInit.paymentId,
-                        requestUuid = completeRequestUuid,
-                        externalRef = null,
-                    )
-                val paidStatus =
-                    completeResult.getOrElse { e ->
-                        _state.update {
-                            it.copy(
-                                isProcessingPay = false,
-                                paymentError = subscriptionPaymentErrorMessage(e),
-                                paymentSheetStep = PaymentSheetStep.Subscription,
-                            )
-                        }
-                        return@launch
-                    }
-                applySubscriptionSaleAndOpenReceipt(
-                    clientId = clientId,
-                    tariffUuid = tariffUuid,
-                    paymentId = paymentInit.paymentId,
-                    requestUuid = requestUuid,
-                    payMethod = SubscriptionPayMethod.CARD,
-                    paymentStatus = paidStatus.status,
-                    priceRub = priceRub,
-                    uiPayMethod = PaymentMethod.CARD,
-                )
-            }
-    }
-
-    private fun startSubscriptionSbpPaymentFlow(
-        clientId: String,
-        tariffUuid: String,
-        priceRub: Int,
-        requestUuid: String,
-        previousPaymentJob: Job?,
-    ) {
-        cancelSbpJobs()
-        paymentJob =
-            viewModelScope.launch {
-                finishPaymentJobForReplacement(previousPaymentJob)
-                _state.update {
-                    it.copy(
-                        paymentSheetStep = PaymentSheetStep.Sbp,
-                        paymentError = null,
-                        sbpLink = null,
-                        sbpStatus = SBPStatus.Pending,
-                        sbpRemainingSeconds = 0,
-                        isSbpLoading = true,
-                    )
-                }
-                getSBPLinkUseCase.forSubscription(
-                    clientId = clientId,
-                    subscriptionLevelId = tariffUuid,
-                    requestUuid = requestUuid,
-                ).fold(
-                    onSuccess = { link ->
-                        subscriptionPaymentId = link.orderId
-                        _state.update {
-                            it.copy(
-                                sbpLink = link,
-                                isSbpLoading = false,
-                                sbpStatus = SBPStatus.Pending,
-                            )
-                        }
-                        val timeout = sbpRepository.getSettings().timeoutInSeconds.coerceIn(30, 600)
-                        _state.update { it.copy(sbpRemainingSeconds = timeout) }
-                        startSubscriptionSbpPolling(
-                            paymentId = link.orderId,
-                            clientId = clientId,
-                            tariffUuid = tariffUuid,
-                            requestUuid = requestUuid,
-                            priceRub = priceRub,
-                        )
-                        startSbpTimer()
-                    },
-                    onFailure = { e ->
-                        Timber.w(e, "Subscription SBP: payment.init failed")
-                        _state.update {
-                            it.copy(
-                                paymentError = e.message ?: "Ошибка инициализации оплаты СБП",
-                                isSbpLoading = false,
-                            )
-                        }
-                    },
-                )
-            }
-    }
-
-    private fun startSubscriptionSbpPolling(
-        paymentId: String,
-        clientId: String,
-        tariffUuid: String,
-        requestUuid: String,
-        priceRub: Int,
-    ) {
-        sbpPollingJob?.cancel()
-        sbpPollingJob =
-            viewModelScope.launch {
-                while (isActive) {
-                    checkSBPStatusUseCase.forSubscriptionPayment(paymentId).fold(
-                        onSuccess = { status ->
-                            _state.update { it.copy(sbpStatus = status) }
-                            when (status) {
-                                SBPStatus.Success -> {
-                                    cancelSbpJobs()
-                                    applySubscriptionSaleAfterSbpPaid(
-                                        clientId = clientId,
-                                        tariffUuid = tariffUuid,
-                                        paymentId = paymentId,
-                                        requestUuid = requestUuid,
-                                        priceRub = priceRub,
-                                    )
-                                    return@launch
-                                }
-                                is SBPStatus.Failed -> {
-                                    cancelSbpJobs()
-                                    _state.update {
-                                        it.copy(
-                                            paymentError = status.reason.ifBlank { "Оплата отклонена" },
-                                            isSbpLoading = false,
-                                        )
-                                    }
-                                    return@launch
-                                }
-                                SBPStatus.Cancelled -> {
-                                    cancelSbpJobs()
-                                    _state.update {
-                                        it.copy(
-                                            paymentError = "Оплата отменена",
-                                            isSbpLoading = false,
-                                        )
-                                    }
-                                    return@launch
-                                }
-                                SBPStatus.Pending -> Unit
-                            }
-                        },
-                        onFailure = { /* continue polling */ },
-                    )
-                    delay(5_000)
-                }
-            }
-    }
-
-    private fun applySubscriptionSaleAfterSbpPaid(
-        clientId: String,
-        tariffUuid: String,
-        paymentId: String,
-        requestUuid: String,
-        priceRub: Int,
-    ) {
-        val previousPaymentJob = paymentJob
-        paymentJob =
-            viewModelScope.launch {
-                finishPaymentJobForReplacement(previousPaymentJob)
-                _state.update { it.copy(isProcessingPay = true, paymentError = null) }
-                applySubscriptionSaleAndOpenReceipt(
-                    clientId = clientId,
-                    tariffUuid = tariffUuid,
-                    paymentId = paymentId,
-                    requestUuid = requestUuid,
-                    payMethod = SubscriptionPayMethod.SBP,
-                    paymentStatus = SubscriptionPaymentStatus.PAID,
-                    priceRub = priceRub,
-                    uiPayMethod = PaymentMethod.SBP,
-                )
-            }
-    }
-
-    private suspend fun applySubscriptionSaleAndOpenReceipt(
-        clientId: String,
-        tariffUuid: String,
-        paymentId: String,
-        requestUuid: String,
-        payMethod: SubscriptionPayMethod,
-        paymentStatus: SubscriptionPaymentStatus,
-        priceRub: Int,
-        uiPayMethod: PaymentMethod,
-    ) {
-        val saleResult =
-            applyMachineSubscriptionSaleUseCase(
-                params =
-                    SubscriptionSaleParams(
-                        paymentId = paymentId,
-                        requestUuid = requestUuid,
-                        clientId = clientId,
-                        subscriptionLevelId = tariffUuid,
-                        payMethod = payMethod,
-                    ),
-                paymentStatus = paymentStatus,
-            )
-        saleResult
-            .onSuccess {
-                val reg = telemetryService.loadMachineRegistration()
-                val machineClientId = reg.serialNumber.ifBlank { "unknown" }
-                val machineId = reg.machineId.toIntOrNull() ?: 0
-                telemetryService.startSubscriptionSaleTimer(
-                    requestUuid = requestUuid,
-                    machineClientId = machineClientId,
-                    userUuid = clientId,
-                    machineId = machineId,
-                )
-                clearSubscriptionPaymentSession()
-                openSubscriptionReceiptModal(payMethod = uiPayMethod, priceRub = priceRub)
-            }.onFailure { e ->
-                _state.update {
-                    it.copy(
-                        isProcessingPay = false,
-                        isSbpLoading = false,
-                        paymentError = subscriptionPaymentErrorMessage(e),
-                        paymentSheetStep =
-                            if (payMethod == SubscriptionPayMethod.SBP) {
-                                PaymentSheetStep.Sbp
-                            } else {
-                                PaymentSheetStep.Subscription
-                            },
-                    )
-                }
-            }
-    }
-
-    private fun subscriptionPaymentErrorMessage(error: Throwable): String =
-        when (error) {
-            is LoyaltyPaymentException ->
-                when (error.code) {
-                    "PAYMENT_NOT_CONFIRMED" -> "Оплата не подтверждена на сервере"
-                    else -> error.message ?: "Ошибка оплаты подписки"
-                }
-            else -> error.message ?: "Ошибка оплаты подписки"
-        }
-
-    private fun openSubscriptionReceiptModal(payMethod: PaymentMethod, priceRub: Int) {
-        subscriptionReceiptTimerJob?.cancel()
-        _state.update {
-            it.copy(
-                isProcessingPay = false,
-                isSbpLoading = false,
-                paymentSheetVisible = true,
-                paymentSheetStep = PaymentSheetStep.SubscriptionReceipt,
-                paymentError = null,
-                sbpLink = null,
-                sbpStatus = SBPStatus.Pending,
-                sbpRemainingSeconds = 0,
-                subscriptionLevelPickerVisible = false,
-                subscriptionPurchaseFlowActive = false,
-                subscriptionReceiptUrl = null,
-                subscriptionReceiptLoading = true,
-                subscriptionReceiptError = null,
-                subscriptionReceiptRemainingSeconds = 15,
-            )
-        }
-        subscriptionReceiptTimerJob =
-            viewModelScope.launch {
-                var secondsLeft = 15
-                while (secondsLeft > 0) {
-                    delay(1_000)
-                    secondsLeft -= 1
-                    _state.update { it.copy(subscriptionReceiptRemainingSeconds = secondsLeft) }
-                }
-                dismissPaymentSheet()
-            }
-        loadSubscriptionFiscalReceipt(payMethod = payMethod, priceRub = priceRub)
-    }
-
-    private fun loadSubscriptionFiscalReceipt(payMethod: PaymentMethod, priceRub: Int) {
-        viewModelScope.launch {
-            if (priceRub <= 0 || !nanoKassaRepository.hasNanoFiscalConfig()) {
-                _state.update {
-                    it.copy(
-                        subscriptionReceiptLoading = false,
-                        subscriptionReceiptError = "Чек недоступен: проверьте настройки кассы",
-                    )
-                }
-                return@launch
-            }
-            val amountKopecks = priceRub * 100
-            val item = ReceiptItem(name = "Подписка", price = amountKopecks, quantity = 1)
-            nanoKassaRepository
-                .sendFiscalReceipt(
-                    amountKopecks = amountKopecks,
-                    items = listOf(item),
-                    paymentMethod = payMethod,
-                    isTest = false,
-                ).fold(
-                    onSuccess = { receipt ->
-                        _state.update {
-                            it.copy(
-                                subscriptionReceiptUrl = receipt.checkPageUrl,
-                                subscriptionReceiptLoading = false,
-                                subscriptionReceiptError =
-                                    if (receipt.checkPageUrl.isNullOrBlank()) "Нет ссылки на чек" else null,
-                            )
-                        }
-                    },
-                    onFailure = { e ->
-                        Timber.e(e, "subscription fiscal receipt failed")
-                        _state.update {
-                            it.copy(
-                                subscriptionReceiptLoading = false,
-                                subscriptionReceiptError = e.message ?: "Не удалось получить чек",
-                            )
-                        }
-                    },
-                )
-        }
-    }
-
     override fun onCleared() {
         cancelWaterPourGestures()
         // ViewModelScope завершается вместе с onCleared; await здесь невозможен — best-effort cleanup.
@@ -2612,7 +1884,6 @@ constructor(
         }
         releaseCombinedPaymentSession()
         cancelSbpFlow()
-        subscriptionReceiptTimerJob?.cancel()
         paymentJob?.cancel()
         runCatching {
             runBlocking {
@@ -2647,12 +1918,6 @@ constructor(
         _state.value = state
     }
 
-    /** Только для unit-тестов UC-7: сессия server payment без полного SBP flow. */
-    internal fun setSubscriptionPaymentSessionForTests(paymentId: String, requestUuid: String) {
-        subscriptionPaymentId = paymentId
-        subscriptionPaymentRequestUuid = requestUuid
-    }
-
     internal fun isCombinedPaymentSettledForUnitTests(): Boolean = combinedPaymentSettled.get()
 
     internal suspend fun exitCombinedPaymentRecoveryToMenuForUnitTests() {
@@ -2673,8 +1938,6 @@ constructor(
         cancelWaterPourGestures()
         releaseCombinedPaymentSession()
         cancelSbpFlow()
-        subscriptionReceiptTimerJob?.cancel()
-        subscriptionReceiptTimerJob = null
         paymentJob?.cancel()
         paymentJob = null
         subscriptionExitTimerJob?.cancel()
@@ -2712,14 +1975,6 @@ constructor(
         private const val WATER_POUR_DEBOUNCE_MS = 400L
         const val WATER_POUR_MAX_MS = 30_000L
         const val WATER_POUR_LIMIT_HIDE_MS = 4_000L
-
-        private const val TARIFFS_WS_OFFLINE_MESSAGE =
-            "Нет подключения к телеметрии (WebSocket). Тарифы не загружаются — проверьте сеть и авторизацию."
-        private const val TARIFFS_REQUEST_FAILED_MESSAGE =
-            "Не удалось запросить тарифы. Попробуйте ещё раз."
-        private const val TARIFFS_LOAD_TIMEOUT_MESSAGE =
-            "Тарифы не получены. Проверьте связь и повторите."
-        private const val TARIFFS_LOAD_TIMEOUT_MS = 12_000L
 
  /** UUID для кнопки «Эмуляция QR подписки» (контракт statusSubscribeTopic.body). */
         const val EMULATED_SUBSCRIPTION_CLIENT_UUID = "2caaf0b2-2b7f-4c09-9bef-dafd984c9a66"

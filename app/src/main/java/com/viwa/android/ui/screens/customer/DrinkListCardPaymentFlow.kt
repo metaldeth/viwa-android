@@ -52,17 +52,6 @@ internal object DrinkListCardPaymentFlow {
         }
     }
 
-    suspend fun paySubscriptionWithCard(
-        priceRub: Int,
-        cardPaymentOrchestrator: CardPaymentOrchestrator,
-    ): CardPaymentResult =
-        cardPaymentOrchestrator.pay(
-            TerminalProductType.Drink,
-            priceRub,
-            productNumber = 0,
-            sbp = false,
-        )
-
     /**
      * Атомарно фиксирует победителя combined-оплаты; повторные вызовы возвращают false.
      */

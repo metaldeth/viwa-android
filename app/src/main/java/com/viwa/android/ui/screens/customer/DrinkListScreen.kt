@@ -286,7 +286,7 @@ fun DrinkListScreen(
         fun Float.epx(): Dp = (this * s).dp
 
  // Слой под колонкой контента: не перехватывает тапы по карточкам/шапке/низу (они выше по z-order).
-        if (hasSelection && !state.paymentSheetVisible && !showPasswordDialog && !state.subscriptionLevelPickerVisible) {
+        if (hasSelection && !state.paymentSheetVisible && !showPasswordDialog) {
             Box(
                 modifier =
                     Modifier
@@ -452,7 +452,6 @@ fun DrinkListScreen(
                                 s = s,
                                 state = state,
                                 onDismiss = { viewModel.dismissSubscriptionCard() },
-                                onOpenSubscriptionPurchase = { viewModel.openSubscriptionOfferSheet() },
                             )
                         } else {
                             ViwaPromoCard(s = s, onClick = onOpenFreeDrinkOffer)
@@ -631,42 +630,10 @@ fun DrinkListScreen(
             SubscriptionDebugFab(viewModel = viewModel, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp))
         }
 
-        if (state.subscriptionLevelPickerVisible) {
-            ViwaSubscriptionLevelPickerOverlay(
-                s = s,
-                levels = state.subscriptionLevelsList,
-                levelsLoading = state.subscriptionLevelsLoading,
-                tariffsError = state.subscriptionTariffsError,
-                onDismiss = { viewModel.dismissSubscriptionLevelPicker() },
-                onSelectLevel = { viewModel.selectSubscriptionLevelAndOpenPayment(it) },
-                onRetry = { viewModel.retrySubscriptionLevels() },
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .align(Alignment.Center)
-                        .zIndex(24f),
-            )
-        }
-
- // Выше оверлея выбора тарифа (zIndex 24), иначе модалка оплаты остаётся под списком подписок.
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .align(Alignment.Center)
-                    .zIndex(25f),
-        ) {
-            CustomerPaymentSheet(
+        CustomerPaymentSheet(
                 visible = state.paymentSheetVisible,
                 step = state.paymentSheetStep,
-                priceRub =
-                    if (state.subscriptionPurchaseFlowActive &&
-                        (state.paymentSheetStep == PaymentSheetStep.Subscription || state.paymentSheetStep == PaymentSheetStep.Sbp)
-                    ) {
-                        state.subscriptionPriceRub
-                    } else {
-                        priceRub
-                    },
+                priceRub = priceRub,
                 terminalBanner = state.paymentTerminalBanner,
                 cardPaymentUiStatus = state.cardPaymentUiStatus,
                 paymentError = state.paymentError,
@@ -676,30 +643,21 @@ fun DrinkListScreen(
                 sbpStatus = state.sbpStatus,
                 sbpRemainingSeconds = state.sbpRemainingSeconds,
                 sbpLoading = state.isSbpLoading,
-                receiptUrl = state.subscriptionReceiptUrl,
-                receiptLoading = state.subscriptionReceiptLoading,
-                receiptError = state.subscriptionReceiptError,
-                receiptRemainingSeconds = state.subscriptionReceiptRemainingSeconds,
                 onDismiss = { viewModel.dismissPaymentSheet() },
                 onCombinedRecoveryToMenu = { viewModel.exitCombinedPaymentRecoveryToMenu() },
                 onChooseSbp = {
-                    if (state.paymentSheetStep == PaymentSheetStep.Subscription) {
-                        viewModel.startSubscriptionPayment(isSbp = true)
-                    } else if (state.paymentSheetStep != PaymentSheetStep.Combined) {
+                    if (state.paymentSheetStep != PaymentSheetStep.Combined) {
                         viewModel.openSbpStep(onNavigateToPreparing)
                     }
                 },
                 onChooseCard = {
-                    if (state.paymentSheetStep == PaymentSheetStep.Subscription) {
-                        viewModel.startSubscriptionPayment(isSbp = false)
-                    } else if (state.paymentSheetStep != PaymentSheetStep.Combined) {
+                    if (state.paymentSheetStep != PaymentSheetStep.Combined) {
                         viewModel.startCardPayment(onNavigateToPreparing)
                     }
                 },
                 onDevPourWithoutPay =
                     if (state.freeMode &&
                         !state.combinedPaymentConfirmed &&
-                        !state.subscriptionPurchaseFlowActive &&
                         state.scannedSubscriptionClientId.isNullOrBlank()
                     ) {
                         { viewModel.devPourWithoutPayment(onNavigateToPreparing) }
@@ -709,7 +667,6 @@ fun DrinkListScreen(
                 onBackToMethods = { viewModel.backToPaymentMethods() },
                 onRetrySbp = { viewModel.retrySbpPayment(onNavigateToPreparing) },
             )
-        }
     }
 }
 

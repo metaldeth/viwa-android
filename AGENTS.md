@@ -5,6 +5,10 @@
 | **type** | android |
 | **project** | viwa-android |
 | **productName** | Viwa |
+| **branch** | main |
+| **workBranch** | main |
+| **commitTarget** | main |
+| **deployBranch** | main |
 | **buildCommand** | `./gradlew assembleDebug` (Windows: `gradlew.bat assembleDebug`) |
 | **releaseCommand** | `release-android.cmd` — скачать signing с OTA-сервера, `assembleRelease`, upload APK, вывести `version.json` |
 | **tdd** | true |

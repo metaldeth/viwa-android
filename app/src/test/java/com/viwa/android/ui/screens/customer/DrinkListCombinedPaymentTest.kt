@@ -139,7 +139,7 @@ class DrinkListCombinedPaymentTest {
                 cardPaymentOrchestrator = mocks.orch,
                 preparingManager = mocks.preparing,
                 sbpRepository = mocks.sbpRepository,
-            ).first
+            )
         return vm to mocks
     }
 

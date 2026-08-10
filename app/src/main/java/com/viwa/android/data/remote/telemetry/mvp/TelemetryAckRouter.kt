@@ -153,15 +153,6 @@ constructor(
             }
         }
 
-        val subscriptionLevels = payload["levels"]
-        val subscriptionPayment = payload["paymentId"]
-        if (subscriptionLevels != null || subscriptionPayment != null) {
-            if (!correlation.isNullOrBlank() && loyaltyHandler != null) {
-                loyaltyHandler(correlation, payload)
-                return AckRouteOutcome.HANDLED
-            }
-        }
-
         if (isTechnicianAckPayload(payload)) {
             if (!correlation.isNullOrBlank() && technicianHandler != null) {
                 technicianHandler(correlation, payload)

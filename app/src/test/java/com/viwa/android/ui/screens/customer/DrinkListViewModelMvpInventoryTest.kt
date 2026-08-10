@@ -120,7 +120,6 @@ class DrinkListViewModelMvpInventoryTest {
         every { mock.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Disconnected()).asStateFlow()
         every { mock.subscribeInfo } returns MutableStateFlow(null).asStateFlow()
-        every { mock.subscriptionLevels } returns MutableStateFlow(null).asStateFlow()
         every { mock.loyaltyCardClientScans } returns
             MutableSharedFlow<String>(extraBufferCapacity = 16).asSharedFlow()
         every { mock.invalidLoyaltyCardScans } returns
@@ -153,7 +152,6 @@ class DrinkListViewModelMvpInventoryTest {
             MutableStateFlow(com.viwa.android.services.preparing.CustomerPreparingPhase.Idle).asStateFlow()
         val getSbp = mockk<GetSBPLinkUseCase>(relaxUnitFun = true)
         val checkSbp = mockk<CheckSBPStatusUseCase>(relaxUnitFun = true)
-        val subscriptionUseCases = relaxedSubscriptionPaymentUseCases()
         val sbp = DrinkListViewModelTestSupport.sbpRepositoryMock()
         val nano = DrinkListViewModelTestSupport.nanoKassaRepositoryMock()
         val networkTraffic = mockk<NetworkTrafficLogger>(relaxUnitFun = true)
@@ -173,10 +171,6 @@ class DrinkListViewModelMvpInventoryTest {
             telemetry,
             getSbp,
             checkSbp,
-            subscriptionUseCases.init,
-            subscriptionUseCases.complete,
-            subscriptionUseCases.apply,
-            subscriptionUseCases.cancel,
             sbp,
             nano,
             networkTraffic,

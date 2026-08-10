@@ -104,15 +104,4 @@ class DrinkListViewModelPaymentFlowTest {
             }
             coVerify(exactly = 0) { orch.pay(any(), any(), any(), any()) }
         }
-
-    @Test
-    fun task05_11_subscriptionCardCallsOrchestratorLikeLegacyTerminal() =
-        runTest(scheduler) {
-            val orch = mockk<CardPaymentOrchestrator>(relaxUnitFun = true)
-            coEvery { orch.pay(any(), any(), any(), any()) } returns CardPaymentResult.Success
-            DrinkListCardPaymentFlow.paySubscriptionWithCard(84, orch)
-            coVerify(exactly = 1) {
-                orch.pay(TerminalProductType.Drink, price = 84, productNumber = 0, sbp = false)
-            }
-        }
 }

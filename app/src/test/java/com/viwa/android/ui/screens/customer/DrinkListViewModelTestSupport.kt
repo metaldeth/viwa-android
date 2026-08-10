@@ -6,11 +6,15 @@ import com.viwa.android.data.network.NetworkTrafficLogger
 import com.viwa.android.data.remote.telemetry.ConnectionState
 import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.domain.model.SBPSettings
+import com.viwa.android.domain.model.customer.DrinkContainer
+import com.viwa.android.domain.model.customer.DrinkDosage
+import com.viwa.android.domain.model.customer.DrinkPrice
+import com.viwa.android.domain.model.customer.DrinkProduct
+import com.viwa.android.domain.model.customer.DrinkTaste
 import com.viwa.android.domain.offline.OfflineAuthorizationReason
 import com.viwa.android.domain.repository.NanoKassaRepository
 import com.viwa.android.domain.repository.SBPRepository
 import com.viwa.android.domain.repository.TelemetryCellsRepository
-import com.viwa.android.domain.subscription.CancelMachineSubscriptionUseCase
 import com.viwa.android.domain.usecase.CheckSBPStatusUseCase
 import com.viwa.android.domain.usecase.GetSBPLinkUseCase
 import com.viwa.android.hardware.controller.ControllerGateway
@@ -74,7 +78,6 @@ internal object DrinkListViewModelTestSupport {
         every { mock.connectionState } returns
             MutableStateFlow<ConnectionState>(ConnectionState.Disconnected()).asStateFlow()
         every { mock.subscribeInfo } returns MutableStateFlow(null).asStateFlow()
-        every { mock.subscriptionLevels } returns MutableStateFlow(null).asStateFlow()
         every { mock.loyaltyCardClientScans } returns
             MutableSharedFlow<String>(extraBufferCapacity = 16).asSharedFlow()
         every { mock.invalidLoyaltyCardScans } returns
@@ -114,6 +117,31 @@ internal object DrinkListViewModelTestSupport {
             every { it.terminalStatusFlow } returns MutableStateFlow("").asStateFlow()
         }
 
+    fun sampleContainer(containerNumber: Int = 2): DrinkContainer {
+        val taste = DrinkTaste(1, "Cola", null, null)
+        val product =
+            DrinkProduct(
+                id = 1,
+                name = "Coke",
+                taste = taste,
+                dosage = DrinkDosage(1.0, 300, 1.0, 1.0),
+                dPrices =
+                    listOf(
+                        DrinkPrice(300, 100),
+                        DrinkPrice(700, 150),
+                    ),
+            )
+        return DrinkContainer(
+            containerNumber = containerNumber,
+            sodaStatus = null,
+            product = product,
+            productUuid = "test-product-uuid",
+            volumeMl = 1000,
+            minVolumeMl = 0,
+            isActive = true,
+        )
+    }
+
     fun cellsRepositoryMock(): TelemetryCellsRepository =
         mockk<TelemetryCellsRepository>(relaxUnitFun = true).also {
             every { it.snapshotFlow } returns MutableStateFlow(null).asStateFlow()
@@ -122,13 +150,11 @@ internal object DrinkListViewModelTestSupport {
     fun createViewModel(
         getSBPLinkUseCase: GetSBPLinkUseCase = mockk(relaxed = true),
         checkSBPStatusUseCase: CheckSBPStatusUseCase = mockk(relaxed = true),
-        subscriptionUseCases: SubscriptionPaymentUseCaseMocks = relaxedSubscriptionPaymentUseCases(),
         cardPaymentOrchestrator: CardPaymentOrchestrator = mockk(relaxed = true),
         preparingManager: PreparingManager = mockk(relaxed = true),
         sbpRepository: SBPRepository = sbpRepositoryMock(),
         telemetryService: ViwaTelemetryService = createTestTelemetry(),
-        cancelUseCaseOverride: CancelMachineSubscriptionUseCase? = null,
-    ): Pair<DrinkListViewModel, SubscriptionPaymentUseCaseMocks> {
+    ): DrinkListViewModel {
         val gateway = mockk<ControllerGateway>(relaxUnitFun = true)
         val responses = MutableSharedFlow<ControllerResponseEvent>(extraBufferCapacity = 16)
         every { gateway.incomingResponses } returns responses.asSharedFlow()
@@ -158,10 +184,6 @@ internal object DrinkListViewModelTestSupport {
                 telemetryService,
                 getSBPLinkUseCase,
                 checkSBPStatusUseCase,
-                subscriptionUseCases.init,
-                subscriptionUseCases.complete,
-                subscriptionUseCases.apply,
-                cancelUseCaseOverride ?: subscriptionUseCases.cancel,
                 sbpRepository,
                 nano,
                 networkTraffic,
@@ -170,6 +192,6 @@ internal object DrinkListViewModelTestSupport {
                 mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
             )
         trackViewModel(vm)
-        return vm to subscriptionUseCases
+        return vm
     }
 }

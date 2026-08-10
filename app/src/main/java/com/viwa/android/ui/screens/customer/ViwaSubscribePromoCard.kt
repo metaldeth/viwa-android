@@ -196,7 +196,6 @@ fun ViwaSubscribePromoCard(
     s: Float,
     state: DrinkListUiState,
     onDismiss: () -> Unit,
-    onOpenSubscriptionPurchase: () -> Unit,
 ) {
     val palette = subscribePromoPalette()
     val scenario = subscribePromoScenario(state)
@@ -286,7 +285,6 @@ fun ViwaSubscribePromoCard(
                                 s = s,
                                 palette = palette,
                                 primaryLabel = "Выгодная подписка тут",
-                                onPrimaryClick = onOpenSubscriptionPurchase,
                                 onDismiss = onDismiss,
                                 remainingSeconds = state.subscriptionExitRemainingSeconds,
                                 showPrimary = false,
@@ -401,7 +399,6 @@ fun ViwaSubscribePromoCard(
                                 s = s,
                                 palette = palette,
                                 primaryLabel = "Продлить",
-                                onPrimaryClick = onOpenSubscriptionPurchase,
                                 onDismiss = onDismiss,
                                 remainingSeconds = state.subscriptionExitRemainingSeconds,
                                 showPrimary = false,
@@ -447,7 +444,6 @@ fun ViwaSubscribePromoCard(
                                 s = s,
                                 palette = palette,
                                 primaryLabel = "Продлить",
-                                onPrimaryClick = onOpenSubscriptionPurchase,
                                 onDismiss = onDismiss,
                                 remainingSeconds = state.subscriptionExitRemainingSeconds,
                                 showPrimary = false,
@@ -675,10 +671,10 @@ private fun PromoActionRow(
     s: Float,
     palette: SubscribePromoPalette,
     primaryLabel: String,
-    onPrimaryClick: () -> Unit,
     onDismiss: () -> Unit,
     remainingSeconds: Int,
     showPrimary: Boolean = true,
+    onPrimaryClick: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),

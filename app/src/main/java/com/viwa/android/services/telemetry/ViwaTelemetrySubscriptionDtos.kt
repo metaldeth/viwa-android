@@ -49,15 +49,6 @@ data class SaleSubscribeTopicRequest(
     val body: SaleSubscribeTopicBody,
 )
 
-/** Тариф подписки из subscriptionLevelTopic. */
-data class SubscriptionLevelItem(
-    val uuid: String,
-    val price: Double,
-    val name: String? = null,
-    val volume: Int? = null,
-    val orgId: Int? = null,
-)
-
 /** Нормализованные данные из subscribeInformationTopic для UI. */
 data class SubscribeInformationState(
     val isStatusRequest: Boolean,
