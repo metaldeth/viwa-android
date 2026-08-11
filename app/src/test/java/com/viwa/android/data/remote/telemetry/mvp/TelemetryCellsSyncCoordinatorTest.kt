@@ -1,5 +1,9 @@
 package com.viwa.android.data.remote.telemetry.mvp
 
+import com.viwa.android.data.local.outbox.MachineOutboxEntryEntity
+import com.viwa.android.data.local.outbox.MachineOutboxKind
+import com.viwa.android.data.local.outbox.MachineOutboxStatus
+import com.viwa.android.data.local.outbox.RecipeOutboxStore
 import com.viwa.android.data.local.outbox.RecipeOutboxTestFixtures
 import com.viwa.android.data.local.recipe.CellAssignmentBaseStore
 import com.viwa.android.data.local.recipe.CellEffectiveRecipeStore
@@ -698,6 +702,69 @@ class TelemetryCellsSyncCoordinatorTest {
     }
 
     @Test
+    fun `recipe reconnect with warm effective and empty outbox sends sync request`() = runTest {
+        val dao = FakeCellEffectiveRecipeDao()
+        val recipeStore =
+            CellEffectiveRecipeStore(
+                dao = dao,
+                featureEnabled = { true },
+                clock = { 1_000L },
+            )
+        val outboxStack = RecipeOutboxTestFixtures.createOutboxStack(recipeDao = dao)
+        val complete =
+            CellEffectiveRecipe(
+                cellId = "cell-warm",
+                baseDrinkVolumeMl = 300,
+                waterDeciMl = 2700,
+                productDeciMl = 300,
+                fingerprint = CellEffectiveRecipeDefaults.legacyFingerprint,
+                source = CellEffectiveRecipeSource.COMMAND,
+                productId = "prod-1",
+                baseVersionId = "base-1",
+                lastAppliedCommandGeneration = 3L,
+                cancelThroughGeneration = 2L,
+                updatedAtMs = 1_000L,
+            )
+        dao.upsert(CellEffectiveRecipeEntity.fromDomain(complete))
+        val ackedReportKey =
+            RecipeOutboxStore.reportIdempotencyKey(
+                complete.cellId,
+                complete.deviceReportRevision,
+            )
+        outboxStack.persistence.insert(
+            MachineOutboxEntryEntity(
+                localId = "acked-report",
+                kind = MachineOutboxKind.CELLS_RECIPE_REPORT.wireValue,
+                idempotencyKey = ackedReportKey,
+                messageId = "acked-mid",
+                payloadJson = "{}",
+                status = MachineOutboxStatus.ACKED.name,
+                attempts = 1,
+                wsAckFailures = 0,
+                nextRetryAtMs = 0L,
+                lastError = null,
+                sessionGenerationAtSend = 1L,
+                createdAtMs = 1_000L,
+                ackedAtMs = 1_000L,
+                inFlightSinceMs = null,
+            ),
+        )
+        val recipeCoordinator =
+            createCoordinator(
+                recipeStore = recipeStore,
+                recipeSync = RecipeSyncCoordinator.forTests(recipeMessageCodec),
+                recipeDao = dao,
+                outboxStack = outboxStack,
+            )
+        coEvery { wsManager.sendEnvelope(any(), any(), any()) } returns Result.success("mid")
+
+        recipeCoordinator.onWebSocketHello(recipeHello)
+
+        coVerify { wsManager.sendEnvelope(RECIPE_WS_TYPE_SYNC_REQUEST, any(), any()) }
+        coVerify(exactly = 0) { wsManager.sendEnvelope(RECIPE_WS_TYPE_REPORT, any(), any()) }
+    }
+
+    @Test
     fun `recipe reconnect sends report batches after schema with integer generations`() = runTest {
         val dao = FakeCellEffectiveRecipeDao()
         val recipeStore =
@@ -802,25 +869,26 @@ class TelemetryCellsSyncCoordinatorTest {
         recipeStore: CellEffectiveRecipeStore = effectiveRecipeStore,
         recipeSync: RecipeSyncCoordinator = recipeSyncCoordinator,
         recipeDao: FakeCellEffectiveRecipeDao = this.recipeDao,
+        outboxStack: RecipeOutboxTestFixtures.RecipeOutboxTestStack? = null,
     ): TelemetryCellsSyncCoordinator {
-        val outboxStack = RecipeOutboxTestFixtures.createOutboxStack(recipeDao = recipeDao)
+        val stack = outboxStack ?: RecipeOutboxTestFixtures.createOutboxStack(recipeDao = recipeDao)
         val drainCoordinator =
             MachineOutboxDrainCoordinator(
-                outboxStore = outboxStack.machineOutboxStore,
+                outboxStore = stack.machineOutboxStore,
                 wsManagerLazy =
                     object : dagger.Lazy<MvpTelemetryWebSocketManager> {
                         override fun get(): MvpTelemetryWebSocketManager = wsManager
                     },
                 apiClient = mockk(relaxed = true),
                 bearerTokenProvider = mockk(relaxed = true),
-                recipeOutboxStore = outboxStack.recipeOutboxStore,
+                recipeOutboxStore = stack.recipeOutboxStore,
                 appScope = testScope,
             )
         val applier = RecipeCommandApplier(recipeStore)
         val orchestrator =
             RecipeSyncOrchestrator(
                 wsCoordinator = recipeSync,
-                inbox = outboxStack.inbox(applier, recipeStore),
+                inbox = stack.inbox(applier, recipeStore),
                 effectiveRecipeStore = recipeStore,
                 assignmentBaseStore = CellAssignmentBaseStore.forTests(FakeCellAssignmentBaseDao()),
             )
@@ -838,7 +906,7 @@ class TelemetryCellsSyncCoordinatorTest {
             recipeMessageCodec = recipeMessageCodec,
             recipeSyncCoordinator = recipeSync,
             recipeSyncOrchestrator = orchestrator,
-            recipeOutboxStore = outboxStack.recipeOutboxStore,
+            recipeOutboxStore = stack.recipeOutboxStore,
             outboxDrainCoordinator = drainCoordinator,
             appScope = testScope,
         )

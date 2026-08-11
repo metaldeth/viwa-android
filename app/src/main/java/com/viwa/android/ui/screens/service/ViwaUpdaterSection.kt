@@ -16,13 +16,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -36,7 +32,6 @@ fun ViwaUpdaterSection(
     embedded: Boolean = false,
 ) {
     val progress by viewModel.updateInstallProgress.collectAsStateWithLifecycle()
-    var legacyHost by remember(state.updateHost) { mutableStateOf(state.updateHost) }
     val scheme = MaterialTheme.colorScheme
     val content: @Composable () -> Unit = {
             Text(
@@ -56,26 +51,6 @@ fun ViwaUpdaterSection(
                 true -> Text("Автопроверка: включена (раз в 6 ч)", style = MaterialTheme.typography.bodySmall)
                 false -> Text("Автопроверка: выключена сервером", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
                 null -> Text("Автопроверка: ожидание hello WS", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Legacy HTTP (debug/fallback)", modifier = Modifier.weight(1f))
-                Switch(
-                    checked = state.otaLegacyFallbackEnabled,
-                    onCheckedChange = { viewModel.setLegacyOtaFallbackEnabled(it) },
-                )
-            }
-            if (state.otaLegacyFallbackEnabled) {
-                Spacer(Modifier.height(8.dp))
-                SettingsTextField(
-                    label = "Legacy URL сервера",
-                    value = legacyHost,
-                    onValueChange = { legacyHost = it },
-                    placeholder = "https://tl.vitamin-water.ru/android-ota",
-                )
-                Button(onClick = { viewModel.setUpdateHost(legacyHost) }) {
-                    Text("Сохранить legacy URL")
-                }
             }
             Spacer(Modifier.height(16.dp))
             Button(
@@ -133,13 +108,11 @@ fun ViwaUpdaterSection(
                 ) {
                     Text("Установить")
                 }
-                if (update.telemetryOffer) {
-                    Text(
-                        "Установка требует scope firmware.update (online)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Text(
+                    "Установка требует scope firmware.update (online)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 if (state.isInstalling) {
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {

@@ -1,13 +1,13 @@
 # OTA-обновления viwa-android
 
-## Phase 3 — telemetry OTA (production-safe)
+Production OTA — только **telemetry Phase 3** через `viwa-telemetry`. Legacy HTTP (`version.json`, `update-server`, Docker) удалён.
 
-Основной поток: **machine JWT** + signed manifest из `viwa-telemetry`.
+## Поток на устройстве
 
 | Шаг | Endpoint | Auth |
 |-----|----------|------|
-| Check | `GET /api/v1/machines/app-updates/check?currentVersionCode=` | Bearer JWT |
-| Report | `POST /api/v1/machines/app-updates/report` | Bearer JWT |
+| Check | `GET /api/v1/machines/app-updates/check?currentVersionCode=` | Bearer machine JWT |
+| Report | `POST /api/v1/machines/app-updates/report` | Bearer machine JWT |
 | Download | `GET /api/v1/machines/app-updates/download/:releaseId?token=` | Bearer JWT + HMAC token |
 
 Контракт: `c:\viwa\viwa-telemetry\docs\contracts\app-updates.md`.
@@ -15,33 +15,21 @@
 ### Клиент (Android)
 
 - Сравнение **`versionCode`**, не `versionName`.
-- Ed25519 canonical manifest (`app-release-manifest-v1|…`) + pinned/hello OTA public key (`local.properties`: `ota.signingKeyId`, `ota.signingPublicKeyPem`).
+- Ed25519 canonical manifest + pinned/hello OTA public key (`local.properties`: `ota.signingKeyId`, `ota.signingPublicKeyPem`).
 - Download: max 200 MB, SHA-256, expiry URL, pre-install verify package/versionCode/cert.
 - State machine: Idle → Checking → Offered → Downloading → Verifying → Installing → AwaitingUser → Success/Failed; persistence в JsonStore.
-- Автопроверка **раз в 6 ч** только при `hello.featureFlags.appUpdates=true`; manual — вкладка «Обновления» сервисного меню.
+- Автопроверка **раз в 6 ч** только при `hello.featureFlags.appUpdates=true`; ручная — вкладка «Тема» сервисного меню (блок «Обновления»).
 - **Mandatory** enforcement выключен по умолчанию (server + client flag).
-- Install: `firmware.update` scope (online-only); check/view — сервисное меню.
-- Silent install **не** используется без device-owner; K3568 OEM follow-up.
+- Install: `firmware.update` scope (online-only).
+- Silent install **не** используется без device-owner.
 
-### Legacy HTTP (debug/fallback)
+## Сборка release APK (локальная подпись)
 
-Явный переключатель «Legacy HTTP» в UI. Старый `version.json` + прямой URL APK — только для отладки.
+Keystore и пароли **не в git** — каталог `signing/` (gitignored):
 
-| Поле | Значение |
-|------|----------|
-| Хост (prod legacy) | `https://tl.vitamin-water.ru/android-ota` |
-| Имя APK | `viwa-android-{versionName}-release.apk` или `wiva-android-*` (legacy) |
-
-## Legacy update-server (Docker)
-
-```bash
-docker compose up -d update-server
-curl http://localhost:9082/version.json
-```
-
-Каталог `release/`, переменная `ANDROID_UPDATE_BASE_URL`. Подробнее — `.cursor/rules/universal/infra-android-update-server.mdc`.
-
-## Сборка APK
+- `signing/release.jks`
+- `signing/.storepass`, `signing/.keypass` (или env `STORE_PASSWORD`, `KEY_PASSWORD`, `KEY_ALIAS`)
+- опционально `signing/release-remote.env` — `OTA_RELEASE_UPLOAD_TOKEN`, `TELEMETRY_API_URL`
 
 ```bat
 gradlew.bat assembleRelease
@@ -49,36 +37,24 @@ gradlew.bat assembleRelease
 
 APK: `app/build/outputs/apk/release/viwa-android-{versionName}-release.apk`.
 
-## Локальный релиз (release-android)
-
-Keystore и пароли **не хранятся в git** — они лежат на OTA-сервере в `/opt/viwa-android/signing/` (`release.jks`, `credentials.json` или `.storepass`/`.keypass`). Собранные APK — в `/opt/viwa-android/release/`.
-
-Публичный манифест: `https://tl.vitamin-water.ru/android-ota/version.json`.
-
-### Однократная настройка сервера
-
-Если signing materials ещё только локально:
-
-```powershell
-.\scripts\bootstrap-signing-to-server.ps1
-# при необходимости: -Token <RELEASE_TOKEN>
-```
-
-Скрипт копирует `signing/release.jks` и пароли на `wiva-server`, создаёт `credentials.json` и шаблон `signing/release-remote.env` (добавьте `RELEASE_TOKEN`).
-
-### Сборка и публикация с Windows
+## Публикация релиза (Windows)
 
 ```bat
 release-android.cmd
+release-android.cmd -Publish
 ```
 
-Скрипт:
+Скрипт `scripts/release-android.ps1`:
 
-1. Скачивает keystore и credentials с update-server (Bearer `RELEASE_TOKEN`)
-2. Собирает `gradlew.bat assembleRelease` с подписью
-3. Загружает APK на сервер (`POST /admin/upload`)
-4. Печатает актуальный `version.json`
+1. Собирает `assembleRelease` с **локальной** подписью (`signing/` или env).
+2. Загружает APK: `POST {TELEMETRY_API_URL}/api/v1/app-releases/upload` с Bearer `OTA_RELEASE_UPLOAD_TOKEN`.
+3. С `-Publish`: `POST .../:id/publish` с `rolloutPercent: 100`.
+4. Печатает `releaseId`, `versionName`, `versionCode`.
 
-Переменные: `UPDATE_BASE_URL` (по умолчанию `https://tl.vitamin-water.ru/android-ota`), `RELEASE_TOKEN` — из окружения или `signing/release-remote.env`.
+Переменные: `TELEMETRY_API_URL` (по умолчанию `https://tl.vitamin-water.ru`), `OTA_RELEASE_UPLOAD_TOKEN` — из окружения или `signing/release-remote.env`.
 
-Каталог `signing/` в репозитории gitignored; секреты в документацию не добавлять.
+## CI (GitLab)
+
+Job `build_release_apk` собирает signed APK в Docker. Копирование в `WIVA_OTA_RELEASE_DIR` — legacy file-drop; для production rollout используйте telemetry upload (`OTA_RELEASE_UPLOAD_TOKEN`) через `release-android.ps1` или отдельный CI job.
+
+Секреты в документацию не добавлять.

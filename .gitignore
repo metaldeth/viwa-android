@@ -26,7 +26,7 @@ local.properties
 .externalNativeBuild/
 .cxx/
 
-# OTA: собранные APK на хосте (раздаётся через update-server)
+# Собранные release APK на хосте (CI / release-android.ps1)
 /release/
 gradle-docker-prebuild/*.zip
 .env

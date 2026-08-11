@@ -158,6 +158,33 @@ constructor(
         )
     }
 
+    /**
+     * Repairs enrollment metadata when [MachineSecretStore] still has a secret but JsonStore flags
+     * were cleared or migrated incompletely (e.g. partial cloud backup restore).
+     */
+    suspend fun reconcilePersistedRegistration(): MachineRegistration {
+        var reg = loadMachineRegistration().let { MachineRegistration.migrateLegacy(it) }
+        val serial = SerialNumberUtils.normalize(reg.serialNumber)
+        if (serial.isNotBlank() && machineSecretStore.hasSecret(serial) && !MachineRegistration.isEnrolled(reg)) {
+            reg =
+                reg.copy(
+                    authScheme = MachineRegistration.AUTH_SCHEME_STABLE_SECRET,
+                    machineCredential = "",
+                    machineKey = "",
+                    isRegistered = true,
+                    enrolled = true,
+                )
+            persistRegistrationMetadata(reg)
+            Timber.i("SimpleTelemetry: reconciled enrollment from stored machineSecret serial=$serial")
+        }
+        return ensureIdentity(reg)
+    }
+
+    suspend fun canReconnectWithPersistedCredentials(): Boolean {
+        val reg = reconcilePersistedRegistration()
+        return MachineRegistration.isEnrolled(reg) && hasAuthMaterial(reg)
+    }
+
     suspend fun ensureIdentity(reg: MachineRegistration): MachineRegistration {
         var updated = reg
         if (updated.installationId.isBlank()) {
@@ -549,9 +576,17 @@ constructor(
     private suspend fun connectInternal(reason: String) {
         if (isUserPaused()) return
         val config = loadTelemetryConfig()
-        val reg = ensureIdentity(loadMachineRegistration())
+        val reg = reconcilePersistedRegistration()
         if (!MachineRegistration.isEnrolled(reg)) {
             Timber.w("SimpleTelemetry: registration required ($reason)")
+            return
+        }
+        if (!hasAuthMaterial(reg)) {
+            val serial = SerialNumberUtils.normalize(reg.serialNumber)
+            Timber.w(
+                "SimpleTelemetry: enrolled but no auth material for serial=$serial ($reason) — " +
+                    "re-register or restore machineSecret",
+            )
             return
         }
         val wsUrl =

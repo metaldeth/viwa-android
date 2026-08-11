@@ -1,5 +1,6 @@
 package com.viwa.android.services.telemetry
 
+import com.viwa.android.BuildConfig
 import com.viwa.android.data.remote.telemetry.ConnectionState
 import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryLoyaltySyncHandler
 import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryWebSocketManager
@@ -144,6 +145,9 @@ constructor(
                 launch {
                     delay(3_000)
                     scheduledAutoConnect = null
+                    if (BuildConfig.DEBUG) {
+                        TelemetryDebugBootstrap.maybeAutoConnectOnColdStart(this@ViwaTelemetryService)
+                    }
                     startTelemetryIfRegistered("холодный старт")
                 }
         }
@@ -201,6 +205,8 @@ constructor(
 
     suspend fun loadMachineRegistration(): MachineRegistration = mvpCoordinator.loadMachineRegistration()
 
+    suspend fun hasStableSecret(serialNumber: String): Boolean = mvpCoordinator.hasStableSecret(serialNumber)
+
     suspend fun saveMachineRegistration(reg: MachineRegistration) = mvpCoordinator.saveMachineRegistration(reg)
 
     suspend fun registerMachine(
@@ -252,9 +258,16 @@ constructor(
     }
 
     private suspend fun startTelemetryIfRegistered(reason: String) {
-        val reg = loadMachineRegistration()
-        if (!MachineRegistration.isEnrolled(reg)) {
-            Timber.d("ViwaTelemetry: автоподключение пропущено ($reason) — машина не зарегистрирована")
+        if (!mvpCoordinator.canReconnectWithPersistedCredentials()) {
+            val reg = loadMachineRegistration()
+            if (!MachineRegistration.isEnrolled(reg)) {
+                Timber.d("ViwaTelemetry: автоподключение пропущено ($reason) — машина не зарегистрирована")
+            } else {
+                Timber.w(
+                    "ViwaTelemetry: автоподключение пропущено ($reason) — нет machineSecret " +
+                        "для serial=${reg.serialNumber}",
+                )
+            }
             return
         }
         // Cold start / reboot: пауза «Отключить WS» не должна переживать рестарт процесса —

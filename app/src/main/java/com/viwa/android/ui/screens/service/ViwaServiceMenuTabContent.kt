@@ -114,7 +114,6 @@ fun ViwaServiceMenuTabContent(
             }
 
         ViwaServiceGroupId.CardPayment,
-        ViwaServiceGroupId.Updater,
         ViwaServiceGroupId.Performance,
         ViwaServiceGroupId.Metrics ->
             ViwaPlaceholderTab("Раздел недоступен в меню.")

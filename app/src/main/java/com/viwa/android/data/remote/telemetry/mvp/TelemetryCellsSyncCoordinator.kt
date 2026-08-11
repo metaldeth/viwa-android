@@ -260,8 +260,10 @@ constructor(
         if (!flushRecipeOutboxPending()) {
             uplinkSuccess = false
         }
-        val completeCells = effectiveRecipeStore.listCompleteEffectiveForUplink()
-        if (completeCells.isEmpty() && !recipeOutboxStore.hasUnsentRecipeEntries()) {
+        // Always request downlink delivery when uplink outbox is drained — warm persisted
+        // effective recipes skip report enqueue (idempotent) but server still needs
+        // sync.request to run deliverAfterReport for pending commands.
+        if (!recipeOutboxStore.hasUnsentRecipeEntries()) {
             sendRecipeSyncRequest()
                 .onFailure {
                     Timber.w(it, "TelemetryCellsSync: recipe sync.request failed")

@@ -51,7 +51,6 @@ class AppUpdateCoordinatorTest {
     @Before
     fun setup() {
         coEvery { configRepository.getJson(JsonStoreKeys.TELEMETRY_CONFIG) } returns """{"apiUrl":"https://tl.example.test"}"""
-        coEvery { configRepository.get(JsonStoreKeys.OTA_LEGACY_HTTP_FALLBACK) } returns "false"
         coEvery { configRepository.get(JsonStoreKeys.OTA_MANDATORY_ENFORCEMENT) } returns "false"
         coEvery { configRepository.getJson(JsonStoreKeys.OTA_UPDATE_STATE) } returns null
         coEvery { configRepository.setJson(JsonStoreKeys.OTA_UPDATE_STATE, any()) } returns Unit

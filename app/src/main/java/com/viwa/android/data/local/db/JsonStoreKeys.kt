@@ -1,7 +1,6 @@
 package com.viwa.android.data.local.db
 
 object JsonStoreKeys {
-    const val UPDATE_SERVER_HOST = "updateServerHost"
  /** Строка `"true"` / `"false"` для переключателя мока контроллера. */
     const val USE_MOCK_CONTROLLER = "useMockController"
 
@@ -136,7 +135,4 @@ object JsonStoreKeys {
 
     /** `"true"` — explicit client flag to enforce server mandatory updates. */
     const val OTA_MANDATORY_ENFORCEMENT = "otaMandatoryEnforcement"
-
-    /** `"true"` — allow legacy HTTP version.json flow (debug/fallback only). */
-    const val OTA_LEGACY_HTTP_FALLBACK = "otaLegacyHttpFallback"
 }

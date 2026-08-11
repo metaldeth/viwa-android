@@ -3,13 +3,16 @@ package com.viwa.android.services.telemetry
 import android.content.Intent
 import com.viwa.android.BuildConfig
 import com.viwa.android.data.remote.telemetry.mvp.SerialAlreadyBoundException
+import com.viwa.android.data.remote.telemetry.mvp.SerialNumberUtils
+import com.viwa.android.domain.model.MachineRegistration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
 /**
- * DEBUG-only adb bootstrap: register + connect telemetry from [MainActivity] intent extras
- * without service-menu keyboard.
+ * DEBUG-only telemetry bootstrap:
+ * - adb intent extras from [MainActivity] (register + connect without service menu)
+ * - [maybeAutoConnectOnColdStart] from `local.properties` / env (see AGENTS.md)
  */
 object TelemetryDebugBootstrap {
     const val EXTRA_REG_KEY = "telemetry_debug_reg_key"
@@ -41,6 +44,44 @@ object TelemetryDebugBootstrap {
         }
     }
 
+    /**
+     * DEBUG cold start using BuildConfig from `telemetry.debug.*` in local.properties.
+     * Prefers reconnect when [MachineSecretStore] already has a secret for the bench serial.
+     */
+    suspend fun maybeAutoConnectOnColdStart(telemetryService: ViwaTelemetryService) {
+        if (!BuildConfig.DEBUG) return
+        val configuredSerial = BuildConfig.TELEMETRY_DEBUG_SERIAL.trim()
+        val configuredRegKey = BuildConfig.TELEMETRY_DEBUG_REG_KEY.trim()
+        val persistedReg = telemetryService.loadMachineRegistration()
+        val action =
+            TelemetryDebugColdStartPlanner.resolve(
+                TelemetryDebugColdStartPlanner.Input(
+                    isDebugBuild = true,
+                    autoConnectEnabled = BuildConfig.TELEMETRY_DEBUG_AUTO_CONNECT,
+                    configuredSerial = configuredSerial,
+                    configuredRegKey = configuredRegKey,
+                    persistedSerial = persistedReg.serialNumber,
+                    isEnrolled = MachineRegistration.isEnrolled(persistedReg),
+                    hasStoredSecretForConfiguredSerial =
+                        telemetryService.hasStableSecret(configuredSerial),
+                    hasStoredSecretForPersistedSerial =
+                        telemetryService.hasStableSecret(persistedReg.serialNumber),
+                ),
+            )
+        when (action) {
+            TelemetryDebugColdStartPlanner.Action.None -> Unit
+            TelemetryDebugColdStartPlanner.Action.ConnectOnly -> {
+                Timber.i("TelemetryDebugBootstrap: cold-start connect-only serial=$configuredSerial")
+                telemetryService.connect()
+            }
+            TelemetryDebugColdStartPlanner.Action.RegisterThenConnect -> {
+                val serial = SerialNumberUtils.normalize(configuredSerial)
+                Timber.i("TelemetryDebugBootstrap: cold-start register+connect serial=$serial")
+                runBootstrap(telemetryService, configuredRegKey, serial, shouldRegister = true)
+            }
+        }
+    }
+
     private const val TAG = "TelemetryDebugBootstrap"
 
     private suspend fun runBootstrap(
@@ -61,6 +102,7 @@ object TelemetryDebugBootstrap {
                             ?: error.cause as? SerialAlreadyBoundException
                     if (conflict != null) {
                         Timber.e(
+                            error,
                             "TelemetryDebugBootstrap: serial ${conflict.serialNumber} already bound " +
                                 "to another installation — enable allow-rebind in web panel " +
                                 "(or pm clear app data for a fresh installationId, then retry)",

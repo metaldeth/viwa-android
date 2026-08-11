@@ -10,7 +10,7 @@
 | **commitTarget** | main |
 | **deployBranch** | main |
 | **buildCommand** | `./gradlew assembleDebug` (Windows: `gradlew.bat assembleDebug`) |
-| **releaseCommand** | `release-android.cmd` — скачать signing с OTA-сервера, `assembleRelease`, upload APK, вывести `version.json` |
+| **releaseCommand** | `release-android.cmd` — локальная подпись, `assembleRelease`, upload в telemetry (`POST /api/v1/app-releases/upload`), опционально `-Publish` |
 | **tdd** | true |
 | **testCommand** | `gradlew.bat :app:testDebugUnitTest` (Windows) |
 | **mrTarget** | main |
@@ -83,12 +83,13 @@ gradlew.bat installRelease
 
 Если уже стоит сборка с другой подписью: `adb uninstall com.viwa.android`, затем снова `installRelease`.
 
-Полный OTA и Docker: `docs/OTA_UPDATE.md`.
+Полный OTA: `docs/OTA_UPDATE.md` (telemetry Phase 3).
 
 ## Simple Telemetry MVP
 
 - Документация клиента: **`docs/SIMPLE_TELEMETRY_MVP_ANDROID.md`** (REST enroll, WS fallback, 409/rebind, ONLINE после `hello`).
 - Локальные ключи (не коммитить): **`local.properties.sample`** → скопировать в `local.properties`; `telemetry.enrollmentKey` = `MACHINE_ENROLLMENT_KEY` на сервере (`viwa-telemetry/.env.example`).
+- **DEBUG test bench** (`installDebug` only): в `local.properties` задать `telemetry.debug.serial` (default `VIWA-TEST01`), `telemetry.debug.regKey=REG-...`, `telemetry.debug.autoConnect=true`. После первой успешной регистрации `machineSecret` хранится в EncryptedSharedPreferences — перезапуск и `installDebug` поверх существующей сборки переподключаются без повторного REG. Ключ `telemetry.debug.regKey` **не коммитить**.
 - Серверная документация: `c:\viwa\viwa-telemetry\AGENTS.md`, deploy: `c:\viwa\viwa-telemetry\docs\deployment\server.md`.
 
 ## Офис / железо (этап F)

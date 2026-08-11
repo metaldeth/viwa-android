@@ -70,7 +70,6 @@ object ServiceMenuTestTags {
             ViwaServiceGroupId.Equipment -> "service_group_equipment"
             ViwaServiceGroupId.Maintenance -> "service_group_maintenance"
             ViwaServiceGroupId.Settings -> "service_group_settings"
-            ViwaServiceGroupId.Updater -> "service_group_updater"
             ViwaServiceGroupId.Performance -> "service_group_performance"
             ViwaServiceGroupId.Metrics -> "service_group_metrics"
         }

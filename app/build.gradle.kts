@@ -61,8 +61,8 @@ android {
         applicationId = "com.viwa.android"
         minSdk = 25
         targetSdk = 35
-        versionCode = 207
-        versionName = "26.08.10.02"
+        versionCode = 208
+        versionName = "26.08.11.01"
 
         testInstrumentationRunner = "com.viwa.android.ViwaHiltTestRunner"
 
@@ -96,6 +96,30 @@ android {
         debug {
             val releaseSigning = signingConfigs.getByName("release")
             releaseSigning.storeFile?.let { signingConfig = releaseSigning }
+            val localProps = Properties()
+            val localPropsFile = rootProject.file("local.properties")
+            if (localPropsFile.exists()) {
+                FileInputStream(localPropsFile).use { localProps.load(it) }
+            }
+            val debugSerial =
+                localProps.getProperty("telemetry.debug.serial")
+                    ?: System.getenv("VIWA_TELEMETRY_DEBUG_SERIAL")
+                    ?: "VIWA-TEST01"
+            val debugRegKey =
+                localProps.getProperty("telemetry.debug.regKey")
+                    ?: System.getenv("VIWA_TELEMETRY_DEBUG_REG_KEY")
+                    ?: ""
+            val debugAutoConnect =
+                localProps.getProperty("telemetry.debug.autoConnect")
+                    ?: System.getenv("VIWA_TELEMETRY_DEBUG_AUTO_CONNECT")
+                    ?: "false"
+            buildConfigField("String", "TELEMETRY_DEBUG_SERIAL", "\"${debugSerial.replace("\"", "\\\"")}\"")
+            buildConfigField("String", "TELEMETRY_DEBUG_REG_KEY", "\"${debugRegKey.replace("\"", "\\\"")}\"")
+            buildConfigField(
+                "boolean",
+                "TELEMETRY_DEBUG_AUTO_CONNECT",
+                debugAutoConnect.equals("true", ignoreCase = true).toString(),
+            )
         }
         release {
             signingConfig = signingConfigs.getByName("release")
@@ -105,6 +129,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            buildConfigField("String", "TELEMETRY_DEBUG_SERIAL", "\"\"")
+            buildConfigField("String", "TELEMETRY_DEBUG_REG_KEY", "\"\"")
+            buildConfigField("boolean", "TELEMETRY_DEBUG_AUTO_CONNECT", "false")
         }
     }
 

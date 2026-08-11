@@ -137,14 +137,6 @@ constructor(
         }
     }
 
-    suspend fun setLegacyFallbackEnabled(enabled: Boolean) {
-        configRepository.set(JsonStoreKeys.OTA_LEGACY_HTTP_FALLBACK, if (enabled) "true" else "false")
-        _snapshot.value = _snapshot.value.copy(legacyFallbackEnabled = enabled)
-    }
-
-    suspend fun isLegacyFallbackEnabled(): Boolean =
-        configRepository.get(JsonStoreKeys.OTA_LEGACY_HTTP_FALLBACK) == "true"
-
     suspend fun setMandatoryEnforcementEnabled(enabled: Boolean) {
         configRepository.set(JsonStoreKeys.OTA_MANDATORY_ENFORCEMENT, if (enabled) "true" else "false")
         _snapshot.value = _snapshot.value.copy(mandatoryEnforcementEnabled = enabled)
@@ -331,7 +323,6 @@ constructor(
                 fromVersionCode = persisted.fromVersionCode,
                 errorMessage = persisted.failureReason,
                 lastCheckEpochMs = persisted.lastCheckEpochMs,
-                legacyFallbackEnabled = isLegacyFallbackEnabled(),
                 mandatoryEnforcementEnabled = configRepository.get(JsonStoreKeys.OTA_MANDATORY_ENFORCEMENT) == "true",
                 pendingApkPath = persisted.pendingApkPath,
             )

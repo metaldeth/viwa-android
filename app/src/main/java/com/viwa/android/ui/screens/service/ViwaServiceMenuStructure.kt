@@ -22,9 +22,6 @@ sealed interface ViwaServiceGroupId {
 
     data object Settings : ViwaServiceGroupId
 
-    /** OTA перенесено на вкладку «Тема». */
-    data object Updater : ViwaServiceGroupId
-
     data object Performance : ViwaServiceGroupId
 
     data object Metrics : ViwaServiceGroupId

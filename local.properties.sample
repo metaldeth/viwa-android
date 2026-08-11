@@ -9,6 +9,11 @@
 
 # Alternative: set env VIWA_TELEMETRY_ENROLLMENT_KEY before gradlew (PowerShell: $env:VIWA_TELEMETRY_ENROLLMENT_KEY = "...")
 
+# DEBUG bench auto-connect (never commit REG key; debug APK only)
+# telemetry.debug.serial=VIWA-TEST01
+# telemetry.debug.regKey=REG-your-dev-key-here
+# telemetry.debug.autoConnect=true
+
 # OTA manifest verification (optional — pinned Ed25519 key from viwa-telemetry OTA_SIGNING_*)
 # ota.signingKeyId=ota-dev-v1
 # ota.signingPublicKeyPem=-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----

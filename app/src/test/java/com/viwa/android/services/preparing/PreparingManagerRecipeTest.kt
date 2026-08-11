@@ -299,8 +299,9 @@ class PreparingManagerRecipeTest {
                 pourGateEnabled = true,
             ),
         )
-        assertFalse(RecipeSyncFeatureFlags.FEATURE_RECIPE_SYNC)
-        assertFalse(RecipeSyncFeatureFlags.FEATURE_RECIPE_POUR_FROM_EFFECTIVE)
+        // Phase C prod rollout: both compile-time gates are on; pour still needs managed gate at runtime.
+        assertTrue(RecipeSyncFeatureFlags.FEATURE_RECIPE_SYNC)
+        assertTrue(RecipeSyncFeatureFlags.FEATURE_RECIPE_POUR_FROM_EFFECTIVE)
     }
 
     @Test

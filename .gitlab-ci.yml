@@ -5,14 +5,17 @@
 #   2) Сборка release APK: docker build --target ci-build — Gradle только внутри образа,
 #      в workspace job не создаётся app/build.
 #   3) APK из образа -> ./release/ -> выравнивание владельца под пользователя job ->
-#      копирование в WIVA_OTA_RELEASE_DIR (например /opt/wiva-android/release).
+#      опционально копирование в WIVA_OTA_RELEASE_DIR (legacy file-drop; production rollout —
+#      POST /api/v1/app-releases/upload + publish через OTA_RELEASE_UPLOAD_TOKEN, см. docs/OTA_UPDATE.md).
 #
 # Очистка: scripts/ci-runner-cleanup.sh. При необходимости sudo включается через
 # WIVA_CI_SUDO_CLEANUP=1 и NOPASSWD в sudoers для gitlab-runner.
 # DOCKER_BUILDKIT=1 не задаём: без docker-buildx сборка падала в legacy Android kiosk.
 #
 # Переменные:
-#   WIVA_OTA_RELEASE_DIR — каталог OTA на сервере; без неё APK останется только в артефактах job.
+#   WIVA_OTA_RELEASE_DIR — legacy каталог file-drop на сервере (опционально); без неё APK только в артефактах job.
+#   OTA_RELEASE_UPLOAD_TOKEN — Bearer для telemetry upload/publish (release-android.ps1 / отдельный deploy job).
+#   TELEMETRY_API_URL — базовый URL telemetry API (по умолчанию https://tl.vitamin-water.ru).
 #   WIVA_APT_HTTP_MIRROR, WIVA_GRADLE_DIST_URL, WIVA_GRADLE_CACHE_FILE, WIVA_CI_SUDO_CLEANUP
 #   KEYSTORE_PATH, STORE_PASSWORD, KEY_PASSWORD, KEY_ALIAS — только если нужна своя подпись.
 
@@ -74,7 +77,7 @@ build_release_apk:
         cp -v release/*.apk "${WIVA_OTA_RELEASE_DIR}/"
         ls -la "${WIVA_OTA_RELEASE_DIR}"
       else
-        echo "NOTE: WIVA_OTA_RELEASE_DIR не задан — APK только в артефактах job и в ./release/ до очистки."
+        echo "NOTE: WIVA_OTA_RELEASE_DIR не задан — APK только в артефактах job. Для telemetry rollout задайте OTA_RELEASE_UPLOAD_TOKEN и upload/publish (см. docs/OTA_UPDATE.md)."
       fi
   after_script:
     - chmod +x scripts/ci-runner-cleanup.sh

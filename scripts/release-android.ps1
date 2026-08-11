@@ -1,7 +1,10 @@
 #Requires -Version 5.1
 param(
-    [string]$UpdateBaseUrl = $env:UPDATE_BASE_URL,
-    [string]$ReleaseToken = $env:RELEASE_TOKEN
+    [switch]$Publish,
+    [string]$TelemetryApiUrl = $env:TELEMETRY_API_URL,
+    [string]$UploadToken = $env:OTA_RELEASE_UPLOAD_TOKEN,
+    [string]$Channel = 'STABLE',
+    [string]$Changelog = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,74 +38,82 @@ function Write-Step {
     Write-Host "==> $Message"
 }
 
+function Read-SigningSecretFile {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $null
+    }
+    return (Get-Content -LiteralPath $Path -Raw).Trim()
+}
+
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptDir
 $SigningDir = Join-Path $RepoRoot 'signing'
 $EnvFile = Join-Path $SigningDir 'release-remote.env'
 
 Set-Location -LiteralPath $RepoRoot
-
 Import-EnvFile -Path $EnvFile
 
-if ([string]::IsNullOrWhiteSpace($UpdateBaseUrl)) {
-    if (-not [string]::IsNullOrWhiteSpace($env:UPDATE_BASE_URL)) {
-        $UpdateBaseUrl = $env:UPDATE_BASE_URL
+if ([string]::IsNullOrWhiteSpace($TelemetryApiUrl)) {
+    if (-not [string]::IsNullOrWhiteSpace($env:TELEMETRY_API_URL)) {
+        $TelemetryApiUrl = $env:TELEMETRY_API_URL
     } else {
-        $UpdateBaseUrl = 'https://tl.vitamin-water.ru/android-ota'
+        $TelemetryApiUrl = 'https://tl.vitamin-water.ru'
     }
 }
 
-if ([string]::IsNullOrWhiteSpace($ReleaseToken)) {
-    if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_TOKEN)) {
-        $ReleaseToken = $env:RELEASE_TOKEN
+if ([string]::IsNullOrWhiteSpace($UploadToken)) {
+    if (-not [string]::IsNullOrWhiteSpace($env:OTA_RELEASE_UPLOAD_TOKEN)) {
+        $UploadToken = $env:OTA_RELEASE_UPLOAD_TOKEN
     }
 }
 
-$UpdateBaseUrl = $UpdateBaseUrl.TrimEnd('/')
+$TelemetryApiUrl = $TelemetryApiUrl.TrimEnd('/')
 
-if ([string]::IsNullOrWhiteSpace($UpdateBaseUrl)) {
-    throw 'UPDATE_BASE_URL is not set. Set env UPDATE_BASE_URL or signing/release-remote.env.'
+if ([string]::IsNullOrWhiteSpace($UploadToken)) {
+    throw 'OTA_RELEASE_UPLOAD_TOKEN is not set. Set env OTA_RELEASE_UPLOAD_TOKEN or add it to signing/release-remote.env.'
 }
 
-if ([string]::IsNullOrWhiteSpace($ReleaseToken)) {
-    throw 'RELEASE_TOKEN is not set. Set env RELEASE_TOKEN or add it to signing/release-remote.env.'
+$KeystorePath = $env:KEYSTORE_PATH
+if ([string]::IsNullOrWhiteSpace($KeystorePath)) {
+    $KeystorePath = Join-Path $SigningDir 'release.jks'
+}
+if (-not [System.IO.Path]::IsPathRooted($KeystorePath)) {
+    $KeystorePath = Join-Path $RepoRoot $KeystorePath
+}
+if (-not (Test-Path -LiteralPath $KeystorePath)) {
+    throw "Release keystore not found: $KeystorePath. Place signing/release.jks locally (gitignored) or set KEYSTORE_PATH."
 }
 
-if (-not (Test-Path -LiteralPath $SigningDir)) {
-    New-Item -ItemType Directory -Path $SigningDir | Out-Null
+$StorePassword = $env:STORE_PASSWORD
+if ([string]::IsNullOrWhiteSpace($StorePassword)) {
+    $StorePassword = Read-SigningSecretFile -Path (Join-Path $SigningDir '.storepass')
+}
+$KeyPassword = $env:KEY_PASSWORD
+if ([string]::IsNullOrWhiteSpace($KeyPassword)) {
+    $KeyPassword = Read-SigningSecretFile -Path (Join-Path $SigningDir '.keypass')
+}
+if ([string]::IsNullOrWhiteSpace($KeyPassword)) {
+    $KeyPassword = $StorePassword
+}
+$KeyAlias = $env:KEY_ALIAS
+if ([string]::IsNullOrWhiteSpace($KeyAlias)) {
+    $KeyAlias = 'release'
 }
 
-$AuthHeaders = @{
-    Authorization = "Bearer $ReleaseToken"
+if ([string]::IsNullOrWhiteSpace($StorePassword)) {
+    throw 'STORE_PASSWORD is not set. Set env STORE_PASSWORD or signing/.storepass.'
+}
+if ([string]::IsNullOrWhiteSpace($KeyAlias)) {
+    throw 'KEY_ALIAS is not set.'
 }
 
-Write-Step 'Downloading release keystore'
-$KeystorePath = Join-Path $SigningDir 'release.jks'
-Invoke-WebRequest -Uri "$UpdateBaseUrl/admin/signing/release.jks" -Headers $AuthHeaders -OutFile $KeystorePath
+$env:KEYSTORE_PATH = $KeystorePath
+$env:STORE_PASSWORD = $StorePassword
+$env:KEY_PASSWORD = $KeyPassword
+$env:KEY_ALIAS = $KeyAlias
 
-Write-Step 'Downloading signing credentials'
-$CredentialsResponse = Invoke-WebRequest -Uri "$UpdateBaseUrl/admin/signing/credentials.json" -Headers $AuthHeaders -UseBasicParsing
-$Credentials = $CredentialsResponse.Content | ConvertFrom-Json
-
-if ([string]::IsNullOrWhiteSpace($Credentials.keyAlias)) {
-    throw 'credentials.json did not contain keyAlias.'
-}
-if ([string]::IsNullOrWhiteSpace($Credentials.storePassword)) {
-    throw 'credentials.json did not contain storePassword.'
-}
-if ([string]::IsNullOrWhiteSpace($Credentials.keyPassword)) {
-    throw 'credentials.json did not contain keyPassword.'
-}
-
-Set-Content -LiteralPath (Join-Path $SigningDir '.storepass') -Value $Credentials.storePassword -NoNewline -Encoding ASCII
-Set-Content -LiteralPath (Join-Path $SigningDir '.keypass') -Value $Credentials.keyPassword -NoNewline -Encoding ASCII
-
-$env:KEYSTORE_PATH = 'signing/release.jks'
-$env:STORE_PASSWORD = $Credentials.storePassword
-$env:KEY_PASSWORD = $Credentials.keyPassword
-$env:KEY_ALIAS = $Credentials.keyAlias
-
-Write-Step 'Building assembleRelease'
+Write-Step 'Building assembleRelease (local signing)'
 $Gradlew = Join-Path $RepoRoot 'gradlew.bat'
 & $Gradlew assembleRelease
 if ($LASTEXITCODE -ne 0) {
@@ -117,29 +128,58 @@ if (-not $ApkFiles -or $ApkFiles.Count -eq 0) {
 }
 $Apk = $ApkFiles[$ApkFiles.Count - 1]
 
-Write-Step "Uploading $($Apk.Name)"
-$UploadHeaders = @{
-    Authorization = "Bearer $ReleaseToken"
-    'X-Filename' = $Apk.Name
-}
-$UploadResponse = Invoke-WebRequest `
-    -Uri "$UpdateBaseUrl/admin/upload" `
-    -Method POST `
-    -Headers $UploadHeaders `
-    -ContentType 'application/vnd.android.package-archive' `
-    -InFile $Apk.FullName `
-    -UseBasicParsing
-$UploadJson = $UploadResponse.Content | ConvertFrom-Json
-if (-not $UploadJson.ok) {
-    throw 'Upload response did not indicate success.'
+Write-Step "Uploading $($Apk.Name) to telemetry"
+$UploadUrl = "$TelemetryApiUrl/api/v1/app-releases/upload"
+$UploadArgs = @(
+    '-sS',
+    '-X', 'POST',
+    $UploadUrl,
+    '-H', "Authorization: Bearer $UploadToken",
+    '-F', "channel=$Channel",
+    '-F', "file=@$($Apk.FullName)"
+)
+if (-not [string]::IsNullOrWhiteSpace($Changelog)) {
+    $UploadArgs += @('-F', "changelog=$Changelog")
 }
 
-Write-Step 'Fetching version.json'
-$VersionResponse = Invoke-WebRequest -Uri "$UpdateBaseUrl/version.json" -UseBasicParsing
-Write-Host $VersionResponse.Content
+$UploadJsonRaw = & curl.exe @UploadArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "Telemetry upload failed with exit code $LASTEXITCODE"
+}
+$UploadJson = $UploadJsonRaw | ConvertFrom-Json
+if (-not $UploadJson.id) {
+    throw "Upload response did not contain release id: $UploadJsonRaw"
+}
+
+$ReleaseId = $UploadJson.id
+$VersionName = $UploadJson.versionName
+$VersionCode = $UploadJson.versionCode
+
+if ($Publish) {
+    Write-Step "Publishing release $ReleaseId"
+    $PublishUrl = "$TelemetryApiUrl/api/v1/app-releases/$ReleaseId/publish"
+    $PublishBody = '{"rolloutPercent":100}'
+    $PublishJsonRaw = & curl.exe -sS -X POST $PublishUrl `
+        -H "Authorization: Bearer $UploadToken" `
+        -H 'Content-Type: application/json' `
+        -d $PublishBody
+    if ($LASTEXITCODE -ne 0) {
+        throw "Telemetry publish failed with exit code $LASTEXITCODE"
+    }
+    $PublishJson = $PublishJsonRaw | ConvertFrom-Json
+    if ($PublishJson.status -ne 'PUBLISHED') {
+        throw "Publish response status is not PUBLISHED: $PublishJsonRaw"
+    }
+}
 
 Write-Host ""
 Write-Host 'Release complete.'
 Write-Host "  APK: $($Apk.FullName)"
-Write-Host "  Uploaded: $($Apk.Name)"
-Write-Host "  version.json: $UpdateBaseUrl/version.json"
+Write-Host "  releaseId: $ReleaseId"
+Write-Host "  versionName: $VersionName"
+Write-Host "  versionCode: $VersionCode"
+if ($Publish) {
+    Write-Host '  status: PUBLISHED (rollout 100%)'
+} else {
+    Write-Host '  status: DRAFT (pass -Publish to publish with rollout 100%)'
+}

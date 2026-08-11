@@ -145,12 +145,10 @@ data class ServiceUiState(
     val devFreeMode: Boolean = true,
     val currentVersion: String = "",
     val currentVersionCode: Int = 0,
-    val updateHost: String = "",
     val availableUpdate: AppUpdate? = null,
     val otaPhase: String? = null,
     val otaChannel: String? = null,
     val otaServerFeatureEnabled: Boolean? = null,
-    val otaLegacyFallbackEnabled: Boolean = false,
     val otaMandatoryEnforcementEnabled: Boolean = false,
     val isCheckingUpdate: Boolean = false,
     val isInstalling: Boolean = false,
@@ -2103,9 +2101,8 @@ constructor(
                         otaPhase = snapshot.phase.name,
                         otaChannel = snapshot.offer?.channel?.name,
                         otaServerFeatureEnabled = snapshot.serverFeatureEnabled,
-                        otaLegacyFallbackEnabled = snapshot.legacyFallbackEnabled,
                         otaMandatoryEnforcementEnabled = snapshot.mandatoryEnforcementEnabled,
-                        availableUpdate = snapshot.offer?.toLegacyAppUpdate() ?: it.availableUpdate,
+                        availableUpdate = snapshot.offer?.toAppUpdate() ?: it.availableUpdate,
                         updateCheckError = snapshot.errorMessage,
                         isCheckingUpdate = snapshot.phase == com.viwa.android.domain.ota.AppUpdatePhase.Checking,
                         isInstalling =
@@ -2147,8 +2144,6 @@ constructor(
                         devFreeMode = free,
                         currentVersion = updateRepository.getCurrentVersion(),
                         currentVersionCode = updateRepository.getCurrentVersionCode(),
-                        updateHost = updateRepository.getUpdateServerHost(),
-                        otaLegacyFallbackEnabled = updateRepository.isLegacyFallbackEnabled(),
                         primaryButtonPulseStyle = pulse,
                         subscriptionDebugEnabled = subDebug,
                         flowStripRgbArgb = flowStripRgbCoordinator.getSavedArgb(),
@@ -2312,12 +2307,7 @@ constructor(
                     isUpToDate = false,
                 )
             }
-            val result =
-                if (_state.value.otaLegacyFallbackEnabled) {
-                    updateRepository.checkUpdate()
-                } else {
-                    updateRepository.checkTelemetryUpdate()
-                }
+            val result = updateRepository.checkUpdate()
             result.fold(
                 onSuccess = { update ->
                     _state.update {
@@ -2349,14 +2339,10 @@ constructor(
                     com.viwa.android.domain.technician.TechnicianKeyConstants.SCOPE_FIRMWARE_UPDATE,
                 )
             val result =
-                if (update.telemetryOffer) {
-                    updateRepository.installTelemetryUpdate(
-                        requireFirmwareScope = true,
-                        hasFirmwareScope = hasFirmwareScope,
-                    )
-                } else {
-                    updateRepository.downloadAndInstall(update)
-                }
+                updateRepository.installTelemetryUpdate(
+                    requireFirmwareScope = true,
+                    hasFirmwareScope = hasFirmwareScope,
+                )
             result.fold(
                 onSuccess = {
                     _updateInstallProgress.value = null
@@ -2371,20 +2357,6 @@ constructor(
                     }
                 },
             )
-        }
-    }
-
-    fun setLegacyOtaFallbackEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            updateRepository.setLegacyFallbackEnabled(enabled)
-            _state.update { it.copy(otaLegacyFallbackEnabled = enabled) }
-        }
-    }
-
-    fun setUpdateHost(host: String) {
-        viewModelScope.launch {
-            updateRepository.setUpdateServerHost(host)
-            _state.update { it.copy(updateHost = host) }
         }
     }
 

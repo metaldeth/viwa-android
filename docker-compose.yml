@@ -1,18 +1,1 @@
-# Сервер раздачи APK для wiva-android.
-# Запуск: docker compose up -d update-server
-# Подробнее: docs/OTA_UPDATE.md
-
-services:
-  update-server:
-    build:
-      context: ./update-server
-      dockerfile: Dockerfile
-    ports:
-      - '9082:9082'
-    environment:
-      - PORT=9082
-      - RELEASE_DIR=/app/release
-      - BASE_URL=${ANDROID_UPDATE_BASE_URL:-http://dev.ishaker.ru:9082}  # DEFAULT_UPDATE_HOST
-    volumes:
-      - ./release:/app/release:ro
-    restart: unless-stopped
+# Legacy update-server removed. OTA delivery is telemetry Phase 3 only — see docs/OTA_UPDATE.md.

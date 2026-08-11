@@ -32,7 +32,7 @@ data class OtaUpdateOffer(
     val downloadUrl: String,
     val downloadExpiresAt: String,
 ) {
-    fun toLegacyAppUpdate(): AppUpdate =
+    fun toAppUpdate(): AppUpdate =
         AppUpdate(
             version = versionName,
             versionCode = versionCode,
@@ -40,7 +40,6 @@ data class OtaUpdateOffer(
             changelog = changelog,
             channel = channel.name,
             releaseId = releaseId,
-            telemetryOffer = true,
         )
 
     companion object {
@@ -72,7 +71,6 @@ data class AppUpdateCoordinatorSnapshot(
     val lastCheckEpochMs: Long? = null,
     val serverFeatureEnabled: Boolean? = null,
     val mandatoryEnforcementEnabled: Boolean = false,
-    val legacyFallbackEnabled: Boolean = false,
     val pendingApkPath: String? = null,
 )
 

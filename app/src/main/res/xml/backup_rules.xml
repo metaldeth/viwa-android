@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- machineSecret is Keystore-bound; cloud restore cannot rehydrate it. -->
+    <exclude domain="sharedpref" path="wiva_machine_secrets.xml" />
+</full-backup-content>
