@@ -5,6 +5,8 @@ import com.viwa.android.data.payment.aqsi.setup.AqsiPaymentStartupInitializer
 import com.viwa.android.hardware.FlowStripRgbCoordinator
 import com.viwa.android.hardware.scanner.ViwaScannerStartupInitializer
 import com.viwa.android.hardware.serial.ViwaSerialDiscovery
+import com.viwa.android.logging.AppLogFileStore
+import com.viwa.android.logging.RotatingFileTimberTree
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -30,9 +32,13 @@ class ViwaApplication : Application() {
     @Inject
     lateinit var serialDiscovery: ViwaSerialDiscovery
 
+    @Inject
+    lateinit var appLogFileStore: AppLogFileStore
+
     override fun onCreate() {
         super.onCreate()
         Timber.plant(Timber.DebugTree())
+        Timber.plant(RotatingFileTimberTree(appLogFileStore))
         appScope.launch {
             val devices = serialDiscovery.availableDevices()
             Timber.tag("ViwaSerial").i(

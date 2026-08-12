@@ -35,6 +35,7 @@ class TelemetryNetworkValidatedSideEffectsCoordinatorTest {
                 outboxDrainCoordinator = outboxDrain,
                 offlineEntitlementCoordinator = offlineEntitlement,
                 technicianKeySessionCoordinator = technicianKeys,
+                logShipCoordinator = mockk(relaxed = true),
                 appScope = this,
             )
 

@@ -69,6 +69,7 @@ constructor(
     private val recipeMessageCodec: RecipeMessageCodec,
     private val offlineEntitlementCoordinator: com.viwa.android.data.remote.telemetry.mvp.offline.OfflineEntitlementSessionCoordinator,
     private val technicianKeySessionCoordinator: com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianKeySessionCoordinator,
+    private val logShipCoordinator: LogShipCoordinator,
     private val appUpdateCoordinatorProvider: javax.inject.Provider<com.viwa.android.domain.ota.AppUpdateCoordinator>,
 ) {
     private val json =
@@ -101,6 +102,7 @@ constructor(
     @Volatile private var outboxBatchCapability: MvpOutboxBatchCapabilityDto? = null
     @Volatile private var offlineEntitlementCapability: com.viwa.android.data.remote.telemetry.mvp.offline.MvpOfflineEntitlementCapabilityDto? = null
     @Volatile private var technicianKeysCapability: com.viwa.android.data.remote.telemetry.mvp.offline.MvpTechnicianKeysCapabilityDto? = null
+    @Volatile private var logShipCapability: MvpLogShipCapabilityDto? = null
     @Volatile private var serverTechnicianKeysEnabled: Boolean? = null
     private val heartbeatTrafficLogCounter = AtomicInteger(0)
     private val transportPingLogCounter = AtomicInteger(0)
@@ -328,9 +330,11 @@ constructor(
         outboxBatchCapability = null
         offlineEntitlementCapability = null
         technicianKeysCapability = null
+        logShipCapability = null
         serverTechnicianKeysEnabled = null
         outboxDrainCoordinator.stopPeriodicFlush()
         technicianKeySessionCoordinator.onDisconnect()
+        logShipCoordinator.onDisconnect()
         cellsContentReportAckAwaiter.cancelAll()
         appScope.launch {
             runCatching { cellsSyncHandler?.onRecipeDisconnect() }
@@ -398,6 +402,8 @@ constructor(
 
     fun technicianKeysCapability(): com.viwa.android.data.remote.telemetry.mvp.offline.MvpTechnicianKeysCapabilityDto? =
         technicianKeysCapability
+
+    fun logShipCapability(): MvpLogShipCapabilityDto? = logShipCapability
 
     fun serverTechnicianKeysEnabled(): Boolean? = serverTechnicianKeysEnabled
 
@@ -555,6 +561,12 @@ constructor(
             } else {
                 null
             }
+        logShipCapability =
+            if (com.viwa.android.logging.LogShipFeatureFlags.FEATURE_LOG_SHIP) {
+                hello.capabilities?.logShip
+            } else {
+                null
+            }
         helloReceived = true
         helloTimeoutJob?.cancel()
         lastHeartbeatAckAtMs = System.currentTimeMillis()
@@ -572,6 +584,8 @@ constructor(
                 .onFailure { Timber.w(it, "MvpTelemetry WS: offline entitlement onHello failed") }
             runCatching { technicianKeySessionCoordinator.onHello(hello) }
                 .onFailure { Timber.w(it, "MvpTelemetry WS: technician keys onHello failed") }
+            runCatching { logShipCoordinator.onHello(hello.capabilities?.logShip) }
+                .onFailure { Timber.w(it, "MvpTelemetry WS: log ship onHello failed") }
             runCatching {
                 appUpdateCoordinatorProvider.get().onHello(
                     appUpdatesEnabled = hello.featureFlags?.appUpdates,

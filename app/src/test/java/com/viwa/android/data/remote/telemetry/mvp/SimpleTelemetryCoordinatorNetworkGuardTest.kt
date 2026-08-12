@@ -74,6 +74,7 @@ class SimpleTelemetryCoordinatorNetworkGuardTest {
             networkObserver = networkObserver,
             offlineEntitlementCoordinator = mockk(relaxed = true),
             technicianKeySessionCoordinator = mockk(relaxed = true),
+            logShipCoordinator = mockk(relaxed = true),
             networkValidatedSideEffects = sideEffects,
             appScope = this,
         )

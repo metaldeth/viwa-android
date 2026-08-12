@@ -7,6 +7,7 @@ import com.viwa.android.data.remote.telemetry.mvp.MachineOutboxBearerTokenProvid
 import com.viwa.android.data.remote.telemetry.mvp.MachineOutboxDrainCoordinator
 import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryApiClient
 import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryWebSocketManager
+import com.viwa.android.data.remote.telemetry.mvp.mockLogShipCoordinator
 import com.viwa.android.data.remote.telemetry.mvp.mockOtaCoordinatorProvider
 import com.viwa.android.domain.offline.BoundedTelemetryClock
 import com.viwa.android.domain.offline.OfflineSigningKeysStore
@@ -169,6 +170,7 @@ class MvpTelemetryWebSocketManagerDisconnectLifecycleTest {
                 recipeMessageCodec = com.viwa.android.data.remote.telemetry.mvp.cells.RecipeMessageCodec(),
                 offlineEntitlementCoordinator = mockk(relaxed = true),
                 technicianKeySessionCoordinator = technicianCoordinator,
+                logShipCoordinator = mockLogShipCoordinator(),
                 appUpdateCoordinatorProvider = mockOtaCoordinatorProvider(),
             )
 

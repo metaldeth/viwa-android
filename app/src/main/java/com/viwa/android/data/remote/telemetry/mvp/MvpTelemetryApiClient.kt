@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -457,6 +458,52 @@ class MvpTelemetryApiClient(
                         .header("Authorization", "Bearer $bearerToken")
                         .build()
                 executeJson(httpRequest, com.viwa.android.data.remote.ota.OtaReportResponseDto.serializer())
+            }
+        }
+
+    suspend fun uploadMachineLogs(
+        endpoint: String,
+        bearerToken: String,
+        gzipBytes: ByteArray,
+        periodStart: String,
+        periodEnd: String,
+        appVersionName: String,
+    ): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val gzipMediaType = "application/gzip".toMediaType()
+                val multipart =
+                    MultipartBody
+                        .Builder()
+                        .setType(MultipartBody.FORM)
+                        .addFormDataPart(
+                            "file",
+                            "app-logs.gz",
+                            gzipBytes.toRequestBody(gzipMediaType),
+                        )
+                        .addFormDataPart("periodStart", periodStart)
+                        .addFormDataPart("periodEnd", periodEnd)
+                        .addFormDataPart("appVersionName", appVersionName)
+                        .build()
+                val httpRequest =
+                    Request.Builder()
+                        .url(endpoint)
+                        .post(multipart)
+                        .header("Authorization", "Bearer $bearerToken")
+                        .build()
+                httpClient.newCall(httpRequest).execute().use { response ->
+                    if (response.code == 404) {
+                        throw LogShipFeatureDisabledException()
+                    }
+                    if (!response.isSuccessful) {
+                        val text = response.body?.string().orEmpty()
+                        Timber.w("MvpTelemetry log ship HTTP ${response.code}: ${redactApiLog(text)}")
+                        if (response.code == 401 || response.code == 403) {
+                            throw TokenAuthException("HTTP ${response.code}")
+                        }
+                        error("HTTP ${response.code}: ${redactApiLog(text)}")
+                    }
+                }
             }
         }
 }

@@ -40,12 +40,14 @@ constructor(
     private val networkObserver: TelemetryNetworkObserver,
     private val offlineEntitlementCoordinator: com.viwa.android.data.remote.telemetry.mvp.offline.OfflineEntitlementSessionCoordinator,
     private val technicianKeySessionCoordinator: com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianKeySessionCoordinator,
+    private val logShipCoordinator: LogShipCoordinator,
     private val networkValidatedSideEffects: TelemetryNetworkValidatedSideEffectsCoordinator,
     @AppIoScope private val appScope: CoroutineScope,
 ) {
     init {
         offlineEntitlementCoordinator.onApplicationStart()
         technicianKeySessionCoordinator.onApplicationStart()
+        logShipCoordinator.onApplicationStart()
         networkObserver.onValidatedAvailable = {
             appScope.launch {
                 if (isUserPaused()) return@launch

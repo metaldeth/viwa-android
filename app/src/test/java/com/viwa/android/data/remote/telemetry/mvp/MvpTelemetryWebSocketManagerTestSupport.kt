@@ -6,6 +6,8 @@ import com.viwa.android.data.remote.telemetry.mvp.cells.RecipeSyncCoordinator
 import io.mockk.mockk
 import kotlinx.coroutines.test.TestScope
 
+internal fun mockLogShipCoordinator(): LogShipCoordinator = mockk(relaxed = true)
+
 internal fun mockOtaCoordinatorProvider(): javax.inject.Provider<com.viwa.android.domain.ota.AppUpdateCoordinator> {
     val otaCoordinator = mockk<com.viwa.android.domain.ota.AppUpdateCoordinator>(relaxed = true)
     val otaProvider = mockk<javax.inject.Provider<com.viwa.android.domain.ota.AppUpdateCoordinator>>()
@@ -32,6 +34,7 @@ internal fun TestScope.createWsManagerForTests(
         recipeMessageCodec = RecipeMessageCodec(),
         offlineEntitlementCoordinator = mockk(relaxed = true),
         technicianKeySessionCoordinator = mockk(relaxed = true),
+        logShipCoordinator = mockLogShipCoordinator(),
         appUpdateCoordinatorProvider = otaProvider,
     )
 }

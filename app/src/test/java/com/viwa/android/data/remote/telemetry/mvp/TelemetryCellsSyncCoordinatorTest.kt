@@ -522,6 +522,7 @@ class TelemetryCellsSyncCoordinatorTest {
                 networkObserver = mockk(relaxed = true),
                 offlineEntitlementCoordinator = mockk(relaxed = true),
                 technicianKeySessionCoordinator = mockk(relaxed = true),
+                logShipCoordinator = mockk(relaxed = true),
                 networkValidatedSideEffects = mockk(relaxed = true),
                 appScope = this,
             )

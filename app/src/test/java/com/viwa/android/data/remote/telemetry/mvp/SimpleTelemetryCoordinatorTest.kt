@@ -95,6 +95,7 @@ class SimpleTelemetryCoordinatorTest {
                 recipeMessageCodec = com.viwa.android.data.remote.telemetry.mvp.cells.RecipeMessageCodec(),
                 offlineEntitlementCoordinator = mockk(relaxed = true),
                 technicianKeySessionCoordinator = mockk(relaxed = true),
+                logShipCoordinator = mockLogShipCoordinator(),
                 appUpdateCoordinatorProvider = mockOtaCoordinatorProvider(),
             )
         coordinatorAppScope = CoroutineScope(SupervisorJob())
@@ -111,6 +112,7 @@ class SimpleTelemetryCoordinatorTest {
                 networkObserver = mockk(relaxed = true),
                 offlineEntitlementCoordinator = mockk(relaxed = true),
                 technicianKeySessionCoordinator = mockk(relaxed = true),
+                logShipCoordinator = mockk(relaxed = true),
                 networkValidatedSideEffects = mockk(relaxed = true),
                 appScope = coordinatorAppScope,
             )
@@ -247,6 +249,7 @@ class SimpleTelemetryCoordinatorTest {
                 networkObserver = mockk(relaxed = true),
                 offlineEntitlementCoordinator = mockk(relaxed = true),
                 technicianKeySessionCoordinator = mockk(relaxed = true),
+                logShipCoordinator = mockk(relaxed = true),
                 networkValidatedSideEffects = mockk(relaxed = true),
                 appScope = this,
             )
@@ -288,6 +291,7 @@ class SimpleTelemetryCoordinatorTest {
                 recipeMessageCodec = com.viwa.android.data.remote.telemetry.mvp.cells.RecipeMessageCodec(),
                 offlineEntitlementCoordinator = mockk(relaxed = true),
                 technicianKeySessionCoordinator = mockk(relaxed = true),
+                logShipCoordinator = mockLogShipCoordinator(),
                 appUpdateCoordinatorProvider = mockOtaCoordinatorProvider(),
             )
         val localCoordinator =
@@ -303,6 +307,7 @@ class SimpleTelemetryCoordinatorTest {
                 networkObserver = mockk(relaxed = true),
                 offlineEntitlementCoordinator = mockk(relaxed = true),
                 technicianKeySessionCoordinator = mockk(relaxed = true),
+                logShipCoordinator = mockk(relaxed = true),
                 networkValidatedSideEffects = mockk(relaxed = true),
                 appScope = this,
             )

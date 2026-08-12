@@ -23,6 +23,7 @@ constructor(
     private val outboxDrainCoordinator: MachineOutboxDrainCoordinator,
     private val offlineEntitlementCoordinator: OfflineEntitlementSessionCoordinator,
     private val technicianKeySessionCoordinator: TechnicianKeySessionCoordinator,
+    private val logShipCoordinator: LogShipCoordinator,
     @AppIoScope private val appScope: CoroutineScope,
 ) {
     private var debounceJob: Job? = null
@@ -47,6 +48,7 @@ constructor(
             .onFailure { Timber.w(it, "TelemetryNetworkValidatedSideEffects: outbox drain failed") }
         offlineEntitlementCoordinator.onNetworkValidated()
         technicianKeySessionCoordinator.onNetworkValidated()
+        logShipCoordinator.onNetworkValidated()
     }
 
     companion object {

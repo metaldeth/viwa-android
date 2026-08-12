@@ -12,11 +12,18 @@ data class MvpOutboxBatchCapabilityDto(
 )
 
 @Serializable
+data class MvpLogShipCapabilityDto(
+    val uploadEndpoint: String? = null,
+    val syncIntervalSeconds: Int? = null,
+)
+
+@Serializable
 data class MvpHelloCapabilitiesDto(
     val outboxBatch: MvpOutboxBatchCapabilityDto? = null,
     val offlineEntitlement: MvpOfflineEntitlementCapabilityDto? = null,
     val technicianKeys: com.viwa.android.data.remote.telemetry.mvp.offline.MvpTechnicianKeysCapabilityDto? = null,
     val recipeSync: com.viwa.android.data.remote.telemetry.mvp.cells.MvpRecipeSyncCapabilityDto? = null,
+    val logShip: MvpLogShipCapabilityDto? = null,
 )
 
 @Serializable
