@@ -98,7 +98,13 @@ if ([string]::IsNullOrWhiteSpace($KeyPassword)) {
 }
 $KeyAlias = $env:KEY_ALIAS
 if ([string]::IsNullOrWhiteSpace($KeyAlias)) {
-    $KeyAlias = 'release'
+    $aliasFile = Join-Path $SigningDir 'key-alias'
+    if (Test-Path -LiteralPath $aliasFile) {
+        $KeyAlias = (Get-Content -LiteralPath $aliasFile -Raw).Trim()
+    }
+}
+if ([string]::IsNullOrWhiteSpace($KeyAlias)) {
+    $KeyAlias = 'viwa-release'
 }
 
 if ([string]::IsNullOrWhiteSpace($StorePassword)) {

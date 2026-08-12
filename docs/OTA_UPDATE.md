@@ -27,9 +27,10 @@ Production OTA — только **telemetry Phase 3** через `viwa-telemetry
 
 Keystore и пароли **не в git** — каталог `signing/` (gitignored):
 
-- `signing/release.jks`
-- `signing/.storepass`, `signing/.keypass` (или env `STORE_PASSWORD`, `KEY_PASSWORD`, `KEY_ALIAS`)
+- `signing/release.jks` (alias по умолчанию **`viwa-release`**, файл `signing/key-alias` или env `KEY_ALIAS`)
+- `signing/.storepass`, `signing/.keypass` (или env `STORE_PASSWORD`, `KEY_PASSWORD`)
 - опционально `signing/release-remote.env` — `OTA_RELEASE_UPLOAD_TOKEN`, `TELEMETRY_API_URL`
+- pin манифеста: `local.properties` → `ota.signingKeyId=ota-prod-v1`, `ota.signingPublicKeyPem=...`
 
 ```bat
 gradlew.bat assembleRelease
