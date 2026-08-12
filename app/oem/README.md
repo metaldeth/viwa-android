@@ -30,7 +30,9 @@ Script applies:
 
 1. `pm grant com.viwa.android android.permission.WRITE_SECURE_SETTINGS`
 2. `settings put global policy_control immersive.full=com.viwa.android` (scoped to Viwa only)
-3. On Kiayo (`com.kiayo.externservice` present): `setprop persist.kiayo.status.naviBar 0`
+3. On Kiayo (`com.kiayo.externservice` present):
+   - `setprop persist.kiayo.status.naviBar 0`
+   - `setprop persist.sys.navibar 0` (Android nav bar; `1` leaves it visible even with immersive)
 
 Manual equivalent:
 
@@ -39,6 +41,7 @@ adb shell pm grant com.viwa.android android.permission.WRITE_SECURE_SETTINGS
 adb shell settings put global policy_control "immersive.full=com.viwa.android"
 # Только Kiayo после проверки: adb shell pm path com.kiayo.externservice
 adb shell setprop persist.kiayo.status.naviBar 0
+adb shell setprop persist.sys.navibar 0
 ```
 
 Verify:
@@ -47,10 +50,11 @@ Verify:
 adb shell dumpsys package com.viwa.android | findstr "WRITE_SECURE_SETTINGS: granted=true"
 adb shell settings get global policy_control
 adb shell getprop persist.kiayo.status.naviBar
+adb shell getprop persist.sys.navibar
 adb shell pm path com.kiayo.externservice
 ```
 
-Expected: grant true, `immersive.full=com.viwa.android`, `naviBar=0` on Kiayo.
+Expected: grant true, `immersive.full=com.viwa.android`, both nav props `0` on Kiayo.
 
 ## Future boards — firmware priv-app (recommended)
 

@@ -46,6 +46,10 @@ $kiayoExternService = "com.kiayo.externservice"
 $kiayoNavBarHideProp = "persist.kiayo.status.naviBar"
 $kiayoNavBarHidden = "0"
 $kiayoNavBarShown = "1"
+# Kiayo/Rockchip also exposes Android nav via persist.sys.navibar (1=shown, 0=hidden).
+$sysNavBarHideProp = "persist.sys.navibar"
+$sysNavBarHidden = "0"
+$sysNavBarShown = "1"
 
 function Invoke-Adb {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]] $CommandArgs)
@@ -81,12 +85,17 @@ function Show-Verification {
 
     if ($KiayoApplied) {
         $naviBar = (Invoke-Adb shell getprop $kiayoNavBarHideProp).Trim()
+        $sysNav = (Invoke-Adb shell getprop $sysNavBarHideProp).Trim()
         Write-Host "$kiayoNavBarHideProp = $naviBar"
+        Write-Host "$sysNavBarHideProp = $sysNav"
     }
 
     $okPolicy = $policy -eq $policyValue
     $okGrant = $null -ne $granted
-    $okKiayo = -not $KiayoApplied -or ((Invoke-Adb shell getprop $kiayoNavBarHideProp).Trim() -eq $kiayoNavBarHidden)
+    $okKiayo = -not $KiayoApplied -or (
+        ((Invoke-Adb shell getprop $kiayoNavBarHideProp).Trim() -eq $kiayoNavBarHidden) -and
+        ((Invoke-Adb shell getprop $sysNavBarHideProp).Trim() -eq $sysNavBarHidden)
+    )
 
     Write-Host ""
     if ($okPolicy -and $okGrant -and $okKiayo) {
@@ -100,7 +109,7 @@ function Show-Verification {
             Write-Host "  Expected WRITE_SECURE_SETTINGS: granted=true for $pkg"
         }
         if ($KiayoApplied -and -not $okKiayo) {
-            Write-Host "  Expected $kiayoNavBarHideProp = $kiayoNavBarHidden"
+            Write-Host "  Expected $kiayoNavBarHideProp = $kiayoNavBarHidden and $sysNavBarHideProp = $sysNavBarHidden"
         }
         throw "Kiosk provisioning verification failed."
     }
@@ -114,6 +123,7 @@ if ($Rollback) {
 
     if (Test-KiayoBoard) {
         Invoke-Adb shell setprop $kiayoNavBarHideProp $kiayoNavBarShown
+        Invoke-Adb shell setprop $sysNavBarHideProp $sysNavBarShown
     }
 
     Write-Host ""
@@ -131,6 +141,7 @@ $kiayoApplied = Test-KiayoBoard
 if ($kiayoApplied) {
     Write-Host "Kiayo board detected ($kiayoExternService) — hiding OEM navigation bar ..."
     Invoke-Adb shell setprop $kiayoNavBarHideProp $kiayoNavBarHidden
+    Invoke-Adb shell setprop $sysNavBarHideProp $sysNavBarHidden
 } elseif (-not $SkipKiayo) {
     Write-Host "Kiayo externservice not found — skipping $kiayoNavBarHideProp (use -SkipKiayo to silence)."
 }
