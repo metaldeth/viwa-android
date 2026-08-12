@@ -54,6 +54,24 @@ class LoyaltyWsCodecTest {
     }
 
     @Test
+    fun decodeStatusAck_mapsLastPlainWaterType() {
+        val payload =
+            buildJsonObject {
+                put("clientId", "660e8400-e29b-41d4-a716-446655440010")
+                put("active", true)
+                put("volumeMl", 450)
+                put("dailyLimitMl", 2000)
+                put("dailyUsedMl", 0)
+                put("dailyRemainingMl", 2000)
+                put("lastPlainWaterType", "COLD")
+            }
+
+        val state = LoyaltyWsCodec.decodeStatusAck(payload)
+
+        assertEquals("COLD", state.lastPlainWaterType)
+    }
+
+    @Test
     fun decodeStatusAck_trialUsesClientVolumeMlWhenPoolEmpty() {
         // given — trial: volumeMl=1000, monthly pool dailyRemainingMl=0, active=false
         val payload =

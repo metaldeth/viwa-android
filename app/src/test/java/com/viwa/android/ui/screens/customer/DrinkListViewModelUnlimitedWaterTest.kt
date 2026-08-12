@@ -468,4 +468,38 @@ class DrinkListViewModelUnlimitedWaterTest {
         coVerify(exactly = 1) { holdPour.finalizeHoldPourSession() }
         assertFalse(vm.state.value.isWaterPourActive)
     }
+
+    @Test
+    fun loyaltyCardScan_defaultsToColdAndRestoresServerPreference() = runBlocking {
+        val cardScans = MutableSharedFlow<String>(extraBufferCapacity = 16)
+        val subscribeInfo = MutableStateFlow<SubscribeInformationState?>(null)
+        val telemetry = DrinkListViewModelTestSupport.createTestTelemetry()
+        every { telemetry.connectionState } returns
+            MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
+        every { telemetry.loyaltyCardClientScans } returns cardScans.asSharedFlow()
+        every { telemetry.subscribeInfo } returns subscribeInfo.asStateFlow()
+        every { telemetry.invalidLoyaltyCardScans } returns
+            MutableSharedFlow<Unit>(extraBufferCapacity = 16).asSharedFlow()
+        val vm = DrinkListViewModelTestSupport.createViewModel(telemetryService = telemetry)
+        flushMain(24)
+
+        cardScans.emit("client-1")
+        flushMain(24)
+        assertEquals(DrinkWaterOption.COLD, vm.state.value.waterOption)
+        assertEquals(FlowWaterPourType.Cold, vm.state.value.flowWaterPourType)
+
+        subscribeInfo.value =
+            SubscribeInformationState(
+                isStatusRequest = true,
+                isActiveSubscribe = true,
+                clientId = "client-1",
+                subscribeDateEnd = "2026-12-31T00:00:00.000Z",
+                volumeMl = 500,
+                maxVolumeMl = 2000,
+                lastPlainWaterType = "SPARKLING",
+            )
+        flushMain(24)
+        assertEquals(DrinkWaterOption.SPARK, vm.state.value.waterOption)
+        assertEquals(FlowWaterPourType.Sparkling, vm.state.value.flowWaterPourType)
+    }
 }

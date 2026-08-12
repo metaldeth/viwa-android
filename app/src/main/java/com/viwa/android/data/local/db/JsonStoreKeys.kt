@@ -135,4 +135,7 @@ object JsonStoreKeys {
 
     /** `"true"` — explicit client flag to enforce server mandatory updates. */
     const val OTA_MANDATORY_ENFORCEMENT = "otaMandatoryEnforcement"
+
+    /** JSON map clientId → plainWaterType wire (FILTERED|COLD|SPARKLING) before pour syncs to telemetry. */
+    const val LOYALTY_CLIENT_PLAIN_WATER_PREFS = "loyaltyClientPlainWaterPrefs"
 }

@@ -59,6 +59,8 @@ data class SubscribeInformationState(
     val maxVolumeMl: Int,
     val requestUuid: String? = null,
     val operationType: String? = null,
+    /** Telemetry `lastPlainWaterType` from loyalty.status.get (FILTERED|COLD|SPARKLING). */
+    val lastPlainWaterType: String? = null,
 )
 
 /** Типы оплаты для useSubscriptionSaleTopic. */

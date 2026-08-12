@@ -29,6 +29,9 @@ enum class PlainWaterType(val wireValue: String) {
 
         fun fromDrinkWaterOption(option: DrinkWaterOption): PlainWaterType =
             fromFlowWaterPourType(option.toFlowWaterPourType())
+
+        fun fromWireValue(raw: String): PlainWaterType? =
+            entries.firstOrNull { it.wireValue.equals(raw, ignoreCase = true) }
     }
 }
 

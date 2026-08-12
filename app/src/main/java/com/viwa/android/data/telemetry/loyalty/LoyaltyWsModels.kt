@@ -20,6 +20,7 @@ data class LoyaltyStatusAckPayload(
     val subscriptionEndsAt: String? = null,
     val limitExhausted: Boolean = false,
     val limitResetsAt: String? = null,
+    val lastPlainWaterType: String? = null,
 )
 
 data class LoyaltyWaterUseRequest(
@@ -55,5 +56,6 @@ fun LoyaltyStatusAckPayload.toSubscribeInformationState(): SubscribeInformationS
         subscribeDateEnd = subscriptionEndsAt,
         volumeMl = displayVolumeMl,
         maxVolumeMl = displayMaxMl,
+        lastPlainWaterType = lastPlainWaterType,
     )
 }

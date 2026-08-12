@@ -36,6 +36,7 @@ import com.viwa.android.hardware.controller.decodeFlowTemperatureByte
 import com.viwa.android.hardware.controller.RequestCommand
 import com.viwa.android.hardware.controller.ResponseCommand
 import com.viwa.android.domain.telemetry.HoldPourTelemetryCoordinator
+import com.viwa.android.domain.telemetry.LoyaltyPlainWaterPreference
 import com.viwa.android.domain.telemetry.PlainWaterEntitlement
 import com.viwa.android.domain.offline.OfflineAuthorizationReason
 import com.viwa.android.domain.offline.SubscriptionPourContext
@@ -289,17 +290,24 @@ constructor(
                 val subscriptionActive = info.isActiveSubscribe
                 val pourSessionActive =
                     waterPourStarted || holdPourRequestUuid != null || _state.value.isWaterPourActive
+                val localPrefsJson = configRepository.getJson(JsonStoreKeys.LOYALTY_CLIENT_PLAIN_WATER_PREFS)
+                val preferredPourType =
+                    LoyaltyPlainWaterPreference.resolvePourType(
+                        clientId = info.clientId,
+                        serverPlainWaterType = info.lastPlainWaterType,
+                        localPrefsJson = localPrefsJson,
+                        subscriptionActive = subscriptionActive,
+                        coerceEntitlement = true,
+                    )
                 _state.update {
-                    val effectiveType =
-                        PlainWaterEntitlement.effectivePourType(it.flowWaterPourType, subscriptionActive)
                     it.copy(
                         scannedSubscriptionClientId = info.clientId,
                         isSubscriptionActive = subscriptionActive,
                         subscriptionVolumeMl = info.volumeMl,
                         subscriptionMaxVolumeMl = info.maxVolumeMl,
                         subscriptionEndDate = info.subscribeDateEnd,
-                        flowWaterPourType = effectiveType,
-                        waterOption = effectiveType.toDrinkWaterOption(),
+                        flowWaterPourType = preferredPourType,
+                        waterOption = preferredPourType.toDrinkWaterOption(),
                         invalidSubscriptionCardVisible = false,
                     )
                 }
@@ -324,13 +332,22 @@ constructor(
  */
     private fun observeLoyaltyCardScansForDrinkListUi() {
         viewModelScope.launch {
-            telemetryService.loyaltyCardClientScans.collect {
+            telemetryService.loyaltyCardClientScans.collect { clientId ->
                 resetSubscriptionExitTimer()
+                val localPrefsJson = configRepository.getJson(JsonStoreKeys.LOYALTY_CLIENT_PLAIN_WATER_PREFS)
+                val pourType =
+                    LoyaltyPlainWaterPreference.resolvePourType(
+                        clientId = clientId,
+                        serverPlainWaterType = null,
+                        localPrefsJson = localPrefsJson,
+                        subscriptionActive = _state.value.isSubscriptionActive,
+                        coerceEntitlement = false,
+                    )
                 _state.update {
                     it.copy(
                         invalidSubscriptionCardVisible = false,
-                        waterOption = DrinkWaterOption.STANDARD,
-                        flowWaterPourType = FlowWaterPourType.Filtered,
+                        waterOption = pourType.toDrinkWaterOption(),
+                        flowWaterPourType = pourType,
                     )
                 }
             }
@@ -506,6 +523,17 @@ constructor(
                 waterOption = resolved,
                 flowWaterPourType = resolved.toFlowWaterPourType(),
             )
+        }
+        s.scannedSubscriptionClientId?.let { clientId ->
+            viewModelScope.launch {
+                val encoded =
+                    LoyaltyPlainWaterPreference.encodeLocalPrefs(
+                        configRepository.getJson(JsonStoreKeys.LOYALTY_CLIENT_PLAIN_WATER_PREFS),
+                        clientId,
+                        resolved,
+                    )
+                configRepository.setJson(JsonStoreKeys.LOYALTY_CLIENT_PLAIN_WATER_PREFS, encoded)
+            }
         }
     }
 
