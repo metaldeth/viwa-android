@@ -380,6 +380,46 @@ class MvpTelemetryApiClientTest {
     }
 
     @Test
+    fun `checkAppUpdate uses public path without authorization`() {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "updateAvailable": false,
+                      "manifest": null
+                    }
+                    """.trimIndent(),
+                ),
+        )
+        val baseUrl = server.url("/").toString().removeSuffix("/")
+        val result =
+            kotlinx.coroutines.runBlocking {
+                client.checkAppUpdate(baseUrl, 217)
+            }
+        assertTrue(result.isSuccess)
+        assertFalse(result.getOrThrow().updateAvailable)
+        val recorded = server.takeRequest()
+        assertEquals(null, recorded.getHeader("Authorization"))
+        assertEquals("/api/v1/public/app-updates/check?currentVersionCode=217", recorded.path)
+        assertEquals("GET", recorded.method)
+    }
+
+    @Test
+    fun `checkAppUpdate public 404 is terminal ota http exception`() {
+        server.enqueue(MockResponse().setResponseCode(404))
+        val baseUrl = server.url("/").toString().removeSuffix("/")
+        val result =
+            kotlinx.coroutines.runBlocking {
+                client.checkAppUpdate(baseUrl, 100)
+            }
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is com.viwa.android.domain.ota.OtaHttpException)
+        assertEquals(404, (result.exceptionOrNull() as com.viwa.android.domain.ota.OtaHttpException).statusCode)
+    }
+
+    @Test
     fun `fetchToken parses jwt response`() {
         server.enqueue(
             MockResponse()

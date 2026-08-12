@@ -17,6 +17,20 @@ enum class AppUpdatePhase {
     Failed,
 }
 
+/** Blocks concurrent download/install (not manual check). */
+fun AppUpdatePhase.blocksDownloadOrInstall(): Boolean =
+    when (this) {
+        AppUpdatePhase.Downloading,
+        AppUpdatePhase.Verifying,
+        AppUpdatePhase.Installing,
+        AppUpdatePhase.AwaitingUser,
+        -> true
+        else -> false
+    }
+
+/** UI guard: disable install button while update pipeline is active. */
+fun AppUpdatePhase.isInstallUiBusy(): Boolean = blocksDownloadOrInstall()
+
 data class OtaUpdateOffer(
     val releaseId: String,
     val versionName: String,
@@ -73,6 +87,9 @@ data class AppUpdateCoordinatorSnapshot(
     val mandatoryEnforcementEnabled: Boolean = false,
     val pendingApkPath: String? = null,
 )
+
+/** Service menu UI: no offer → no available update (do not inherit previous). */
+fun AppUpdateCoordinatorSnapshot.availableUpdateForUi(): AppUpdate? = offer?.toAppUpdate()
 
 @Serializable
 data class PersistedAppUpdateState(

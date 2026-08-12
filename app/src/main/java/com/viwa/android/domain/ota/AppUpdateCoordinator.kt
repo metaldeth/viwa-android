@@ -74,8 +74,10 @@ constructor(
     private var serverAppUpdatesEnabled: Boolean? = null
 
     private var periodicJob: Job? = null
+    private var retryJob: Job? = null
     private var persisted = PersistedAppUpdateState()
     private var retryAttempt = 0
+    private val reportInFlight = mutableSetOf<String>()
 
     init {
         scope.launch {
@@ -105,8 +107,8 @@ constructor(
 
     suspend fun checkForUpdatesManual(): Result<OtaUpdateOffer?> =
         mutex.withLock {
-            if (!isTelemetryCheckAllowed()) {
-                return Result.failure(IllegalStateException("OTA telemetry недоступен"))
+            if (!hasConfiguredApiUrl()) {
+                return Result.failure(IllegalStateException("OTA API URL не настроен"))
             }
             performCheck(isManual = true)
         }
@@ -115,6 +117,9 @@ constructor(
         mutex.withLock {
             if (requireFirmwareScope && !hasFirmwareScope) {
                 return Result.failure(SecurityException("Требуется scope firmware.update"))
+            }
+            if (_snapshot.value.phase.blocksDownloadOrInstall()) {
+                return Result.failure(IllegalStateException("Обновление уже выполняется"))
             }
             val offer = _snapshot.value.offer ?: return Result.failure(IllegalStateException("Нет доступного обновления"))
             if (criticalOperationGuard.isCriticalOperationActive()) {
@@ -127,11 +132,11 @@ constructor(
         mutex.withLock {
             val ok = status == android.content.pm.PackageInstaller.STATUS_SUCCESS
             if (ok) {
-                transition(AppUpdatePhase.Success, failureReason = null)
-                reportCurrent(OtaReportStatus.INSTALLED)
+                transition(AppUpdatePhase.Success, failureReason = null, clearOffer = true)
+                reportOnce(OtaReportStatus.INSTALLED)
             } else {
                 transition(AppUpdatePhase.Failed, failureReason = message ?: "Install failed")
-                reportCurrent(OtaReportStatus.FAILED, message)
+                reportOnce(OtaReportStatus.FAILED, message)
             }
             clearPendingApk()
         }
@@ -143,19 +148,17 @@ constructor(
     }
 
     private suspend fun performCheck(isManual: Boolean): Result<OtaUpdateOffer?> {
+        if (!isManual && !isAutoCheckAllowed()) {
+            return Result.success(null)
+        }
         if (!isManual && criticalOperationGuard.isCriticalOperationActive()) {
             return Result.success(null)
         }
-        transition(AppUpdatePhase.Checking)
+        transition(AppUpdatePhase.Checking, failureReason = null)
         val fromVersionCode = apkVerifier.readInstalledVersionCode()
-        val bearer = tokenProvider.resolveBearerToken()
-        if (bearer.isNullOrBlank()) {
-            transition(AppUpdatePhase.Failed, failureReason = "Machine JWT недоступен")
-            return Result.failure(IllegalStateException("Machine JWT unavailable"))
-        }
         val apiUrl = readTelemetryApiUrl()
         return apiClient
-            .checkAppUpdate(apiUrl, bearer, fromVersionCode)
+            .checkAppUpdate(apiUrl, fromVersionCode)
             .fold(
                 onSuccess = { response ->
                     retryAttempt = 0
@@ -164,7 +167,7 @@ constructor(
                 },
                 onFailure = { error ->
                     scheduleRetryIfNeeded(error)
-                    transition(AppUpdatePhase.Failed, failureReason = error.message)
+                    handleCheckFailure(error)
                     Result.failure(error)
                 },
             )
@@ -175,7 +178,7 @@ constructor(
         fromVersionCode: Int,
     ): Result<OtaUpdateOffer?> {
         if (!response.updateAvailable || response.manifest == null) {
-            transition(AppUpdatePhase.Idle, offer = null)
+            transition(AppUpdatePhase.Idle, offer = null, clearOffer = true, failureReason = null)
             return Result.success(null)
         }
         manifestVerifier.verifyManifest(response.manifest).onFailure { error ->
@@ -186,7 +189,7 @@ constructor(
         signingPolicyStore.markTrustedManifest(response.manifest.revocationEpoch ?: 0)
         val offer = OtaUpdateOffer.fromManifest(response.manifest)
         if (offer.versionCode <= fromVersionCode) {
-            transition(AppUpdatePhase.Idle, offer = null)
+            transition(AppUpdatePhase.Idle, offer = null, clearOffer = true, failureReason = null)
             return Result.success(null)
         }
         val requestUuid = persisted.requestUuid ?: UUID.randomUUID().toString()
@@ -198,9 +201,15 @@ constructor(
                 toVersionCode = offer.versionCode,
                 offerJson = json.encodeToString(OtaSignedManifestDto.serializer(), response.manifest),
             )
-        transition(AppUpdatePhase.Offered, offer = offer, requestUuid = requestUuid, fromVersionCode = fromVersionCode)
+        transition(
+            AppUpdatePhase.Offered,
+            offer = offer,
+            requestUuid = requestUuid,
+            fromVersionCode = fromVersionCode,
+            failureReason = null,
+        )
         reportOnce(OtaReportStatus.STARTED)
-        if (shouldAutoInstall(offer)) {
+        if (shouldAutoInstall(offer) && !_snapshot.value.phase.blocksDownloadOrInstall()) {
             downloadVerifyAndInstall(offer)
             return Result.success(offer)
         }
@@ -208,15 +217,13 @@ constructor(
     }
 
     private suspend fun downloadVerifyAndInstall(offer: OtaUpdateOffer): Result<Unit> {
+        if (_snapshot.value.phase.blocksDownloadOrInstall()) {
+            return Result.failure(IllegalStateException("Обновление уже выполняется"))
+        }
         if (criticalOperationGuard.isCriticalOperationActive()) {
             return Result.failure(IllegalStateException("Критическая операция активна"))
         }
-        val bearer = tokenProvider.resolveBearerToken()
-        if (bearer.isNullOrBlank()) {
-            transition(AppUpdatePhase.Failed, failureReason = "Machine JWT недоступен", offer = offer)
-            return Result.failure(IllegalStateException("Machine JWT unavailable"))
-        }
-        transition(AppUpdatePhase.Downloading, offer = offer)
+        transition(AppUpdatePhase.Downloading, offer = offer, failureReason = null)
         reportOnce(OtaReportStatus.DOWNLOADING)
         val apkFile = pendingApkFile()
         return runCatching {
@@ -226,11 +233,10 @@ constructor(
                 destination = apkFile,
                 expectedSizeBytes = offer.fileSizeBytes,
                 expectedSha256 = offer.sha256,
-                bearerToken = bearer,
             ).collect { progress ->
                 _progressFlow.emit(progress)
             }
-            transition(AppUpdatePhase.Verifying, offer = offer, pendingApkPath = apkFile.absolutePath)
+            transition(AppUpdatePhase.Verifying, offer = offer, pendingApkPath = apkFile.absolutePath, failureReason = null)
             apkVerifier.verifyDownloadedApk(
                 apkFile = apkFile,
                 expectedPackageName = context.packageName,
@@ -243,20 +249,24 @@ constructor(
             launchInstall(apkFile, offer)
         }.onFailure { error ->
             downloader.deletePartialFiles(apkFile)
-            transition(AppUpdatePhase.Failed, failureReason = error.message, offer = offer)
-            reportOnce(OtaReportStatus.FAILED, error.message)
+            if (OtaBackendErrors.isTransient(error)) {
+                handleTransientDownloadFailure(error, offer)
+            } else {
+                transition(AppUpdatePhase.Failed, failureReason = OtaBackendErrors.userMessage(error), offer = offer)
+                reportOnce(OtaReportStatus.FAILED, error.message)
+            }
         }
     }
 
     private suspend fun launchInstall(apkFile: File, offer: OtaUpdateOffer) {
-        transition(AppUpdatePhase.Installing, offer = offer, pendingApkPath = apkFile.absolutePath)
+        transition(AppUpdatePhase.Installing, offer = offer, pendingApkPath = apkFile.absolutePath, failureReason = null)
         reportOnce(OtaReportStatus.INSTALLING)
         when (val result = installLauncher.launchInstall(apkFile)) {
             is OtaInstallLaunchResult.PackageInstallerSessionStarted -> {
-                transition(AppUpdatePhase.AwaitingUser, offer = offer)
+                transition(AppUpdatePhase.AwaitingUser, offer = offer, failureReason = null)
             }
             is OtaInstallLaunchResult.ActionViewFallbackStarted -> {
-                transition(AppUpdatePhase.AwaitingUser, offer = offer)
+                transition(AppUpdatePhase.AwaitingUser, offer = offer, failureReason = null)
             }
             is OtaInstallLaunchResult.Failed -> {
                 transition(AppUpdatePhase.Failed, failureReason = result.reason, offer = offer)
@@ -270,14 +280,15 @@ constructor(
         return enforcement && offer.mandatory
     }
 
-    private fun isTelemetryCheckAllowed(): Boolean {
-        if (serverAppUpdatesEnabled != true) return false
-        return true
-    }
+    private suspend fun isAutoCheckAllowed(): Boolean = serverAppUpdatesEnabled == true && hasConfiguredApiUrl()
+
+    private suspend fun hasConfiguredApiUrl(): Boolean = readTelemetryApiUrl().isNotBlank()
 
     private fun cancelPendingAutoWork() {
         periodicJob?.cancel()
         periodicJob = null
+        retryJob?.cancel()
+        retryJob = null
         if (_snapshot.value.phase == AppUpdatePhase.Checking) {
             _snapshot.value = _snapshot.value.copy(phase = AppUpdatePhase.Idle)
         }
@@ -300,26 +311,26 @@ constructor(
     }
 
     private suspend fun scheduleRetryIfNeeded(error: Throwable) {
+        if (!OtaBackendErrors.isTransient(error)) return
         if (retryAttempt >= MAX_RETRY_ATTEMPTS) return
         retryAttempt++
         val backoffMs = min(30 * 60_000L, (1L shl retryAttempt) * 30_000L)
-        scope.launch {
-            delay(backoffMs)
-            if (serverAppUpdatesEnabled == true && !criticalOperationGuard.isCriticalOperationActive()) {
-                mutex.withLock { performCheck(isManual = false) }
+        retryJob?.cancel()
+        retryJob =
+            scope.launch {
+                delay(backoffMs)
+                if (serverAppUpdatesEnabled == true && !criticalOperationGuard.isCriticalOperationActive()) {
+                    mutex.withLock { performCheck(isManual = false) }
+                }
             }
-        }
     }
 
     private suspend fun restorePersistedState() {
         val raw = configRepository.getJson(JsonStoreKeys.OTA_UPDATE_STATE) ?: return
         persisted = runCatching { json.decodeFromString<PersistedAppUpdateState>(raw) }.getOrDefault(PersistedAppUpdateState())
-        val offer =
-            persisted.offerJson?.let {
-                runCatching {
-                    OtaUpdateOffer.fromManifest(json.decodeFromString(OtaSignedManifestDto.serializer(), it))
-                }.getOrNull()
-            }
+        persisted = recoverStalePersistedState()
+        persisted = recoverInterruptedPersistedState()
+        val offer = decodePersistedOffer()
         val phase = runCatching { AppUpdatePhase.valueOf(persisted.phase) }.getOrDefault(AppUpdatePhase.Idle)
         _snapshot.value =
             AppUpdateCoordinatorSnapshot(
@@ -334,6 +345,124 @@ constructor(
             )
     }
 
+    private suspend fun recoverStalePersistedState(): PersistedAppUpdateState {
+        val installedVersionCode = apkVerifier.readInstalledVersionCode()
+        val offer = decodePersistedOffer()
+        val pendingApkFile = persisted.pendingApkPath?.let(::File)?.takeIf { it.isFile } ?: pendingApkFile()
+        val pendingApkVersionCode = pendingApkFile.takeIf { it.isFile }?.let { apkVerifier.readArchiveVersionCode(it) }
+        if (
+            !OtaPersistedStateRecovery.isStale(
+                installedVersionCode = installedVersionCode,
+                targetVersionCode = persisted.toVersionCode,
+                offerVersionCode = offer?.versionCode,
+                pendingApkVersionCode = pendingApkVersionCode,
+            )
+        ) {
+            return persisted
+        }
+        Timber.tag(TAG).i(
+            "Clearing stale OTA state: installed=%d target=%s offer=%s pendingApk=%s",
+            installedVersionCode,
+            persisted.toVersionCode,
+            offer?.versionCode,
+            pendingApkVersionCode,
+        )
+        deleteSafePendingApkFiles(persisted.pendingApkPath)
+        val cleared =
+            PersistedAppUpdateState(
+                lastCheckEpochMs = persisted.lastCheckEpochMs,
+            )
+        configRepository.setJson(JsonStoreKeys.OTA_UPDATE_STATE, json.encodeToString(cleared))
+        return cleared
+    }
+
+    private suspend fun recoverInterruptedPersistedState(): PersistedAppUpdateState {
+        val phase = runCatching { AppUpdatePhase.valueOf(persisted.phase) }.getOrDefault(AppUpdatePhase.Idle)
+        if (!OtaPersistedStateRecovery.needsProcessDeathRecovery(phase)) return persisted
+
+        val offer = decodePersistedOffer()
+        val installedVersionCode = apkVerifier.readInstalledVersionCode()
+        val safePendingApkPath = resolveSafePendingApkPath(installedVersionCode)
+        val plan =
+            OtaPersistedStateRecovery.planProcessDeathRecovery(
+                phase = phase,
+                offer = offer,
+                persistedPendingPath = persisted.pendingApkPath,
+                safePendingApkPath = safePendingApkPath,
+            )
+
+        if (plan.shouldDeletePendingApk) {
+            deleteSafePendingApkFiles(persisted.pendingApkPath)
+        }
+
+        if (plan.clearAllState) {
+            Timber.tag(TAG).i("Recovering interrupted OTA phase %s -> Idle (no valid offer)", phase)
+            val cleared = PersistedAppUpdateState(lastCheckEpochMs = persisted.lastCheckEpochMs)
+            configRepository.setJson(JsonStoreKeys.OTA_UPDATE_STATE, json.encodeToString(cleared))
+            return cleared
+        }
+
+        if (plan.targetPhase == phase && plan.pendingApkPath == persisted.pendingApkPath) return persisted
+
+        Timber.tag(TAG).i("Recovering interrupted OTA phase %s -> %s", phase, plan.targetPhase)
+        val recovered =
+            persisted.copy(
+                phase = plan.targetPhase.name,
+                pendingApkPath = plan.pendingApkPath,
+                failureReason = null,
+            )
+        configRepository.setJson(JsonStoreKeys.OTA_UPDATE_STATE, json.encodeToString(recovered))
+        return recovered
+    }
+
+    private fun resolveSafePendingApkPath(installedVersionCode: Int): String? {
+        val path = persisted.pendingApkPath ?: return null
+        val file = File(path)
+        if (!file.isFile || !isUnderAppFilesDir(file)) return null
+        val archiveVersion = apkVerifier.readArchiveVersionCode(file) ?: return null
+        if (archiveVersion <= installedVersionCode) return null
+        return file.absolutePath
+    }
+
+    private fun decodePersistedOffer(): OtaUpdateOffer? =
+        persisted.offerJson?.let {
+            runCatching {
+                OtaUpdateOffer.fromManifest(json.decodeFromString(OtaSignedManifestDto.serializer(), it))
+            }.getOrNull()
+        }
+
+    private suspend fun handleCheckFailure(error: Throwable) {
+        if (OtaBackendErrors.isTransient(error)) {
+            handleTransientCheckFailure(error)
+        } else {
+            transition(AppUpdatePhase.Failed, failureReason = OtaBackendErrors.userMessage(error))
+        }
+    }
+
+    private suspend fun handleTransientCheckFailure(error: Throwable) {
+        val offer = decodePersistedOffer() ?: _snapshot.value.offer
+        val phase =
+            if (offer != null) {
+                AppUpdatePhase.Offered
+            } else {
+                AppUpdatePhase.Idle
+            }
+        transition(
+            phase = phase,
+            offer = offer,
+            failureReason = OtaBackendErrors.userMessage(error),
+        )
+    }
+
+    private suspend fun handleTransientDownloadFailure(error: Throwable, offer: OtaUpdateOffer) {
+        transition(
+            phase = AppUpdatePhase.Offered,
+            offer = offer,
+            pendingApkPath = null,
+            failureReason = OtaBackendErrors.userMessage(error),
+        )
+    }
+
     private suspend fun persistState() {
         configRepository.setJson(JsonStoreKeys.OTA_UPDATE_STATE, json.encodeToString(persisted))
     }
@@ -343,8 +472,9 @@ constructor(
         offer: OtaUpdateOffer? = _snapshot.value.offer,
         requestUuid: String? = _snapshot.value.requestUuid,
         fromVersionCode: Int? = _snapshot.value.fromVersionCode,
-        failureReason: String? = _snapshot.value.errorMessage,
+        failureReason: String? = null,
         pendingApkPath: String? = _snapshot.value.pendingApkPath,
+        clearOffer: Boolean = false,
     ) {
         persisted =
             persisted.copy(
@@ -353,22 +483,14 @@ constructor(
                 pendingApkPath = pendingApkPath,
                 requestUuid = requestUuid ?: persisted.requestUuid,
                 fromVersionCode = fromVersionCode ?: persisted.fromVersionCode,
-                toVersionCode = offer?.versionCode ?: persisted.toVersionCode,
-                releaseId = offer?.releaseId ?: persisted.releaseId,
-                offerJson =
-                    offer?.let { currentOffer ->
-                        persisted.offerJson?.let { existing ->
-                            existing
-                        } ?: run {
-                            // keep existing serialized manifest when possible
-                            persisted.offerJson
-                        }
-                    },
+                toVersionCode = if (clearOffer) null else (offer?.versionCode ?: persisted.toVersionCode),
+                releaseId = if (clearOffer) null else (offer?.releaseId ?: persisted.releaseId),
+                offerJson = if (clearOffer) null else persisted.offerJson,
             )
         _snapshot.value =
             _snapshot.value.copy(
                 phase = phase,
-                offer = offer,
+                offer = if (clearOffer) null else offer,
                 requestUuid = requestUuid ?: _snapshot.value.requestUuid,
                 fromVersionCode = fromVersionCode ?: _snapshot.value.fromVersionCode,
                 errorMessage = failureReason,
@@ -378,29 +500,38 @@ constructor(
     }
 
     private suspend fun reportOnce(status: OtaReportStatus, failureReason: String? = null) {
-        val key = "${persisted.requestUuid}:${status.name}"
-        if (persisted.reportedKeys.contains(key)) return
-        reportCurrent(status, failureReason)
-        persisted = persisted.copy(reportedKeys = persisted.reportedKeys + key)
-        persistState()
+        val requestUuid = persisted.requestUuid ?: return
+        val key = "$requestUuid:${status.name}"
+        if (persisted.reportedKeys.contains(key) || key in reportInFlight) return
+        reportInFlight += key
+        try {
+            val success = reportCurrent(status, failureReason)
+            if (success) {
+                persisted = persisted.copy(reportedKeys = persisted.reportedKeys + key)
+                persistState()
+            }
+        } finally {
+            reportInFlight -= key
+        }
     }
 
-    private suspend fun reportCurrent(status: OtaReportStatus, failureReason: String? = null) {
-        val requestUuid = persisted.requestUuid ?: return
-        val releaseId = persisted.releaseId ?: return
-        val toVersion = persisted.toVersionCode ?: return
-        val bearer = tokenProvider.resolveBearerToken() ?: return
+    private suspend fun reportCurrent(status: OtaReportStatus, failureReason: String? = null): Boolean {
+        val requestUuid = persisted.requestUuid ?: return false
+        val releaseId = persisted.releaseId ?: return false
+        val toVersion = persisted.toVersionCode ?: return false
+        val bearer = tokenProvider.resolveBearerToken() ?: return false
         val apiUrl = readTelemetryApiUrl()
-        apiClient.reportAppUpdate(
-            apiUrl,
-            bearer,
-            requestUuid,
-            releaseId,
-            persisted.fromVersionCode,
-            toVersion,
-            status,
-            failureReason,
-        )
+        return apiClient
+            .reportAppUpdate(
+                apiUrl,
+                bearer,
+                requestUuid,
+                releaseId,
+                persisted.fromVersionCode,
+                toVersion,
+                status,
+                failureReason,
+            ).isSuccess
     }
 
     private suspend fun reportFailure(
@@ -433,14 +564,40 @@ constructor(
 
     private fun pendingApkFile(): File = File(context.filesDir, OtaConstants.TEMP_APK_NAME)
 
+    private fun isUnderAppFilesDir(file: File): Boolean {
+        if (!file.isFile) return false
+        return runCatching {
+            val root = context.filesDir.toPath().toRealPath()
+            val candidate = file.toPath().toRealPath()
+            candidate.startsWith(root)
+        }.getOrElse {
+            runCatching {
+                val root = context.filesDir.canonicalFile.path
+                val candidate = file.canonicalFile.path
+                candidate == root || candidate.startsWith(root + File.separatorChar)
+            }.getOrDefault(false)
+        }
+    }
+
+    private fun deleteSafePendingApkFiles(persistedPath: String?) {
+        persistedPath
+            ?.let(::File)
+            ?.takeIf { it.isFile && isUnderAppFilesDir(it) }
+            ?.let { downloader.deletePartialFiles(it) }
+        val defaultPending = pendingApkFile()
+        if (defaultPending.isFile && isUnderAppFilesDir(defaultPending)) {
+            downloader.deletePartialFiles(defaultPending)
+        }
+    }
+
     private suspend fun clearPendingApk() {
-        val file = pendingApkFile()
-        downloader.deletePartialFiles(file)
+        deleteSafePendingApkFiles(persisted.pendingApkPath ?: pendingApkFile().absolutePath)
         persisted = persisted.copy(pendingApkPath = null)
         persistState()
     }
 
     companion object {
+        private const val TAG = "AppUpdateCoordinator"
         private const val MAX_RETRY_ATTEMPTS = 5
     }
 }

@@ -1,12 +1,10 @@
 package com.viwa.android.services.telemetry
 
 import com.viwa.android.data.local.db.JsonStoreKeys
-import com.viwa.android.data.remote.telemetry.mvp.SimpleTelemetryCoordinator
 import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.domain.model.MachineRegistration
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
@@ -21,8 +19,10 @@ class ViwaTelemetryServiceColdStartReconnectTest {
         // given
         val configRepository = mockk<ConfigRepository>(relaxed = true)
         coEvery { configRepository.get(JsonStoreKeys.TELEMETRY_PAUSED_BY_USER) } returns "false"
-        val coordinator = mockk<SimpleTelemetryCoordinator>(relaxed = true)
-        coEvery { coordinator.canReconnectWithPersistedCredentials() } returns true
+        val coordinator =
+            mockSimpleTelemetryCoordinatorForServiceTests {
+                coEvery { canReconnectWithPersistedCredentials() } returns true
+            }
         val service =
             ViwaTelemetryService(
                 configRepository = configRepository,
@@ -48,14 +48,16 @@ class ViwaTelemetryServiceColdStartReconnectTest {
         // given
         val configRepository = mockk<ConfigRepository>(relaxed = true)
         coEvery { configRepository.get(JsonStoreKeys.TELEMETRY_PAUSED_BY_USER) } returns "false"
-        val coordinator = mockk<SimpleTelemetryCoordinator>(relaxed = true)
-        coEvery { coordinator.canReconnectWithPersistedCredentials() } returns false
-        coEvery { coordinator.loadMachineRegistration() } returns
-            MachineRegistration(
-                serialNumber = "VIWA-000099",
-                enrolled = true,
-                isRegistered = true,
-            )
+        val coordinator =
+            mockSimpleTelemetryCoordinatorForServiceTests {
+                coEvery { canReconnectWithPersistedCredentials() } returns false
+                coEvery { loadMachineRegistration() } returns
+                    MachineRegistration(
+                        serialNumber = "VIWA-000099",
+                        enrolled = true,
+                        isRegistered = true,
+                    )
+            }
         val service =
             ViwaTelemetryService(
                 configRepository = configRepository,

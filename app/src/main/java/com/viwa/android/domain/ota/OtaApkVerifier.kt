@@ -38,12 +38,15 @@ constructor(
 ) {
     fun readInstalledVersionCode(): Int {
         val info = installedPackageInfo(context.packageName)
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            info.longVersionCode.toInt()
-        } else {
-            @Suppress("DEPRECATION")
-            info.versionCode
-        }
+        return packageInfoVersionCode(info)
+    }
+
+    fun readArchiveVersionCode(apkFile: File): Int? {
+        if (!apkFile.isFile) return null
+        val archiveInfo =
+            context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, archiveFlags())
+                ?: return null
+        return packageInfoVersionCode(archiveInfo)
     }
 
     fun verifyDownloadedApk(
@@ -58,7 +61,7 @@ constructor(
         runCatching {
             if (!apkFile.isFile) throw OtaApkVerificationError.FileMissing()
             if (apkFile.length() != expectedSizeBytes) throw OtaApkVerificationError.SizeMismatch()
-            val digest = sha256Hex(apkFile.readBytes())
+            val digest = sha256HexFile(apkFile)
             if (!digest.equals(expectedSha256, ignoreCase = true)) {
                 throw OtaApkVerificationError.HashMismatch()
             }
@@ -68,13 +71,7 @@ constructor(
             if (archiveInfo.packageName != expectedPackageName) {
                 throw OtaApkVerificationError.PackageNameMismatch(expectedPackageName, archiveInfo.packageName)
             }
-            val archiveVersionCode =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    archiveInfo.longVersionCode.toInt()
-                } else {
-                    @Suppress("DEPRECATION")
-                    archiveInfo.versionCode
-                }
+            val archiveVersionCode = readArchiveVersionCode(apkFile) ?: throw OtaApkVerificationError.FileMissing()
             if (archiveVersionCode != expectedVersionCode) {
                 throw OtaApkVerificationError.VersionCodeMismatch(expectedVersionCode, archiveVersionCode)
             }
@@ -88,6 +85,14 @@ constructor(
             if (!certSha256.equals(expectedSigningCertSha256, ignoreCase = true)) {
                 throw OtaApkVerificationError.SigningCertMismatch(expectedSigningCertSha256, certSha256)
             }
+        }
+
+    private fun packageInfoVersionCode(info: PackageInfo): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode.toInt()
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode
         }
 
     private fun installedPackageInfo(packageName: String): PackageInfo =
@@ -129,5 +134,20 @@ constructor(
     private fun sha256Hex(bytes: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
         return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun sha256HexFile(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(8192)
+            var read = input.read(buffer)
+            while (read >= 0) {
+                if (read > 0) {
+                    digest.update(buffer, 0, read)
+                }
+                read = input.read(buffer)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }

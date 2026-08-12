@@ -409,22 +409,40 @@ class MvpTelemetryApiClient(
 
     suspend fun checkAppUpdate(
         baseUrl: String,
-        bearerToken: String,
         currentVersionCode: Int,
     ): Result<com.viwa.android.data.remote.ota.OtaCheckResponseDto> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val url =
-                    "${baseUrl.trimEnd('/')}/api/v1/machines/app-updates/check?currentVersionCode=$currentVersionCode"
+                    "${baseUrl.trimEnd('/')}/api/v1/public/app-updates/check?currentVersionCode=$currentVersionCode"
                 val httpRequest =
                     Request.Builder()
                         .url(url)
                         .get()
-                        .header("Authorization", "Bearer $bearerToken")
                         .build()
-                executeJson(httpRequest, com.viwa.android.data.remote.ota.OtaCheckResponseDto.serializer())
+                executePublicOtaJson(httpRequest, com.viwa.android.data.remote.ota.OtaCheckResponseDto.serializer())
             }
         }
+
+    private fun <T> executePublicOtaJson(
+        request: Request,
+        deserializer: kotlinx.serialization.KSerializer<T>,
+    ): T {
+        httpClient.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                Timber.w("MvpTelemetry public OTA ${response.code}: ${redactApiLog(text)}")
+                if (response.code == 404) {
+                    throw com.viwa.android.domain.ota.OtaHttpException.fromStatus(
+                        404,
+                        com.viwa.android.domain.ota.OtaHttpException.PUBLIC_OTA_CHECK_UNAVAILABLE,
+                    )
+                }
+                throw com.viwa.android.domain.ota.OtaHttpException.fromStatus(response.code, redactApiLog(text))
+            }
+            return json.decodeFromString(deserializer, text)
+        }
+    }
 
     suspend fun reportAppUpdate(
         baseUrl: String,

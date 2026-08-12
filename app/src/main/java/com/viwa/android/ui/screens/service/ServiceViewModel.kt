@@ -1,5 +1,8 @@
 package com.viwa.android.ui.screens.service
 
+import com.viwa.android.domain.ota.availableUpdateForUi
+import com.viwa.android.domain.ota.isInstallUiBusy
+
 import android.content.Context
 import android.hardware.usb.UsbManager
 import androidx.lifecycle.ViewModel
@@ -2102,13 +2105,10 @@ constructor(
                         otaChannel = snapshot.offer?.channel?.name,
                         otaServerFeatureEnabled = snapshot.serverFeatureEnabled,
                         otaMandatoryEnforcementEnabled = snapshot.mandatoryEnforcementEnabled,
-                        availableUpdate = snapshot.offer?.toAppUpdate() ?: it.availableUpdate,
+                        availableUpdate = snapshot.availableUpdateForUi(),
                         updateCheckError = snapshot.errorMessage,
                         isCheckingUpdate = snapshot.phase == com.viwa.android.domain.ota.AppUpdatePhase.Checking,
-                        isInstalling =
-                            snapshot.phase == com.viwa.android.domain.ota.AppUpdatePhase.Downloading ||
-                                snapshot.phase == com.viwa.android.domain.ota.AppUpdatePhase.Verifying ||
-                                snapshot.phase == com.viwa.android.domain.ota.AppUpdatePhase.Installing,
+                        isInstalling = snapshot.phase.isInstallUiBusy(),
                         isUpToDate = snapshot.phase == com.viwa.android.domain.ota.AppUpdatePhase.Idle && snapshot.offer == null,
                     )
                 }

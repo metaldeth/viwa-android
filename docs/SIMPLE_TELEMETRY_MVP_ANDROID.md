@@ -68,8 +68,10 @@ CMD (legacy): `set VIWA_TELEMETRY_ENROLLMENT_KEY=...`
 
 ### OTA app updates (Phase 3)
 
-- Feature gate: WS hello `featureFlags.appUpdates=true` (fail-closed if absent/false).
-- REST: `/api/v1/machines/app-updates/*` с machine JWT — см. `docs/OTA_UPDATE.md` и `viwa-telemetry/docs/contracts/app-updates.md`.
+- **Manual check / download:** public REST — `GET /api/v1/public/app-updates/check`, `downloadUrl` из signed manifest; **без** machine JWT / WS hello.
+- **Auto-check:** WS hello `featureFlags.appUpdates=true` (6 h interval).
+- **Report:** `POST /api/v1/machines/app-updates/report` с machine JWT — **best-effort** (no JWT / HTTP error не блокирует install, phase не меняется).
+- Подробности: `docs/OTA_UPDATE.md`, контракт `viwa-telemetry/docs/contracts/app-updates.md`.
 - Pinned key: `ota.signingKeyId` / `ota.signingPublicKeyPem` в `local.properties` → `BuildConfig`.
 - Install scope: `firmware.update` (online-only technician key).
 

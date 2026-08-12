@@ -1,20 +1,13 @@
 package com.viwa.android.services.telemetry
 
-import com.viwa.android.data.local.db.JsonStoreKeys
-import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryLoyaltySyncHandler
 import com.viwa.android.data.remote.telemetry.mvp.MvpTelemetryWebSocketManager
-import com.viwa.android.data.remote.telemetry.mvp.SimpleTelemetryCoordinator
 import com.viwa.android.data.remote.telemetry.v3.TelemetryDispenseSyncCoordinator
-import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.data.telemetry.loyalty.LoyaltyWsCodec
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
@@ -29,30 +22,6 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViwaTelemetryServiceTest {
-    private fun createService(
-        scope: CoroutineScope,
-        wsManager: MvpTelemetryWebSocketManager = mockk(relaxed = true),
-        configRepository: ConfigRepository = mockk(relaxed = true),
-    ): Pair<ViwaTelemetryService, MvpTelemetryLoyaltySyncHandler> {
-        coEvery { configRepository.get(JsonStoreKeys.TELEMETRY_PAUSED_BY_USER) } returns "false"
-        var handler: MvpTelemetryLoyaltySyncHandler? = null
-        every { wsManager.loyaltySyncHandler = any() } answers {
-            handler = firstArg()
-            Unit
-        }
-        every { wsManager.loyaltySyncHandler } answers { handler }
-        val service =
-            ViwaTelemetryService(
-                configRepository = configRepository,
-                mvpCoordinator = mockk<SimpleTelemetryCoordinator>(relaxed = true),
-                wsManager = wsManager,
-                dispenseSyncCoordinator = mockk(relaxed = true),
-                offlinePourAuthorizationService = mockk(relaxed = true),
-                scope = scope,
-            )
-        return service to requireNotNull(handler)
-    }
-
     @Test
     fun T11_4_sendStatusGet_sendsLoyaltyStatusGetEnvelope() = runTest {
         // given
@@ -62,7 +31,7 @@ class ViwaTelemetryServiceTest {
         coEvery { wsManager.sendEnvelope(capture(typeSlot), capture(payloadSlot), any()) } returns
             Result.success("msg-status")
 
-        val (service, _) = createService(this, wsManager)
+        val (service, _) = createViwaTelemetryServiceForTests(wsManager = wsManager)
         advanceUntilIdle()
 
         // when
@@ -82,7 +51,7 @@ class ViwaTelemetryServiceTest {
     fun T11_5_inboundStatusAck_updatesSubscribeInfoStateFlow() = runTest {
         // given
         val wsManager = mockk<MvpTelemetryWebSocketManager>(relaxed = true)
-        val (service, handler) = createService(this, wsManager)
+        val (service, handler) = createViwaTelemetryServiceForTests(wsManager = wsManager)
         advanceUntilIdle()
         val messageIdSlot = slot<String>()
         coEvery {
@@ -117,22 +86,10 @@ class ViwaTelemetryServiceTest {
         val wsManager = mockk<MvpTelemetryWebSocketManager>(relaxed = true)
         coEvery { wsManager.sendEnvelope(any(), any(), any()) } returns Result.success("msg-legacy")
         val dispenseSyncCoordinator = mockk<TelemetryDispenseSyncCoordinator>(relaxed = true)
-        val configRepository = mockk<ConfigRepository>(relaxed = true)
-        coEvery { configRepository.get(JsonStoreKeys.TELEMETRY_PAUSED_BY_USER) } returns "false"
-        var handler: MvpTelemetryLoyaltySyncHandler? = null
-        every { wsManager.loyaltySyncHandler = any() } answers {
-            handler = firstArg()
-            Unit
-        }
-        every { wsManager.loyaltySyncHandler } answers { handler }
-        val service =
-            ViwaTelemetryService(
-                configRepository = configRepository,
-                mvpCoordinator = mockk<SimpleTelemetryCoordinator>(relaxed = true),
+        val (service, _) =
+            createViwaTelemetryServiceForTests(
                 wsManager = wsManager,
                 dispenseSyncCoordinator = dispenseSyncCoordinator,
-                offlinePourAuthorizationService = mockk(relaxed = true),
-                scope = this,
             )
         advanceUntilIdle()
 
@@ -169,7 +126,7 @@ class ViwaTelemetryServiceTest {
     fun T12_9_inboundStatusChanged_updatesSubscribeInfoWithoutRescan() = runTest {
         // given
         val wsManager = mockk<MvpTelemetryWebSocketManager>(relaxed = true)
-        val (service, handler) = createService(this, wsManager)
+        val (service, handler) = createViwaTelemetryServiceForTests(wsManager = wsManager)
         advanceUntilIdle()
 
         val payload =
@@ -202,7 +159,7 @@ class ViwaTelemetryServiceTest {
         coEvery {
             wsManager.sendEnvelope(LoyaltyWsCodec.TYPE_STATUS_GET, any(), capture(messageIdSlot))
         } returns Result.success("unused")
-        val (service, handler) = createService(this, wsManager)
+        val (service, handler) = createViwaTelemetryServiceForTests(wsManager = wsManager)
         advanceUntilIdle()
         service.sendStatusGet("660e8400-e29b-41d4-a716-446655440010")
         val statusPayload =
@@ -239,7 +196,7 @@ class ViwaTelemetryServiceTest {
         coEvery {
             wsManager.sendEnvelope(LoyaltyWsCodec.TYPE_STATUS_GET, any(), capture(messageIdSlot))
         } returns Result.success("unused")
-        val (service, handler) = createService(this, wsManager)
+        val (service, handler) = createViwaTelemetryServiceForTests(wsManager = wsManager)
         advanceUntilIdle()
         service.sendStatusGet("660e8400-e29b-41d4-a716-446655440010")
         handler.onLoyaltyAck(
