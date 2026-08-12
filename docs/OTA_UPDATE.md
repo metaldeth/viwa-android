@@ -18,7 +18,7 @@ Production OTA — только **telemetry Phase 3** через `viwa-telemetry
 - Ed25519 canonical manifest + pinned/hello OTA public key (`local.properties`: `ota.signingKeyId`, `ota.signingPublicKeyPem`).
 - Download: max 200 MB, SHA-256, expiry URL, pre-install verify package/versionCode/cert.
 - State machine: Idle → Checking → Offered → Downloading → Verifying → Installing → AwaitingUser → Success/Failed; persistence в JsonStore.
-- Автопроверка **раз в 6 ч** только при `hello.featureFlags.appUpdates=true`; ручная — вкладка «Тема» сервисного меню (блок «Обновления»).
+- Автопроверка **раз в 6 ч** только при `hello.featureFlags.appUpdates=true`; ручная — **Настройки → Обновления**.
 - **Mandatory** enforcement выключен по умолчанию (server + client flag).
 - Install: `firmware.update` scope (online-only).
 - Silent install **не** используется без device-owner.

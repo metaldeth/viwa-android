@@ -318,6 +318,9 @@ class TechnicianKeyPolicySecurityTest {
         assertTrue(
             sessionStore.currentSession()?.scopes?.contains(TechnicianKeyConstants.SCOPE_SERVICE_MENU) == true,
         )
+        assertTrue(
+            sessionStore.currentSession()?.scopes?.contains(TechnicianKeyConstants.SCOPE_FIRMWARE_UPDATE) == true,
+        )
     }
 
     private suspend fun seedPolicy(

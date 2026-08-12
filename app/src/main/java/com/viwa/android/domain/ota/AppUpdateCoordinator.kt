@@ -211,6 +211,11 @@ constructor(
         if (criticalOperationGuard.isCriticalOperationActive()) {
             return Result.failure(IllegalStateException("Критическая операция активна"))
         }
+        val bearer = tokenProvider.resolveBearerToken()
+        if (bearer.isNullOrBlank()) {
+            transition(AppUpdatePhase.Failed, failureReason = "Machine JWT недоступен", offer = offer)
+            return Result.failure(IllegalStateException("Machine JWT unavailable"))
+        }
         transition(AppUpdatePhase.Downloading, offer = offer)
         reportOnce(OtaReportStatus.DOWNLOADING)
         val apkFile = pendingApkFile()
@@ -221,6 +226,7 @@ constructor(
                 destination = apkFile,
                 expectedSizeBytes = offer.fileSizeBytes,
                 expectedSha256 = offer.sha256,
+                bearerToken = bearer,
             ).collect { progress ->
                 _progressFlow.emit(progress)
             }

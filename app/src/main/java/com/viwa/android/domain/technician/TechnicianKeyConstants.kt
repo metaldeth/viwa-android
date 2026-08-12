@@ -31,6 +31,13 @@ object TechnicianKeyConstants {
             "cells.replenishment",
         )
 
+    /**
+     * Local password `"studio"` session scopes.
+     * Includes [SCOPE_FIRMWARE_UPDATE] so OTA install works without KEY-* scan;
+     * KEY offline path keeps [OFFLINE_SCOPES] only (firmware.update remains online-only there).
+     */
+    val STUDIO_SCOPES: Set<String> = OFFLINE_SCOPES + SCOPE_FIRMWARE_UPDATE
+
     val ONLINE_ONLY_SCOPES =
         setOf(
             "registration.rebind",

@@ -20,14 +20,14 @@ constructor(
     }
 
     /**
-     * Legacy password `"studio"` path: establishes a local offline-scoped session, then navigates.
-     * KEY-* scan path must keep using [navigateIfAuthorized] after real authorization.
+     * Legacy password `"studio"` path: local session with [TechnicianKeyConstants.STUDIO_SCOPES]
+     * (includes firmware.update for OTA install). KEY-* scan keeps using [navigateIfAuthorized].
      */
     fun navigateAfterLocalStudioPassword(navigate: () -> Unit) {
         val nowMs = clock.trustedNowMs()
         sessionStore.establish(
             technicianKeyId = LOCAL_STUDIO_TECHNICIAN_KEY_ID,
-            scopes = TechnicianKeyConstants.OFFLINE_SCOPES.toList(),
+            scopes = TechnicianKeyConstants.STUDIO_SCOPES.toList(),
             sessionToken = "local-studio",
             expiresAtMs = nowMs + TechnicianKeyConstants.SESSION_TTL_MS,
         )

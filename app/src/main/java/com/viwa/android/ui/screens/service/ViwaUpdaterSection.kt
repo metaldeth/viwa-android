@@ -109,7 +109,7 @@ fun ViwaUpdaterSection(
                     Text("Установить")
                 }
                 Text(
-                    "Установка требует scope firmware.update (online)",
+                    "Установка: пароль studio или KEY с scope firmware.update",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

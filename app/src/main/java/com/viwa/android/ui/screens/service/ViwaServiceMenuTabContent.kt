@@ -110,6 +110,7 @@ fun ViwaServiceMenuTabContent(
                 ViwaServiceSubTabId.Idle -> ViwaIdleTab()
                 ViwaServiceSubTabId.Window -> ViwaWindowTab()
                 ViwaServiceSubTabId.Theme -> ViwaThemeTab(state, viewModel)
+                ViwaServiceSubTabId.Updates -> ViwaUpdatesTab(state, viewModel)
                 else -> ViwaSettingsDevModeTab(state, viewModel)
             }
 
@@ -127,7 +128,15 @@ private fun ViwaThemeTab(
 ) {
     SettingsColumn {
         ViwaAppearanceThemeSection(state = state, viewModel = viewModel)
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+    }
+}
+
+@Composable
+private fun ViwaUpdatesTab(
+    state: ServiceUiState,
+    viewModel: ServiceViewModel,
+) {
+    SettingsColumn {
         ViwaUpdaterSection(state = state, viewModel = viewModel, embedded = true)
     }
 }

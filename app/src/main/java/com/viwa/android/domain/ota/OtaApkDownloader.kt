@@ -17,6 +17,7 @@ class OtaApkDownloader(
         destination: File,
         expectedSizeBytes: Long,
         expectedSha256: String,
+        bearerToken: String,
         maxBytes: Long = OtaConstants.MAX_APK_BYTES,
     ): Flow<UpdateProgress> =
         flow {
@@ -25,7 +26,13 @@ class OtaApkDownloader(
             val tempFile = File(destination.parentFile, "${destination.name}.part")
             if (tempFile.exists()) tempFile.delete()
 
-            val request = Request.Builder().url(url).get().build()
+            // Server requires machine JWT + HMAC query token (see app-updates download guard).
+            val request =
+                Request.Builder()
+                    .url(url)
+                    .header("Authorization", "Bearer $bearerToken")
+                    .get()
+                    .build()
             okHttpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     tempFile.delete()

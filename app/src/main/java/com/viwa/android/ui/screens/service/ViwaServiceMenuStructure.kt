@@ -87,6 +87,9 @@ sealed interface ViwaServiceSubTabId {
 
     data object Theme : ViwaServiceSubTabId
 
+    /** OTA обновление приложения (telemetry app-releases). */
+    data object Updates : ViwaServiceSubTabId
+
     data object PerformanceGeneral : ViwaServiceSubTabId
 
     data object Animation : ViwaServiceSubTabId
@@ -179,6 +182,7 @@ val ViwaServiceMenuGroups: List<ViwaServiceGroupSpec> =
                     ViwaServiceSubTabSpec(ViwaServiceSubTabId.Idle, "Ожидание"),
                     ViwaServiceSubTabSpec(ViwaServiceSubTabId.Window, "Окно"),
                     ViwaServiceSubTabSpec(ViwaServiceSubTabId.Theme, "Тема"),
+                    ViwaServiceSubTabSpec(ViwaServiceSubTabId.Updates, "Обновления"),
                 ),
         ),
     )

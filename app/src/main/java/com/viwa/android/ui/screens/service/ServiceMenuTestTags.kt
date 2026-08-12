@@ -103,6 +103,7 @@ object ServiceMenuTestTags {
             ViwaServiceSubTabId.Idle -> "service_subtab_idle"
             ViwaServiceSubTabId.Window -> "service_subtab_window"
             ViwaServiceSubTabId.Theme -> "service_subtab_theme"
+            ViwaServiceSubTabId.Updates -> "service_subtab_updates"
             ViwaServiceSubTabId.PerformanceGeneral -> "service_subtab_performance_general"
             ViwaServiceSubTabId.Animation -> "service_subtab_animation"
             ViwaServiceSubTabId.MetricsMemory -> "service_subtab_metrics_memory"
