@@ -136,6 +136,7 @@ if ($Serial) { Write-Host "ADB serial: $Serial" }
 
 Invoke-Adb shell pm grant $pkg android.permission.WRITE_SECURE_SETTINGS
 Invoke-Adb shell settings put global policy_control $policyValue
+Invoke-Adb shell cmd package set-home-activity $pkg/.ui.MainActivity
 
 $kiayoApplied = Test-KiayoBoard
 if ($kiayoApplied) {

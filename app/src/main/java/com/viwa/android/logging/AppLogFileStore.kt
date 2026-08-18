@@ -61,7 +61,7 @@ constructor(
 
     fun prepareShipSnapshot(): ShipSnapshot? =
         lock.withLock {
-            val raw = readPendingBytes()
+            val raw = readPendingBytes(MAX_SHIP_BYTES)
             if (raw.isEmpty()) return null
             val lines = raw.toString(Charsets.UTF_8).lines().filter { it.isNotBlank() }
             val periodStart = parseLineTimestamp(lines.firstOrNull()) ?: Instant.now().toString()
@@ -116,23 +116,27 @@ constructor(
     private fun orderedLogFiles(): List<File> =
         listOf(rolled2File, rolled1File, activeFile).filter { it.exists() }
 
-    private fun readPendingBytes(): ByteArray {
+    private fun readPendingBytes(maxBytes: Long): ByteArray {
         val (cursorName, cursorOffset) = readCursor()
         val files = orderedLogFiles()
         if (files.isEmpty()) return byteArrayOf()
         val startIdx = files.indexOfFirst { it.name == cursorName }.let { if (it < 0) 0 else it }
         val out = ByteArrayOutputStream()
         for (i in startIdx until files.size) {
+            if (out.size() >= maxBytes) break
             val file = files[i]
             val from = if (i == startIdx) cursorOffset else 0L
-            val length = file.length() - from
+            val length = minOf(file.length() - from, maxBytes - out.size())
             if (length <= 0) continue
             file.inputStream().use { input ->
                 input.skip(from)
                 copyBytes(input, out, length)
             }
         }
-        return out.toByteArray()
+        val bytes = out.toByteArray()
+        if (bytes.size < maxBytes) return bytes
+        val lastNewline = bytes.lastIndexOf('\n'.code.toByte())
+        return if (lastNewline > 0) bytes.copyOf(lastNewline + 1) else bytes
     }
 
     private fun advanceCursorBy(byteCount: Int) {
@@ -144,7 +148,7 @@ constructor(
             if (remaining <= 0) break
             val file = files[i]
             val from = if (i == startIdx) cursorOffset else 0L
-            val available = (file.length() - from).toInt()
+            val available = (file.length() - from).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             if (available <= 0) continue
             if (remaining >= available) {
                 remaining -= available
@@ -185,12 +189,19 @@ constructor(
 
     private fun truncateActivePrefix(bytesToRemove: Long) {
         if (bytesToRemove <= 0) return
-        val tail = ByteArrayOutputStream()
+        val tmp = File(logDir, "active.tmp")
+        if (tmp.exists()) tmp.delete()
         activeFile.inputStream().use { input ->
             input.skip(bytesToRemove)
-            input.copyTo(tail)
+            tmp.outputStream().use { output -> input.copyTo(output) }
         }
-        activeFile.writeBytes(tail.toByteArray())
+        if (activeFile.exists() && !activeFile.delete()) {
+            activeFile.writeBytes(byteArrayOf())
+        }
+        if (!tmp.renameTo(activeFile)) {
+            tmp.copyTo(activeFile, overwrite = true)
+            tmp.delete()
+        }
     }
 
     private fun readCursor(): Pair<String, Long> {
@@ -240,6 +251,10 @@ constructor(
     }
 
     companion object {
-        private const val MAX_FILE_BYTES = 2L * 1024L * 1024L
+        /** On-device cap per rotating file (3 files: active + rolled-1/2). */
+        internal const val MAX_FILE_BYTES = 1L * 1024L * 1024L * 1024L
+
+        /** Upload chunk so gzip/snapshot stays in RAM; remaining bytes ship on the next cycle. */
+        internal const val MAX_SHIP_BYTES = 2L * 1024L * 1024L
     }
 }

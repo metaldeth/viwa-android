@@ -275,7 +275,7 @@ fun ViwaSubscribePromoCard(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
-                                    text = "Стандартная вода — безлимитно",
+                                    text = "Вода без сиропа безлимитно",
                                     fontSize = (13f * s).sp,
                                     fontFamily = MontserratFamily,
                                     color = palette.subtitle,
@@ -334,7 +334,7 @@ fun ViwaSubscribePromoCard(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
-                                    text = "Вода безлимитно",
+                                    text = "Вода без сиропа безлимитно",
                                     fontSize = (15f * s).sp,
                                     lineHeight = (16f * s).sp,
                                     fontFamily = MontserratFamily,
@@ -389,7 +389,7 @@ fun ViwaSubscribePromoCard(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
-                                    text = "Вода — безлимитно",
+                                    text = "Вода без сиропа безлимитно",
                                     fontSize = (14f * s).sp,
                                     fontFamily = MontserratFamily,
                                     color = palette.subtitle,
@@ -434,7 +434,7 @@ fun ViwaSubscribePromoCard(
                                     )
                                 }
                                 Text(
-                                    text = "Стандартная вода — безлимитно",
+                                    text = "Вода без сиропа безлимитно",
                                     fontSize = (14f * s).sp,
                                     fontFamily = MontserratFamily,
                                     color = palette.subtitle,

@@ -126,6 +126,7 @@ constructor(
         const val HELLO_TIMEOUT_MS = 15_000L
         const val HEARTBEAT_ACK_GRACE_SEC = 5
         const val HEARTBEAT_WATCHDOG_CHECK_INTERVAL_MS = 1_000L
+        const val SHIPPED_WS_LOG_TAG = "MvpTelemetry WS"
     }
 
     fun reportAuthFailure(message: String) {
@@ -226,6 +227,11 @@ constructor(
                                                 if (cont.isActive) cont.resume(Unit) {}
                                                 return@MvpWsClient
                                             }
+                                            logSystem(
+                                                "MVP WS: closed code=$code reason='$reason' " +
+                                                    "gen=$sessionGeneration phase=${fsm.phase} " +
+                                                    "helloReceived=$helloReceived networkDegraded=${!networkValidated}",
+                                            )
                                             when (code) {
                                                 AUTH_CLOSE_CODE, 1008, 1002 -> {
                                                     authFailure = true
@@ -256,6 +262,11 @@ constructor(
                                                 if (cont.isActive) cont.resume(Unit) {}
                                                 return@MvpWsClient
                                             }
+                                            logSystem(
+                                                "MVP WS: socket error gen=$sessionGeneration " +
+                                                    "phase=${fsm.phase} helloReceived=$helloReceived " +
+                                                    "networkDegraded=${!networkValidated}",
+                                            )
                                             if (helloReceived && !authFailure) {
                                                 transitionFsm(TelemetryConnectionPhase.Backoff, "socket error")
                                                 _connectionState.value = ConnectionState.Disconnected()
@@ -876,7 +887,9 @@ constructor(
                         val degradedHint =
                             if (!networkValidated) " networkDegraded=true" else ""
                         logSystem(
-                            "MVP WS: heartbeat ack timeout (${elapsed}ms) gen=$sessionGeneration$degradedHint",
+                            "MVP WS: heartbeat ack timeout elapsedMs=$elapsed timeoutMs=$timeoutMs " +
+                                "intervalSec=$heartbeatIntervalSeconds lastHeartbeatId=$lastHeartbeatMessageId " +
+                                "gen=$sessionGeneration$degradedHint",
                         )
                         transitionFsm(TelemetryConnectionPhase.Backoff, "heartbeat ack timeout")
                         forceClose(client, "heartbeat ack timeout")
@@ -971,6 +984,7 @@ constructor(
             summary = summary,
             payload = summary,
         )
+        Timber.tag(SHIPPED_WS_LOG_TAG).i(summary)
     }
 
     private fun logIn(

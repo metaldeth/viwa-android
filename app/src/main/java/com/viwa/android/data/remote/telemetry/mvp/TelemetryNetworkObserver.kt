@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
 import com.viwa.android.di.AppIoScope
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -26,8 +27,9 @@ constructor(
     @ApplicationContext context: Context,
     @AppIoScope private val appScope: CoroutineScope,
 ) {
+    private val appContext = context.applicationContext
     private val connectivityManager =
-        context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
     private var started = false
     private var debounceJob: Job? = null
@@ -113,7 +115,7 @@ constructor(
             debounceJob?.cancel()
             debounceJob = null
             if (previous) {
-                Timber.i("TelemetryNetworkObserver: validated network lost — degraded signal")
+                Timber.i("TelemetryNetworkObserver: validated network lost — ${describeNetwork()}")
                 onValidatedLost?.invoke()
             }
         }
@@ -125,9 +127,36 @@ constructor(
             appScope.launch {
                 delay(DEBOUNCE_MS)
                 if (!isValidatedAvailable) return@launch
-                Timber.i("TelemetryNetworkObserver: validated network available — reconnect trigger")
+                Timber.i(
+                    "TelemetryNetworkObserver: validated network available — reconnect trigger ${describeNetwork()}",
+                )
                 onValidatedAvailable?.invoke()
             }
+    }
+
+    private fun describeNetwork(): String {
+        val caps =
+            connectivityManager.activeNetwork?.let { connectivityManager.getNetworkCapabilities(it) }
+        val transport =
+            when {
+                caps == null -> "none"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "WIFI"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ETHERNET"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "CELLULAR"
+                else -> "OTHER"
+            }
+        val rssi =
+            if (transport == "WIFI") {
+                runCatching {
+                    @Suppress("DEPRECATION")
+                    (appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager)
+                        ?.connectionInfo
+                        ?.rssi
+                }.getOrNull()
+            } else {
+                null
+            }
+        return "transport=$transport rssi=$rssi"
     }
 
     companion object {

@@ -39,6 +39,7 @@ class ViwaApplication : Application() {
         super.onCreate()
         Timber.plant(Timber.DebugTree())
         Timber.plant(RotatingFileTimberTree(appLogFileStore))
+        installUncaughtExceptionLogging()
         appScope.launch {
             val devices = serialDiscovery.availableDevices()
             Timber.tag("ViwaSerial").i(
@@ -49,5 +50,13 @@ class ViwaApplication : Application() {
         }
         aqsiPaymentStartupInitializer.start()
         scannerStartupInitializer.start()
+    }
+
+    private fun installUncaughtExceptionLogging() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Timber.e(throwable, "Uncaught exception thread=%s", thread.name)
+            previous?.uncaughtException(thread, throwable)
+        }
     }
 }

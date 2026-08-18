@@ -2,6 +2,7 @@ package com.viwa.android.logging
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -54,5 +55,21 @@ class AppLogFileStoreTest {
 
         // then
         assertTrue(store.hasPendingContent())
+    }
+
+    @Test
+    fun maxFileBytesIsOneGigabyte() {
+        assertEquals(1L * 1024L * 1024L * 1024L, AppLogFileStore.MAX_FILE_BYTES)
+    }
+
+    @Test
+    fun prepareShipSnapshot_capsChunkSize() {
+        val line = "2026-08-18T10:00:00Z I/Test: " + "x".repeat(8_000)
+        repeat(400) { store.appendLine(line) }
+
+        val snapshot = store.prepareShipSnapshot()
+        assertTrue(snapshot != null)
+        assertTrue(snapshot!!.shippedByteCount > 0)
+        assertTrue(snapshot.shippedByteCount <= AppLogFileStore.MAX_SHIP_BYTES)
     }
 }

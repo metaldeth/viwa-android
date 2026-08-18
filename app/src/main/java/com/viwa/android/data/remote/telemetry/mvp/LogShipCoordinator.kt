@@ -77,13 +77,17 @@ constructor(
     }
 
     fun onDisconnect() {
-        syncSessionGeneration++
         helloJob?.cancel()
         helloJob = null
         periodicJob?.cancel()
         periodicJob = null
         backoffAttempt = 0
-        persistedCapability = null
+        appScope.launch {
+            runCatching { shipLogs() }
+                .onFailure { Timber.tag(TAG).w(it, "log ship on disconnect failed") }
+            persistedCapability = null
+            syncSessionGeneration++
+        }
     }
 
     private fun schedulePeriodicSync(generation: Long) {

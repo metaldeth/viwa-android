@@ -23,6 +23,7 @@ class TelemetryNetworkObserverTest {
             val connectivityManager = mockk<ConnectivityManager>(relaxed = true)
             every { context.applicationContext } returns context
             every { context.getSystemService(Context.CONNECTIVITY_SERVICE) } returns connectivityManager
+            every { context.getSystemService(Context.WIFI_SERVICE) } returns null
             var availableCount = 0
             val observer = TelemetryNetworkObserver(context, this)
             observer.onValidatedAvailable = { availableCount += 1 }
@@ -43,6 +44,7 @@ class TelemetryNetworkObserverTest {
             val connectivityManager = mockk<ConnectivityManager>(relaxed = true)
             every { context.applicationContext } returns context
             every { context.getSystemService(Context.CONNECTIVITY_SERVICE) } returns connectivityManager
+            every { context.getSystemService(Context.WIFI_SERVICE) } returns null
             var lostCount = 0
             val observer = TelemetryNetworkObserver(context, this)
             observer.applyValidatedStateForTests(validated = true)
@@ -63,6 +65,7 @@ class TelemetryNetworkObserverTest {
         val connectivityManager = mockk<ConnectivityManager>(relaxed = true)
         every { context.applicationContext } returns context
         every { context.getSystemService(Context.CONNECTIVITY_SERVICE) } returns connectivityManager
+        every { context.getSystemService(Context.WIFI_SERVICE) } returns null
         val observer =
             TelemetryNetworkObserver(
                 context,
