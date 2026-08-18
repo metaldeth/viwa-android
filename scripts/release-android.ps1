@@ -164,11 +164,14 @@ $VersionCode = $UploadJson.versionCode
 if ($Publish) {
     Write-Step "Publishing release $ReleaseId"
     $PublishUrl = "$TelemetryApiUrl/api/v1/app-releases/$ReleaseId/publish"
-    $PublishBody = '{"rolloutPercent":100}'
+    # PowerShell mangles curl -d JSON quotes; write a BOM-less file instead.
+    $PublishBodyFile = Join-Path $env:TEMP ("viwa-publish-" + $ReleaseId + ".json")
+    [System.IO.File]::WriteAllText($PublishBodyFile, '{"rolloutPercent":100}', [System.Text.UTF8Encoding]::new($false))
     $PublishJsonRaw = & curl.exe -sS -X POST $PublishUrl `
         -H "Authorization: Bearer $UploadToken" `
-        -H 'Content-Type: application/json' `
-        -d $PublishBody
+        -H "Content-Type: application/json" `
+        --data-binary "@$PublishBodyFile"
+    Remove-Item -LiteralPath $PublishBodyFile -ErrorAction SilentlyContinue
     if ($LASTEXITCODE -ne 0) {
         throw "Telemetry publish failed with exit code $LASTEXITCODE"
     }

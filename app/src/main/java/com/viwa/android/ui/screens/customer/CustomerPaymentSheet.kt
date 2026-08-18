@@ -697,23 +697,48 @@ private fun CombinedDrinkPaymentOverlay(
                     }
                 }
             } else {
-                TextButton(
-                    onClick = onCancel,
+                CombinedPaymentCancelButton(
                     enabled = cancelEnabled,
+                    onClick = onCancel,
                     modifier =
                         Modifier
                             .align(Alignment.TopEnd)
-                            .padding(top = 20.dp, end = 28.dp),
-                ) {
-                    Text(
-                        text = "Отмена",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = paymentColors.cancelLabel.copy(alpha = 0.85f),
-                    )
-                }
+                            .padding(top = 16.dp, end = 20.dp),
+                )
             }
         }
+    }
+}
+
+/** Крупная «Отмена» на тёмном combined-оверлее: читаема с киоска, большая зона нажатия. */
+@Composable
+private fun CombinedPaymentCancelButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(20.dp)
+    Box(
+        modifier =
+            modifier
+                .widthIn(min = 220.dp)
+                .height(80.dp)
+                .clip(shape)
+                .background(Color.White.copy(alpha = 0.16f))
+                .border(2.dp, Color.White, shape)
+                .clickable(enabled = enabled, onClick = onClick)
+                .semantics { contentDescription = "Отмена оплаты" }
+                .padding(horizontal = 28.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "Отмена",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 32.sp,
+            lineHeight = 38.sp,
+            color = Color.White.copy(alpha = if (enabled) 1f else 0.45f),
+        )
     }
 }
 
