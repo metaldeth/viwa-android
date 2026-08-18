@@ -271,16 +271,17 @@ constructor(
                         waterPourStarted || holdPourRequestUuid != null || _state.value.isWaterPourActive
                     stopSubscriptionExitTimer()
                     _state.update { st ->
-                        st.copy(
-                            scannedSubscriptionClientId = null,
-                            isSubscriptionActive = false,
-                            subscriptionVolumeMl = 0,
-                            subscriptionMaxVolumeMl = 0,
-                            subscriptionEndDate = null,
-                            invalidSubscriptionCardVisible = false,
-                            waterOption = DrinkWaterOption.STANDARD,
-                            flowWaterPourType = FlowWaterPourType.Filtered,
-                            subscriptionExitRemainingSeconds = 0,
+                        applyPlainWaterPreferenceIfNoDrink(
+                            st.copy(
+                                scannedSubscriptionClientId = null,
+                                isSubscriptionActive = false,
+                                subscriptionVolumeMl = 0,
+                                subscriptionMaxVolumeMl = 0,
+                                subscriptionEndDate = null,
+                                invalidSubscriptionCardVisible = false,
+                                subscriptionExitRemainingSeconds = 0,
+                            ),
+                            preferredPourType = FlowWaterPourType.Filtered,
                         )
                     }
                     reactToSubscriptionEntitlementLoss(pourSessionActive)
@@ -300,15 +301,16 @@ constructor(
                         coerceEntitlement = true,
                     )
                 _state.update {
-                    it.copy(
-                        scannedSubscriptionClientId = info.clientId,
-                        isSubscriptionActive = subscriptionActive,
-                        subscriptionVolumeMl = info.volumeMl,
-                        subscriptionMaxVolumeMl = info.maxVolumeMl,
-                        subscriptionEndDate = info.subscribeDateEnd,
-                        flowWaterPourType = preferredPourType,
-                        waterOption = preferredPourType.toDrinkWaterOption(),
-                        invalidSubscriptionCardVisible = false,
+                    applyPlainWaterPreferenceIfNoDrink(
+                        it.copy(
+                            scannedSubscriptionClientId = info.clientId,
+                            isSubscriptionActive = subscriptionActive,
+                            subscriptionVolumeMl = info.volumeMl,
+                            subscriptionMaxVolumeMl = info.maxVolumeMl,
+                            subscriptionEndDate = info.subscribeDateEnd,
+                            invalidSubscriptionCardVisible = false,
+                        ),
+                        preferredPourType = preferredPourType,
                     )
                 }
                 if (previousClientId != info.clientId) {
@@ -344,10 +346,9 @@ constructor(
                         coerceEntitlement = false,
                     )
                 _state.update {
-                    it.copy(
-                        invalidSubscriptionCardVisible = false,
-                        waterOption = pourType.toDrinkWaterOption(),
-                        flowWaterPourType = pourType,
+                    applyPlainWaterPreferenceIfNoDrink(
+                        it.copy(invalidSubscriptionCardVisible = false),
+                        preferredPourType = pourType,
                     )
                 }
             }
@@ -502,6 +503,21 @@ constructor(
     fun selectContainerByNumber(containerNumber: Int) {
         val container = _state.value.containers.firstOrNull { it.containerNumber == containerNumber } ?: return
         selectContainer(container)
+    }
+
+    /**
+     * Предпочтение простой воды (карта/подписка) действует только без выбранного напитка.
+     * Если напиток уже выбран — не сбрасывать его тип воды на стандарт/кэш клиента.
+     */
+    private fun applyPlainWaterPreferenceIfNoDrink(
+        state: DrinkListUiState,
+        preferredPourType: FlowWaterPourType,
+    ): DrinkListUiState {
+        if (state.activeContainer != null) return state
+        return state.copy(
+            waterOption = preferredPourType.toDrinkWaterOption(),
+            flowWaterPourType = preferredPourType,
+        )
     }
 
     fun setVolume(ml: Int) {

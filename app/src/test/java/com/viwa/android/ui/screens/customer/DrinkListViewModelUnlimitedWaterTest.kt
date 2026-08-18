@@ -502,4 +502,48 @@ class DrinkListViewModelUnlimitedWaterTest {
         assertEquals(DrinkWaterOption.SPARK, vm.state.value.waterOption)
         assertEquals(FlowWaterPourType.Sparkling, vm.state.value.flowWaterPourType)
     }
+
+    @Test
+    fun loyaltyCardScan_keepsWaterOptionWhenDrinkAlreadySelected() = runBlocking {
+        val cardScans = MutableSharedFlow<String>(extraBufferCapacity = 16)
+        val subscribeInfo = MutableStateFlow<SubscribeInformationState?>(null)
+        val telemetry = DrinkListViewModelTestSupport.createTestTelemetry()
+        every { telemetry.connectionState } returns
+            MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
+        every { telemetry.loyaltyCardClientScans } returns cardScans.asSharedFlow()
+        every { telemetry.subscribeInfo } returns subscribeInfo.asStateFlow()
+        every { telemetry.invalidLoyaltyCardScans } returns
+            MutableSharedFlow<Unit>(extraBufferCapacity = 16).asSharedFlow()
+        val vm = DrinkListViewModelTestSupport.createViewModel(telemetryService = telemetry)
+        vm.setUiStateForUnitTests(
+            DrinkListUiState(
+                activeContainer = DrinkListViewModelTestSupport.sampleContainer(),
+                selectedVolumeMl = 300,
+                waterOption = DrinkWaterOption.SPARK,
+                flowWaterPourType = FlowWaterPourType.Sparkling,
+            ),
+        )
+        flushMain(24)
+
+        cardScans.emit("client-1")
+        flushMain(24)
+        assertEquals(DrinkWaterOption.SPARK, vm.state.value.waterOption)
+        assertEquals(FlowWaterPourType.Sparkling, vm.state.value.flowWaterPourType)
+        assertEquals(2, vm.state.value.activeContainer?.containerNumber)
+
+        subscribeInfo.value =
+            SubscribeInformationState(
+                isStatusRequest = true,
+                isActiveSubscribe = true,
+                clientId = "client-1",
+                subscribeDateEnd = "2026-12-31T00:00:00.000Z",
+                volumeMl = 500,
+                maxVolumeMl = 2000,
+                lastPlainWaterType = "FILTERED",
+            )
+        flushMain(24)
+        assertEquals(DrinkWaterOption.SPARK, vm.state.value.waterOption)
+        assertEquals(FlowWaterPourType.Sparkling, vm.state.value.flowWaterPourType)
+        assertEquals("client-1", vm.state.value.scannedSubscriptionClientId)
+    }
 }
