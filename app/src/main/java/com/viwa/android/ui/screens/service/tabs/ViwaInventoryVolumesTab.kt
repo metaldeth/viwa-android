@@ -4,23 +4,29 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,8 +34,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.viwa.android.domain.inventory.InventoryCellRecipeSupport
@@ -44,10 +50,14 @@ import com.viwa.android.domain.model.CellVolumeStatus
 import com.viwa.android.domain.model.CellVolumeUpdate
 import com.viwa.android.domain.model.MvpInventoryTableRow
 import com.viwa.android.domain.model.TelemetryProduct
+import com.viwa.android.ui.screens.service.LocalServiceKeyboardHost
+import com.viwa.android.ui.screens.service.ServiceKeyboardBottomPanel
+import com.viwa.android.ui.screens.service.ServiceKeyboardHostController
 import com.viwa.android.ui.screens.service.ServiceMenuTestTags
 import com.viwa.android.ui.screens.service.ServiceViewModel
 import com.viwa.android.ui.screens.service.SettingsColumn
 import com.viwa.android.ui.screens.service.SettingsTextField
+import com.viwa.android.ui.system.DialogWindowImmersiveSideEffect
 
 @Composable
 fun ViwaInventoryVolumesTab(
@@ -291,170 +301,214 @@ private fun ManagedInventoryRecipeDialog(
         return
     }
 
-    AlertDialog(
+    val dialogKeyboard = remember { ServiceKeyboardHostController() }
+    LaunchedEffect(editMode) {
+        if (!editMode) {
+            dialogKeyboard.dismiss()
+        }
+    }
+
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text("Рецепт · ячейка ${row.cellNumber}") },
-        text = {
-            Column(
-                Modifier
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState())
-                    .testTag(ServiceMenuTestTags.INVENTORY_RECIPE_DIALOG),
-            ) {
-                Text(row.productName ?: "—", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                currentPanel.driftBadge?.let { badge ->
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        DialogWindowImmersiveSideEffect()
+        CompositionLocalProvider(LocalServiceKeyboardHost provides dialogKeyboard) {
+            Surface(modifier = Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize().padding(16.dp)) {
                     Text(
-                        InventoryManagedRecipeSupport.driftBadgeLabel(badge) ?: "",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = driftBadgeColor(badge),
-                        modifier = Modifier.testTag(ServiceMenuTestTags.INVENTORY_RECIPE_DRIFT_BADGE),
+                        "Рецепт · ячейка ${row.cellNumber}",
+                        style = MaterialTheme.typography.titleLarge,
                     )
-                    Spacer(Modifier.height(4.dp))
-                }
-                currentPanel.baseVersionLabel?.let { label ->
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.testTag(ServiceMenuTestTags.INVENTORY_RECIPE_BASE_VERSION),
-                    )
-                }
-                currentPanel.syncStatusLabel?.let { sync ->
-                    Text(
-                        sync,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.testTag(ServiceMenuTestTags.INVENTORY_RECIPE_SYNC_STATUS),
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                val effective = currentPanel.effective
-                if (effective != null && effective.isRecipeComplete) {
-                    Text("Эффективный рецепт", style = MaterialTheme.typography.labelLarge)
-                    Text(
-                        InventoryManagedRecipeSupport.formatEffectiveLine(effective, 300, currentPanel.conversionFactor),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        InventoryManagedRecipeSupport.formatEffectiveLine(effective, 700, currentPanel.conversionFactor),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                } else {
-                    Text(
-                        "Эффективный рецепт не инициализирован",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                currentPanel.assignmentBase?.let { base ->
-                    InventoryManagedRecipeSupport.formatBaseTripleLine(base)?.let { baseLine ->
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .testTag(ServiceMenuTestTags.INVENTORY_RECIPE_DIALOG),
+                    ) {
+                        Text(row.productName ?: "—", style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.height(8.dp))
-                        Text("База продукта", style = MaterialTheme.typography.labelLarge)
-                        Text(baseLine, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                Text(
-                    "CF=${"%.4f".format(currentPanel.conversionFactor)} (отдельно от drift)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (editMode) {
-                    Spacer(Modifier.height(12.dp))
-                    HorizontalDivider()
-                    Spacer(Modifier.height(8.dp))
-                    Text("Редактирование (integer/deci-ml)", style = MaterialTheme.typography.labelMedium)
-                    SettingsTextField(
-                        label = "baseDrinkVolumeMl",
-                        value = editDraft.baseDrinkVolumeMl,
-                        onValueChange = { editDraft = editDraft.copy(baseDrinkVolumeMl = it) },
-                        keyboardType = KeyboardType.Number,
-                        modifier = Modifier.fillMaxWidth(),
-                        fieldKey = "recipe_edit_base_${row.cellNumber}",
-                    )
-                    SettingsTextField(
-                        label = "waterDeciMl",
-                        value = editDraft.waterDeciMl,
-                        onValueChange = { editDraft = editDraft.copy(waterDeciMl = it) },
-                        keyboardType = KeyboardType.Number,
-                        modifier = Modifier.fillMaxWidth(),
-                        fieldKey = "recipe_edit_water_${row.cellNumber}",
-                    )
-                    SettingsTextField(
-                        label = "productDeciMl",
-                        value = editDraft.productDeciMl,
-                        onValueChange = { editDraft = editDraft.copy(productDeciMl = it) },
-                        keyboardType = KeyboardType.Number,
-                        modifier = Modifier.fillMaxWidth(),
-                        fieldKey = "recipe_edit_product_${row.cellNumber}",
-                    )
-                    editError?.let { err ->
-                        Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                dialogBanner?.let { msg ->
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        msg,
-                        color = if (dialogBannerError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (editMode) {
-                    Button(
-                        onClick = {
-                            val validation = InventoryManagedRecipeSupport.validateEditDraft(editDraft)
-                            if (!validation.valid) {
-                                editError = validation.errorMessage
-                            } else {
-                                editError = null
-                                showEditConfirm = true
+                        currentPanel.driftBadge?.let { badge ->
+                            Text(
+                                InventoryManagedRecipeSupport.driftBadgeLabel(badge) ?: "",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = driftBadgeColor(badge),
+                                modifier = Modifier.testTag(ServiceMenuTestTags.INVENTORY_RECIPE_DRIFT_BADGE),
+                            )
+                            Spacer(Modifier.height(4.dp))
+                        }
+                        currentPanel.baseVersionLabel?.let { label ->
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.testTag(ServiceMenuTestTags.INVENTORY_RECIPE_BASE_VERSION),
+                            )
+                        }
+                        currentPanel.syncStatusLabel?.let { sync ->
+                            Text(
+                                sync,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.testTag(ServiceMenuTestTags.INVENTORY_RECIPE_SYNC_STATUS),
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        val effective = currentPanel.effective
+                        if (effective != null && effective.isRecipeComplete) {
+                            Text("Эффективный рецепт", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                InventoryManagedRecipeSupport.formatEffectiveLine(
+                                    effective,
+                                    300,
+                                    currentPanel.conversionFactor,
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                InventoryManagedRecipeSupport.formatEffectiveLine(
+                                    effective,
+                                    700,
+                                    currentPanel.conversionFactor,
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        } else {
+                            Text(
+                                "Эффективный рецепт не инициализирован",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        currentPanel.assignmentBase?.let { base ->
+                            InventoryManagedRecipeSupport.formatBaseTripleLine(base)?.let { baseLine ->
+                                Spacer(Modifier.height(8.dp))
+                                Text("База продукта", style = MaterialTheme.typography.labelLarge)
+                                Text(baseLine, style = MaterialTheme.typography.bodySmall)
                             }
-                        },
-                        enabled = currentPanel.canEdit,
-                        modifier = Modifier.testTag(ServiceMenuTestTags.INVENTORY_RECIPE_EDIT_SAVE),
-                    ) {
-                        Text("Сохранить")
+                        }
+                        Text(
+                            "CF=${"%.4f".format(currentPanel.conversionFactor)} (отдельно от drift)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        dialogBanner?.let { msg ->
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                msg,
+                                color =
+                                    if (dialogBannerError) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
-                    OutlinedButton(onClick = { editMode = false }) {
-                        Text("Отмена")
+                    if (editMode) {
+                        HorizontalDivider()
+                        Spacer(Modifier.height(8.dp))
+                        Text("Редактирование (integer/deci-ml)", style = MaterialTheme.typography.labelMedium)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            SettingsTextField(
+                                label = "baseDrinkVolumeMl",
+                                value = editDraft.baseDrinkVolumeMl,
+                                onValueChange = { editDraft = editDraft.copy(baseDrinkVolumeMl = it) },
+                                keyboardType = KeyboardType.Number,
+                                modifier = Modifier.weight(1f),
+                                fieldKey = "recipe_edit_base_${row.cellNumber}",
+                            )
+                            SettingsTextField(
+                                label = "waterDeciMl",
+                                value = editDraft.waterDeciMl,
+                                onValueChange = { editDraft = editDraft.copy(waterDeciMl = it) },
+                                keyboardType = KeyboardType.Number,
+                                modifier = Modifier.weight(1f),
+                                fieldKey = "recipe_edit_water_${row.cellNumber}",
+                            )
+                            SettingsTextField(
+                                label = "productDeciMl",
+                                value = editDraft.productDeciMl,
+                                onValueChange = { editDraft = editDraft.copy(productDeciMl = it) },
+                                keyboardType = KeyboardType.Number,
+                                modifier = Modifier.weight(1f),
+                                fieldKey = "recipe_edit_product_${row.cellNumber}",
+                            )
+                        }
+                        editError?.let { err ->
+                            Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
-                } else {
-                    OutlinedButton(
-                        onClick = {
-                            val triple = currentPanel.effective?.triple
-                            editDraft =
-                                if (triple != null) {
-                                    InventoryManagedRecipeSupport.EditDraft(
-                                        baseDrinkVolumeMl = triple.baseDrinkVolumeMl.toString(),
-                                        waterDeciMl = triple.waterDeciMl.toString(),
-                                        productDeciMl = triple.productDeciMl.toString(),
-                                    )
-                                } else {
-                                    InventoryManagedRecipeSupport.EditDraft("", "", "")
-                                }
-                            editMode = true
-                        },
-                        enabled = currentPanel.canEdit,
-                        modifier = Modifier.testTag(ServiceMenuTestTags.INVENTORY_RECIPE_EDIT_BUTTON),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("Изменить")
+                        if (editMode) {
+                            Button(
+                                onClick = {
+                                    val validation = InventoryManagedRecipeSupport.validateEditDraft(editDraft)
+                                    if (!validation.valid) {
+                                        editError = validation.errorMessage
+                                    } else {
+                                        editError = null
+                                        showEditConfirm = true
+                                    }
+                                },
+                                enabled = currentPanel.canEdit,
+                                modifier = Modifier.testTag(ServiceMenuTestTags.INVENTORY_RECIPE_EDIT_SAVE),
+                            ) {
+                                Text("Сохранить")
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    dialogKeyboard.dismiss()
+                                    editMode = false
+                                },
+                            ) {
+                                Text("Отмена")
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = {
+                                    val triple = currentPanel.effective?.triple
+                                    editDraft =
+                                        if (triple != null) {
+                                            InventoryManagedRecipeSupport.EditDraft(
+                                                baseDrinkVolumeMl = triple.baseDrinkVolumeMl.toString(),
+                                                waterDeciMl = triple.waterDeciMl.toString(),
+                                                productDeciMl = triple.productDeciMl.toString(),
+                                            )
+                                        } else {
+                                            InventoryManagedRecipeSupport.EditDraft("", "", "")
+                                        }
+                                    editMode = true
+                                },
+                                enabled = currentPanel.canEdit,
+                                modifier = Modifier.testTag(ServiceMenuTestTags.INVENTORY_RECIPE_EDIT_BUTTON),
+                            ) {
+                                Text("Изменить")
+                            }
+                            OutlinedButton(
+                                onClick = { showResetConfirm = true },
+                                enabled = currentPanel.canReset,
+                                modifier = Modifier.testTag(ServiceMenuTestTags.INVENTORY_RECIPE_RESET_BUTTON),
+                            ) {
+                                Text("Сброс")
+                            }
+                        }
+                        TextButton(onClick = onDismiss) { Text("Закрыть") }
                     }
-                    OutlinedButton(
-                        onClick = { showResetConfirm = true },
-                        enabled = currentPanel.canReset,
-                        modifier = Modifier.testTag(ServiceMenuTestTags.INVENTORY_RECIPE_RESET_BUTTON),
-                    ) {
-                        Text("Сброс")
+                    if (editMode) {
+                        ServiceKeyboardBottomPanel(dialogKeyboard)
                     }
                 }
-                TextButton(onClick = onDismiss) { Text("Закрыть") }
             }
-        },
-    )
+        }
+    }
 
     if (showEditConfirm) {
         AlertDialog(

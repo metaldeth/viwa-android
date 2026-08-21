@@ -134,6 +134,46 @@ class DrinkListViewModelTest {
         }
 
     @Test
+    fun waterPourHold_doesNotRestartExitTimerOnScreenTouch() =
+        runBlocking {
+            val vm = DrinkListViewModelTestSupport.createViewModel()
+            flushMain(24)
+            vm.setUiStateForUnitTests(
+                DrinkListUiState(
+                    scannedSubscriptionClientId = "660e8400-e29b-41d4-a716-446655440010",
+                ),
+            )
+            vm.resetSubscriptionExitTimer()
+            assertTrue(vm.isSubscriptionExitTimerRunningForUnitTests())
+
+            vm.waterPourPointerDown()
+            assertFalse(vm.isSubscriptionExitTimerRunningForUnitTests())
+            vm.resetSubscriptionExitTimer()
+            assertFalse(vm.isSubscriptionExitTimerRunningForUnitTests())
+            assertEquals("660e8400-e29b-41d4-a716-446655440010", vm.state.value.scannedSubscriptionClientId)
+            assertEquals(10, vm.state.value.subscriptionExitRemainingSeconds)
+
+            vm.waterPourPointerUp()
+            assertTrue(vm.isSubscriptionExitTimerRunningForUnitTests())
+        }
+
+    @Test
+    fun resetSubscriptionExitTimer_skippedDuringActivePourSession() =
+        runBlocking {
+            val vm = DrinkListViewModelTestSupport.createViewModel()
+            flushMain(24)
+            vm.setUiStateForUnitTests(
+                DrinkListUiState(
+                    scannedSubscriptionClientId = "660e8400-e29b-41d4-a716-446655440010",
+                ),
+            )
+            vm.markWaterPourActiveForUnitTests()
+            vm.resetSubscriptionExitTimer()
+            assertFalse(vm.isSubscriptionExitTimerRunningForUnitTests())
+            assertEquals("660e8400-e29b-41d4-a716-446655440010", vm.state.value.scannedSubscriptionClientId)
+        }
+
+    @Test
     fun activeEntitlement_allowsPrimaryPourWithoutPaymentSheet() =
         runBlocking {
             val vm = DrinkListViewModelTestSupport.createViewModel()

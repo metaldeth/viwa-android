@@ -213,6 +213,7 @@ constructor(
     private var waterPourMaxHoldJob: Job? = null
     private var waterPourLimitHideJob: Job? = null
     private var waterPourStarted: Boolean = false
+    private var subscriptionExitPausedForPour: Boolean = false
     private var holdPourRequestUuid: String? = null
     private var pendingSubscriptionPourRequestUuid: String? = null
     private val paymentClearingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -668,6 +669,7 @@ constructor(
                     )
                 }.onFailure { Timber.w(it, "waterPour stop (cancel selection)") }
                 abortActiveWaterPour(finalizeTelemetry = true, sendHardwareStop = false)
+                resumeSubscriptionExitTimerAfterWaterPour()
             }
         } else {
             viewModelScope.launch {
@@ -677,11 +679,15 @@ constructor(
             _state.update {
                 it.copy(isWaterPourActive = false, waterPourLimitBanner = false, waterPourError = null)
             }
+            resumeSubscriptionExitTimerAfterWaterPour()
         }
     }
 
     private fun isWaterPourSessionActive(): Boolean =
-        waterPourStarted || holdPourRequestUuid != null || _state.value.isWaterPourActive
+        waterPourStarted ||
+            holdPourRequestUuid != null ||
+            _state.value.isWaterPourActive ||
+            waterPourDebounceJob?.isActive == true
 
     /**
      * Stops an in-flight hold pour once. Callers that already sent hardware stop set [sendHardwareStop] false.
@@ -876,17 +882,20 @@ constructor(
 
     /** Сброс idle-таймера выхода из подписки при любом касании экрана. */
     fun resetSubscriptionExitTimer() {
+        if (subscriptionExitPausedForPour || isWaterPourSessionActive()) return
         if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) return
         startSubscriptionExitTimer()
     }
 
     private fun pauseSubscriptionExitTimerForWaterPour() {
+        subscriptionExitPausedForPour = true
         if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) return
         stopSubscriptionExitTimer()
         _state.update { it.copy(subscriptionExitRemainingSeconds = SUBSCRIPTION_EXIT_TIMEOUT_SECONDS) }
     }
 
     private fun resumeSubscriptionExitTimerAfterWaterPour() {
+        subscriptionExitPausedForPour = false
         if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) return
         startSubscriptionExitTimer()
     }
@@ -897,6 +906,7 @@ constructor(
     }
 
     private fun startSubscriptionExitTimer() {
+        if (subscriptionExitPausedForPour || isWaterPourSessionActive()) return
         stopSubscriptionExitTimer()
         if (_state.value.scannedSubscriptionClientId.isNullOrBlank()) {
             _state.update { it.copy(subscriptionExitRemainingSeconds = 0) }
@@ -929,9 +939,11 @@ constructor(
         !s.scannedSubscriptionClientId.isNullOrBlank() &&
             !s.paymentSheetVisible &&
             !s.invalidSubscriptionCardVisible &&
-            !s.isWaterPourActive
+            !subscriptionExitPausedForPour &&
+            !isWaterPourSessionActive()
 
     private suspend fun exitSubscriptionDueToInactivity() {
+        if (subscriptionExitPausedForPour || isWaterPourSessionActive()) return
         clearSelectionInternal()
         dismissSubscriptionCard()
     }
