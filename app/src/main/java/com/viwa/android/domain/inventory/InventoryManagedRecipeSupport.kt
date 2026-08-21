@@ -30,8 +30,8 @@ object InventoryManagedRecipeSupport {
 
     data class EditDraft(
         val baseDrinkVolumeMl: String,
-        val waterDeciMl: String,
-        val productDeciMl: String,
+        val waterMl: String,
+        val productMl: String,
     )
 
     data class EditValidationResult(
@@ -171,18 +171,24 @@ object InventoryManagedRecipeSupport {
         }
     }
 
+    fun formatDraftMl(deciMl: Int): String {
+        val ml = RecipeCanonical.deciMlToMl(deciMl)
+        val asInt = ml.toInt()
+        return if (ml == asInt.toDouble()) asInt.toString() else formatMl(ml)
+    }
+
     fun validateEditDraft(draft: EditDraft): EditValidationResult {
-        val base = draft.baseDrinkVolumeMl.trim().toIntOrNull()
-        val water = draft.waterDeciMl.trim().toIntOrNull()
-        val product = draft.productDeciMl.trim().toIntOrNull()
-        if (base == null || water == null || product == null) {
-            return EditValidationResult(false, null, "Введите целые значения для объёма и deci-ml")
+        val base = draft.baseDrinkVolumeMl.trim().replace(',', '.').toIntOrNull()
+        val waterMl = draft.waterMl.trim().replace(',', '.').toDoubleOrNull()
+        val productMl = draft.productMl.trim().replace(',', '.').toDoubleOrNull()
+        if (base == null || waterMl == null || productMl == null) {
+            return EditValidationResult(false, null, "Введите объёмы в миллилитрах")
         }
         val triple =
             com.viwa.android.domain.recipe.RecipeCanonicalTriple(
                 baseDrinkVolumeMl = base,
-                waterDeciMl = water,
-                productDeciMl = product,
+                waterDeciMl = RecipeCanonical.mlToDeciMl(waterMl),
+                productDeciMl = RecipeCanonical.mlToDeciMl(productMl),
             )
         val validation = RecipeCanonical.validate(triple)
         if (!validation.valid) {

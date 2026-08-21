@@ -409,13 +409,13 @@ private fun ManagedInventoryRecipeDialog(
                     if (editMode) {
                         HorizontalDivider()
                         Spacer(Modifier.height(8.dp))
-                        Text("Редактирование (integer/deci-ml)", style = MaterialTheme.typography.labelMedium)
+                        Text("Редактирование, мл", style = MaterialTheme.typography.labelMedium)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             SettingsTextField(
-                                label = "baseDrinkVolumeMl",
+                                label = "Объём, мл",
                                 value = editDraft.baseDrinkVolumeMl,
                                 onValueChange = { editDraft = editDraft.copy(baseDrinkVolumeMl = it) },
                                 keyboardType = KeyboardType.Number,
@@ -423,18 +423,18 @@ private fun ManagedInventoryRecipeDialog(
                                 fieldKey = "recipe_edit_base_${row.cellNumber}",
                             )
                             SettingsTextField(
-                                label = "waterDeciMl",
-                                value = editDraft.waterDeciMl,
-                                onValueChange = { editDraft = editDraft.copy(waterDeciMl = it) },
-                                keyboardType = KeyboardType.Number,
+                                label = "Вода, мл",
+                                value = editDraft.waterMl,
+                                onValueChange = { editDraft = editDraft.copy(waterMl = it) },
+                                keyboardType = KeyboardType.Decimal,
                                 modifier = Modifier.weight(1f),
                                 fieldKey = "recipe_edit_water_${row.cellNumber}",
                             )
                             SettingsTextField(
-                                label = "productDeciMl",
-                                value = editDraft.productDeciMl,
-                                onValueChange = { editDraft = editDraft.copy(productDeciMl = it) },
-                                keyboardType = KeyboardType.Number,
+                                label = "Сироп, мл",
+                                value = editDraft.productMl,
+                                onValueChange = { editDraft = editDraft.copy(productMl = it) },
+                                keyboardType = KeyboardType.Decimal,
                                 modifier = Modifier.weight(1f),
                                 fieldKey = "recipe_edit_product_${row.cellNumber}",
                             )
@@ -479,8 +479,8 @@ private fun ManagedInventoryRecipeDialog(
                                         if (triple != null) {
                                             InventoryManagedRecipeSupport.EditDraft(
                                                 baseDrinkVolumeMl = triple.baseDrinkVolumeMl.toString(),
-                                                waterDeciMl = triple.waterDeciMl.toString(),
-                                                productDeciMl = triple.productDeciMl.toString(),
+                                                waterMl = InventoryManagedRecipeSupport.formatDraftMl(triple.waterDeciMl),
+                                                productMl = InventoryManagedRecipeSupport.formatDraftMl(triple.productDeciMl),
                                             )
                                         } else {
                                             InventoryManagedRecipeSupport.EditDraft("", "", "")

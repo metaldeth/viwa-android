@@ -125,18 +125,20 @@ class InventoryManagedRecipeSupportTest {
     fun `edit draft rejects invalid sum invariant`() {
         val result =
             InventoryManagedRecipeSupport.validateEditDraft(
-                InventoryManagedRecipeSupport.EditDraft("300", "2700", "301"),
+                InventoryManagedRecipeSupport.EditDraft("300", "270", "30.1"),
             )
         assertFalse(result.valid)
     }
 
     @Test
-    fun `edit draft accepts valid canonical triple`() {
+    fun `edit draft accepts milliliters and stores deci-ml`() {
         val result =
             InventoryManagedRecipeSupport.validateEditDraft(
-                InventoryManagedRecipeSupport.EditDraft("300", "2700", "300"),
+                InventoryManagedRecipeSupport.EditDraft("300", "270", "30"),
             )
         assertTrue(result.valid)
         assertEquals(300, result.triple!!.baseDrinkVolumeMl)
+        assertEquals(2700, result.triple!!.waterDeciMl)
+        assertEquals(300, result.triple!!.productDeciMl)
     }
 }
