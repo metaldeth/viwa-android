@@ -91,11 +91,13 @@ internal data class CellFullWire(
 @Serializable
 internal data class MachineCalibrationWire(
     val waterPumpTenths: Int,
+    val sodaPumpTenths: Int,
 )
 
 @Serializable
 internal data class MachineCalibrationReportPayloadWire(
     val waterPumpTenths: Int,
+    val sodaPumpTenths: Int,
 )
 
 @Serializable
@@ -182,10 +184,16 @@ constructor() {
         )
     }
 
-    fun encodeMachineCalibrationReportPayload(waterPumpTenths: Int): String =
+    fun encodeMachineCalibrationReportPayload(
+        waterPumpTenths: Int,
+        sodaPumpTenths: Int,
+    ): String =
         json.encodeToString(
             MachineCalibrationReportPayloadWire.serializer(),
-            MachineCalibrationReportPayloadWire(waterPumpTenths = waterPumpTenths),
+            MachineCalibrationReportPayloadWire(
+                waterPumpTenths = waterPumpTenths,
+                sodaPumpTenths = sodaPumpTenths,
+            ),
         )
 
     fun decodeSnapshotPayload(
@@ -236,4 +244,7 @@ private fun CellFullWire.toDomain(legacyConversionFactors: Map<Int, Double>): Te
     )
 
 private fun MachineCalibrationWire.toDomain(): MachineCalibration =
-    MachineCalibration(waterPumpTenths = waterPumpTenths)
+    MachineCalibration(
+        waterPumpTenths = waterPumpTenths,
+        sodaPumpTenths = sodaPumpTenths,
+    )

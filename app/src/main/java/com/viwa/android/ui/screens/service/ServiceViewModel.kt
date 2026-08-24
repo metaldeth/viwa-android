@@ -57,6 +57,7 @@ import com.viwa.android.hardware.serial.SerialPortManager
 import com.viwa.android.data.payment.aqsi.AqsiUsbPaymentManager
 import com.viwa.android.services.payment.ControllerSbpNotifyService
 import com.viwa.android.services.payment.TerminalProductType
+import com.viwa.android.services.calibration.WaterCalibrationChannel
 import com.viwa.android.services.calibration.WaterCalibrationService
 import com.viwa.android.services.calibration.WaterPourResult
 import com.viwa.android.services.calibration.WaterCalibrationWriteResult
@@ -245,6 +246,13 @@ data class ServiceUiState(
     val waterCalBannerIsError: Boolean = false,
     val waterCalAdaptiveWindowInput: String = "2",
     val waterCalRecomputeBusy: Boolean = false,
+    val sodaCalTargetMlInput: String = "200",
+    val sodaCalActualMlInput: String = "",
+    val sodaCalPourBusy: Boolean = false,
+    val sodaCalSaveBusy: Boolean = false,
+    val sodaCalPourResult: String? = null,
+    val sodaCalBanner: String? = null,
+    val sodaCalBannerIsError: Boolean = false,
  /** Аналитика времени готовки по напиткам (фактическое vs расчётное). */
     val preparingStatsDrinks: List<PreparingStatsDrinkOption> = emptyList(),
     val preparingStatsSelectedTasteId: Int? = null,
@@ -2700,6 +2708,120 @@ constructor(
                         waterCalRecomputeBusy = false,
                         waterCalBanner = e.message ?: "Ошибка пересчёта скорости",
                         waterCalBannerIsError = true,
+                    )
+                }
+            }
+        }
+    }
+
+    fun setSodaCalTargetMlInput(value: String) {
+        _state.update { it.copy(sodaCalTargetMlInput = value.filter { ch -> ch.isDigit() }.take(5)) }
+    }
+
+    fun setSodaCalActualMlInput(value: String) {
+        _state.update { it.copy(sodaCalActualMlInput = value.filter { ch -> ch.isDigit() }.take(5)) }
+    }
+
+    fun startSodaCalibrationPour() {
+        viewModelScope.launch {
+            val ml = _state.value.sodaCalTargetMlInput.toIntOrNull() ?: 0
+            if (ml <= 0) {
+                _state.update {
+                    it.copy(
+                        sodaCalBanner = "Введите целевой объём (мл) больше 0",
+                        sodaCalBannerIsError = true,
+                    )
+                }
+                return@launch
+            }
+            _state.update {
+                it.copy(
+                    sodaCalPourBusy = true,
+                    sodaCalPourResult = null,
+                    sodaCalBanner = null,
+                )
+            }
+            runCatching {
+                when (
+                    val r =
+                        waterCalibrationService.runTestPour(
+                            ml,
+                            channel = WaterCalibrationChannel.SODA,
+                        )
+                ) {
+                    is WaterPourResult.Success ->
+                        _state.update {
+                            it.copy(
+                                sodaCalPourBusy = false,
+                                sodaCalPourResult =
+                                    "Налив завершён: ${"%.2f".format(r.durationSec)} с (цель $ml мл)",
+                                waterCalInfo = waterCalibrationService.loadCalibration(),
+                                sodaCalBanner = null,
+                            )
+                        }
+                    is WaterPourResult.Failure ->
+                        _state.update {
+                            it.copy(
+                                sodaCalPourBusy = false,
+                                sodaCalPourResult = r.message,
+                                waterCalInfo = waterCalibrationService.loadCalibration(),
+                                sodaCalBanner = null,
+                            )
+                        }
+                }
+            }.onFailure { e ->
+                Timber.e(e, "startSodaCalibrationPour")
+                _state.update {
+                    it.copy(
+                        sodaCalPourBusy = false,
+                        sodaCalPourResult = e.message ?: "Ошибка налива",
+                    )
+                }
+            }
+        }
+    }
+
+    fun saveSodaCalibrationCoefficient() {
+        viewModelScope.launch {
+            val target = _state.value.sodaCalTargetMlInput.toIntOrNull() ?: 0
+            val actual = _state.value.sodaCalActualMlInput.toIntOrNull() ?: 0
+            _state.update {
+                it.copy(sodaCalSaveBusy = true, sodaCalBanner = null)
+            }
+            runCatching {
+                when (
+                    val r =
+                        waterCalibrationService.writeCoefficient(
+                            targetVolumeMl = target,
+                            actualVolumeMl = actual,
+                            channel = WaterCalibrationChannel.SODA,
+                        )
+                ) {
+                    is WaterCalibrationWriteResult.Success ->
+                        _state.update {
+                            it.copy(
+                                sodaCalSaveBusy = false,
+                                waterCalInfo = r.data,
+                                sodaCalBanner = "Калибровка газировки сохранена",
+                                sodaCalBannerIsError = false,
+                            )
+                        }
+                    is WaterCalibrationWriteResult.Failure ->
+                        _state.update {
+                            it.copy(
+                                sodaCalSaveBusy = false,
+                                sodaCalBanner = r.message,
+                                sodaCalBannerIsError = true,
+                            )
+                        }
+                }
+            }.onFailure { e ->
+                Timber.e(e, "saveSodaCalibrationCoefficient")
+                _state.update {
+                    it.copy(
+                        sodaCalSaveBusy = false,
+                        sodaCalBanner = e.message ?: "Ошибка записи",
+                        sodaCalBannerIsError = true,
                     )
                 }
             }

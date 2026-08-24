@@ -7,6 +7,8 @@ import com.viwa.android.hardware.controller.ControllerConstants
 import com.viwa.android.hardware.controller.ControllerHardwareManager
 import com.viwa.android.hardware.controller.RequestCommand
 import com.viwa.android.hardware.controller.ResponseCommand
+import com.viwa.android.hardware.controller.WaterPumpModel
+import com.viwa.android.hardware.controller.WaterPumpModelCodec
 import com.viwa.android.services.preparing.PreparingTimeHistoryStore
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -45,6 +47,11 @@ sealed class WaterCalibrationWriteResult {
     ) : WaterCalibrationWriteResult()
 }
 
+enum class WaterCalibrationChannel {
+    FILTERED,
+    SODA,
+}
+
 @Singleton
 class WaterCalibrationService
 @Inject
@@ -67,7 +74,8 @@ constructor(
         private const val READ_PUMP_TIMEOUT_MS = 3_000L
         private const val ACK_TIMEOUT_MS = 2_000L
         /** Совпадает с default прошивки Vita Flow: koef_w100=180 → Koef_Water=1.80 */
-        const val DEFAULT_WATER_PUMP_TENTHS = 180
+        const val DEFAULT_WATER_PUMP_TENTHS = WaterPumpModelCodec.DEFAULT_WATER_TENTHS
+        const val DEFAULT_SODA_PUMP_TENTHS = WaterPumpModelCodec.DEFAULT_SODA_TENTHS
     }
 
     suspend fun loadCalibration(): WaterCalibrationData {
@@ -102,41 +110,64 @@ constructor(
         )
     }
 
-    suspend fun readPumpTenths(): Result<Int> =
+    suspend fun readPumpModel(): Result<WaterPumpModel> =
         mutex.withLock {
             if (!hardware.hasActiveConnection()) {
                 return Result.failure(IllegalStateException("Контроллер недоступен"))
             }
-            readPumpTenthsFromController()
-                .map { tenths ->
-                    persistPumpTenths(tenths)
-                    tenths
+            readPumpModelFromController()
+                .map { model ->
+                    persistPumpModel(model)
+                    model
                 }
         }
 
-    suspend fun writePumpTenths(tenths: Int): Result<Unit> =
+    suspend fun writePumpModel(waterTenths: Int, sodaTenths: Int): Result<Unit> =
         mutex.withLock {
             if (!hardware.hasActiveConnection()) {
                 return Result.failure(IllegalStateException("Контроллер недоступен"))
             }
-            val clamped = tenths.coerceIn(1, 255)
-            writePumpTenthsToController(clamped)
-                .onSuccess { persistPumpTenths(clamped) }
+            val water = waterTenths.coerceIn(1, 255)
+            val soda = sodaTenths.coerceIn(1, 255)
+            writePumpModelToController(water, soda)
+                .onSuccess { persistPumpModel(WaterPumpModel(waterTenths = water, sodaTenths = soda)) }
         }
 
-    suspend fun resolvePumpTenthsForUplink(): Int {
-        readPumpTenths()
+    suspend fun readPumpTenths(): Result<Int> =
+        readPumpModel().map { it.waterTenths }
+
+    suspend fun writePumpTenths(tenths: Int): Result<Unit> {
+        val sodaTenths =
+            readPumpModel().getOrNull()?.sodaTenths
+                ?: loadCalibration().sodaPumpTenths
+                ?: DEFAULT_SODA_PUMP_TENTHS
+        return writePumpModel(tenths, sodaTenths)
+    }
+
+    suspend fun resolvePumpModelForUplink(): WaterPumpModel {
+        readPumpModel()
             .onSuccess { return it }
-        return loadCalibration().waterPumpTenths ?: DEFAULT_WATER_PUMP_TENTHS
-    }
-
-    private suspend fun persistPumpTenths(tenths: Int) {
         val stored = loadCalibration()
-        if (stored.waterPumpTenths == tenths) return
-        saveCalibration(stored.copy(waterPumpTenths = tenths))
+        return WaterPumpModel(
+            waterTenths = stored.waterPumpTenths ?: DEFAULT_WATER_PUMP_TENTHS,
+            sodaTenths = stored.sodaPumpTenths ?: DEFAULT_SODA_PUMP_TENTHS,
+        )
     }
 
-    private suspend fun readPumpTenthsFromController(): Result<Int> =
+    suspend fun resolvePumpTenthsForUplink(): Int = resolvePumpModelForUplink().waterTenths
+
+    private suspend fun persistPumpModel(model: WaterPumpModel) {
+        val stored = loadCalibration()
+        if (stored.waterPumpTenths == model.waterTenths && stored.sodaPumpTenths == model.sodaTenths) return
+        saveCalibration(
+            stored.copy(
+                waterPumpTenths = model.waterTenths,
+                sodaPumpTenths = model.sodaTenths,
+            ),
+        )
+    }
+
+    private suspend fun readPumpModelFromController(): Result<WaterPumpModel> =
         runCatching {
             val answer =
                 coroutineScope {
@@ -153,12 +184,12 @@ constructor(
             if (answer == null || answer.payload.isEmpty()) {
                 error("Таймаут чтения коэффициента")
             }
-            answer.payload[0].toInt() and 0xff
+            WaterPumpModelCodec.parseAnswer(answer.payload)
         }
 
-    private suspend fun writePumpTenthsToController(tenths: Int): Result<Unit> =
+    private suspend fun writePumpModelToController(waterTenths: Int, sodaTenths: Int): Result<Unit> =
         runCatching {
-            val writeBody = ByteArray(5) { tenths.toByte() }
+            val writeBody = WaterPumpModelCodec.encodeWrite(waterTenths, sodaTenths)
             val ackReceived =
                 coroutineScope {
                     val awaitAck =
@@ -177,16 +208,24 @@ constructor(
         }
 
  /**
- * Тестовый налив: [RequestCommand.ServiceCommand] mode 0x0A, тело.
+ * Тестовый налив: [RequestCommand.ServiceCommand] mode 0x0A (filtered) / 0x0B (soda).
  */
-    suspend fun runTestPour(volumeMl: Int): WaterPourResult =
+    suspend fun runTestPour(
+        volumeMl: Int,
+        channel: WaterCalibrationChannel = WaterCalibrationChannel.FILTERED,
+    ): WaterPourResult =
         mutex.withLock {
             if (!hardware.hasActiveConnection()) {
                 return WaterPourResult.Failure("Контроллер недоступен")
             }
             val clampedMl = volumeMl.coerceIn(0, 65_535)
             val fifth = (clampedMl / 10).coerceIn(0, 255)
-            val body = byteArrayOf(0x0a, 0, 0, 0, fifth.toByte())
+            val mode: Byte =
+                when (channel) {
+                    WaterCalibrationChannel.FILTERED -> 0x0a
+                    WaterCalibrationChannel.SODA -> 0x0b
+                }
+            val body = byteArrayOf(mode, 0, 0, 0, fifth.toByte())
 
             val pourStartWallMs = System.currentTimeMillis()
             val outcome =
@@ -221,22 +260,39 @@ constructor(
             val mergedTarget = clampedMl.takeIf { it > 0 }
 
             if (durationSec >= WaterCalibrationCalculations.MIN_POUR_DURATION_SEC) {
-                saveCalibration(
-                    current.copy(
-                        lastPourDurationSec = durationSec,
-                        lastPourTimestampMs = endMs,
-                        lastTargetMl = mergedTarget,
-                    ),
-                )
+                val updated =
+                    when (channel) {
+                        WaterCalibrationChannel.FILTERED ->
+                            current.copy(
+                                lastPourDurationSec = durationSec,
+                                lastPourTimestampMs = endMs,
+                                lastTargetMl = mergedTarget,
+                            )
+                        WaterCalibrationChannel.SODA ->
+                            current.copy(
+                                lastSodaPourDurationSec = durationSec,
+                                lastSodaPourTimestampMs = endMs,
+                                lastSodaTargetMl = mergedTarget,
+                            )
+                    }
+                saveCalibration(updated)
                 return WaterPourResult.Success(durationSec = durationSec, startMs = t0, endMs = endMs)
             }
 
-            saveCalibration(
-                current.copy(
-                    lastPourTimestampMs = endMs,
-                    lastTargetMl = mergedTarget,
-                ),
-            )
+            val updated =
+                when (channel) {
+                    WaterCalibrationChannel.FILTERED ->
+                        current.copy(
+                            lastPourTimestampMs = endMs,
+                            lastTargetMl = mergedTarget,
+                        )
+                    WaterCalibrationChannel.SODA ->
+                        current.copy(
+                            lastSodaPourTimestampMs = endMs,
+                            lastSodaTargetMl = mergedTarget,
+                        )
+                }
+            saveCalibration(updated)
             return WaterPourResult.Failure(
                 "Длительность налива меньше минимальной",
                 startMs = t0,
@@ -247,6 +303,7 @@ constructor(
     suspend fun writeCoefficient(
         targetVolumeMl: Int,
         actualVolumeMl: Int,
+        channel: WaterCalibrationChannel = WaterCalibrationChannel.FILTERED,
     ): WaterCalibrationWriteResult =
         mutex.withLock {
             if (actualVolumeMl <= 0) {
@@ -257,7 +314,11 @@ constructor(
             }
 
             val stored = loadCalibration()
-            val lastPour = stored.lastPourDurationSec
+            val lastPour =
+                when (channel) {
+                    WaterCalibrationChannel.FILTERED -> stored.lastPourDurationSec
+                    WaterCalibrationChannel.SODA -> stored.lastSodaPourDurationSec
+                }
             if (lastPour == null || lastPour <= 0) {
                 return WaterCalibrationWriteResult.Failure("Сначала выполните тестовый налив")
             }
@@ -265,22 +326,37 @@ constructor(
             val target = targetVolumeMl.coerceAtLeast(0).toDouble()
             val actual = actualVolumeMl.toDouble()
 
-            val currentTenths =
-                readPumpTenthsFromController().getOrElse {
+            val currentModel =
+                readPumpModelFromController().getOrElse {
                     return WaterCalibrationWriteResult.Failure("Таймаут чтения коэффициента")
                 }
-            val newTenths =
-                WaterCalibrationCalculations.computeNewTenths(
-                    currentTenths = currentTenths,
-                    targetVolumeMl = target,
-                    actualVolumeMl = actual,
-                )
+            val (newWaterTenths, newSodaTenths) =
+                when (channel) {
+                    WaterCalibrationChannel.FILTERED -> {
+                        val newWater =
+                            WaterCalibrationCalculations.computeNewTenths(
+                                currentTenths = currentModel.waterTenths,
+                                targetVolumeMl = target,
+                                actualVolumeMl = actual,
+                            )
+                        newWater to currentModel.sodaTenths
+                    }
+                    WaterCalibrationChannel.SODA -> {
+                        val newSoda =
+                            WaterCalibrationCalculations.computeNewTenths(
+                                currentTenths = currentModel.sodaTenths,
+                                targetVolumeMl = target,
+                                actualVolumeMl = actual,
+                            )
+                        currentModel.waterTenths to newSoda
+                    }
+                }
 
-            writePumpTenthsToController(newTenths)
+            writePumpModelToController(newWaterTenths, newSodaTenths)
                 .onFailure {
                     return WaterCalibrationWriteResult.Failure("Таймаут подтверждения записи коэффициента")
                 }
-            persistPumpTenths(newTenths)
+            persistPumpModel(WaterPumpModel(waterTenths = newWaterTenths, sodaTenths = newSodaTenths))
 
             val flowRate =
                 WaterCalibrationCalculations.computeFlowRateMlPerSec(
@@ -289,15 +365,23 @@ constructor(
                 )
 
             val updated =
-                stored.copy(
-                    lastTargetMl = targetVolumeMl,
-                    lastActualMl = actualVolumeMl,
-                    flowRateMlPerSec = flowRate,
-                    calibratedFlowRateMlPerSec = flowRate,
-                    adaptiveFlowRateMlPerSec = flowRate,
-                )
+                when (channel) {
+                    WaterCalibrationChannel.FILTERED ->
+                        stored.copy(
+                            lastTargetMl = targetVolumeMl,
+                            lastActualMl = actualVolumeMl,
+                            flowRateMlPerSec = flowRate,
+                            calibratedFlowRateMlPerSec = flowRate,
+                            adaptiveFlowRateMlPerSec = flowRate,
+                        )
+                    WaterCalibrationChannel.SODA ->
+                        stored.copy(
+                            lastSodaTargetMl = targetVolumeMl,
+                            lastSodaActualMl = actualVolumeMl,
+                        )
+                }
             saveCalibration(updated)
-            Timber.tag(TAG).i("water calibration saved flowRate=%s", flowRate)
+            Timber.tag(TAG).i("water calibration saved channel=%s flowRate=%s", channel, flowRate)
             return WaterCalibrationWriteResult.Success(data = updated)
         }
 

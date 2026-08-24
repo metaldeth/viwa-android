@@ -189,7 +189,10 @@ internal object DrinkListViewModelTestSupport {
                 networkTraffic,
                 controllerTraffic,
                 cardPaymentOrchestrator,
-                mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
+                mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true).also { holdPour ->
+                    coEvery { holdPour.beginHoldPourSession(any(), any(), any(), any(), any()) } returns "test-hold-uuid"
+                    coEvery { holdPour.finalizeHoldPourSession() } returns 0
+                },
             )
         trackViewModel(vm)
         return vm

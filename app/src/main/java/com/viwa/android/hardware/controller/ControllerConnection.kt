@@ -213,7 +213,9 @@ class ControllerConnection(
             }
             return
         }
-        if (command == RequestCommand.ServiceCommand && (body.getOrNull(0) ?: 0) == 0x0a) {
+        if (command == RequestCommand.ServiceCommand &&
+            ((body.getOrNull(0) ?: 0) == 0x0a || (body.getOrNull(0) ?: 0) == 0x0b)
+        ) {
             val volumeMl = (body.getOrElse(4) { 0 }) * 10
             val durationSec =
                 if (volumeMl > 0) {
@@ -240,7 +242,10 @@ class ControllerConnection(
         }
         if (command == RequestCommand.ReadWaterPumpModel) {
             schedule(ControllerConstants.MOCK_ACK_DELAY_MS) {
-                logRx(ResponseCommand.WaterPumpModelAnswer, byteArrayOf(50, 0, 0, 0, 0))
+                logRx(
+                    ResponseCommand.WaterPumpModelAnswer,
+                    byteArrayOf(50, 50, 0, 80, 80),
+                )
             }
             return
         }

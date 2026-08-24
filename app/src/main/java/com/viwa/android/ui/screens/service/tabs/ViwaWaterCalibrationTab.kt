@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,14 +29,14 @@ fun ViwaWaterCalibrationTab(viewModel: ServiceViewModel) {
         Text("Калибровка воды", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))
         Text(
- "Тестовый налив (0x52 / 0x0A), замер BEGIN→SUCCESS, ввод фактического объёма и запись коэффициента (0xBC → 0xBB),.",
+            "Тестовый налив (0x52 / 0x0A или 0x0B), замер BEGIN→SUCCESS, ввод фактического объёма и запись коэффициента (0xBC → 0xBB).",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
 
         val info = s.waterCalInfo
-        Text("Последняя калибровка", style = MaterialTheme.typography.titleSmall)
+        Text("Последняя калибровка (фильтр)", style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.height(4.dp))
         Text(
             "Расход: ${info.flowRateMlPerSec?.let { "%.2f".format(it) } ?: "—"} мл/с",
@@ -64,8 +65,14 @@ fun ViwaWaterCalibrationTab(viewModel: ServiceViewModel) {
             "Длительность налива: ${info.lastPourDurationSec?.let { "%.2f".format(it) } ?: "—"} с",
             style = MaterialTheme.typography.bodyMedium,
         )
+        Text(
+            "Коэффициент помпы (×0.1): ${info.waterPumpTenths ?: "—"}",
+            style = MaterialTheme.typography.bodyMedium,
+        )
         Spacer(Modifier.height(16.dp))
 
+        Text("Фильтрованная вода", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
         SettingsTextField(
             label = "Объём налива (целевой), мл",
             value = s.waterCalTargetMlInput,
@@ -112,6 +119,86 @@ fun ViwaWaterCalibrationTab(viewModel: ServiceViewModel) {
         if (s.waterCalSaveBusy) {
             Spacer(Modifier.height(8.dp))
             CircularProgressIndicator(strokeWidth = 2.dp)
+        }
+
+        Spacer(Modifier.height(24.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(16.dp))
+
+        Text("Газированная вода", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Цель / факт: ${info.lastSodaTargetMl ?: "—"} / ${info.lastSodaActualMl ?: "—"} мл",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            "Длительность налива: ${info.lastSodaPourDurationSec?.let { "%.2f".format(it) } ?: "—"} с",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            "Коэффициент помпы (×0.1): ${info.sodaPumpTenths ?: "—"}",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.height(12.dp))
+        SettingsTextField(
+            label = "Объём налива (целевой), мл",
+            value = s.sodaCalTargetMlInput,
+            onValueChange = viewModel::setSodaCalTargetMlInput,
+        )
+        Button(
+            onClick = { viewModel.startSodaCalibrationPour() },
+            enabled = !s.sodaCalPourBusy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Начать налив")
+        }
+        if (s.sodaCalPourBusy) {
+            Spacer(Modifier.height(8.dp))
+            CircularProgressIndicator(strokeWidth = 2.dp)
+        }
+        s.sodaCalPourResult?.let { msg ->
+            Spacer(Modifier.height(8.dp))
+            Text(
+                msg,
+                style = MaterialTheme.typography.bodyMedium,
+                color =
+                    if (msg.contains("заверш")) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+        SettingsTextField(
+            label = "Фактический объём, мл",
+            value = s.sodaCalActualMlInput,
+            onValueChange = viewModel::setSodaCalActualMlInput,
+        )
+        Button(
+            onClick = { viewModel.saveSodaCalibrationCoefficient() },
+            enabled = !s.sodaCalSaveBusy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Сохранить калибровку")
+        }
+        if (s.sodaCalSaveBusy) {
+            Spacer(Modifier.height(8.dp))
+            CircularProgressIndicator(strokeWidth = 2.dp)
+        }
+        s.sodaCalBanner?.let { banner ->
+            Spacer(Modifier.height(8.dp))
+            Text(
+                banner,
+                style = MaterialTheme.typography.bodySmall,
+                color =
+                    if (s.sodaCalBannerIsError) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+            )
         }
 
         Spacer(Modifier.height(20.dp))

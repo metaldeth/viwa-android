@@ -34,6 +34,7 @@ import com.viwa.android.domain.telemetry.CellUuidAllocator
 import com.viwa.android.domain.telemetry.DefaultPhysicalCellSchemaProvider
 import com.viwa.android.services.calibration.SyrupCalibrationInventory
 import com.viwa.android.services.calibration.SyrupConversionFactorMigration
+import com.viwa.android.hardware.controller.WaterPumpModel
 import com.viwa.android.services.calibration.WaterCalibrationService
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -112,9 +113,9 @@ class TelemetryCellsSyncCoordinatorTest {
         conversionFactorMigration = mockk(relaxed = true)
         syrupCalibrationInventory = mockk(relaxed = true)
         coEvery { conversionFactorMigration.loadLegacyConversionFactors() } returns emptyMap()
-        coEvery { waterCalibrationService.resolvePumpTenthsForUplink() } returns 3
+        coEvery { waterCalibrationService.resolvePumpModelForUplink() } returns WaterPumpModel(3, 80)
         coEvery { waterCalibrationService.readPumpTenths() } returns Result.failure(IllegalStateException("offline"))
-        coEvery { waterCalibrationService.writePumpTenths(any()) } returns Result.success(Unit)
+        coEvery { waterCalibrationService.writePumpModel(any(), any()) } returns Result.success(Unit)
         contentReportAckAwaiter = CellsContentReportAckAwaiter()
         recipeMessageCodec = RecipeMessageCodec()
         testScope = TestScope(UnconfinedTestDispatcher())
@@ -594,16 +595,24 @@ class TelemetryCellsSyncCoordinatorTest {
 
     @Test
     fun `calibration report syncs controller from snapshot before uplink`() = runTest {
-        // given — snapshot has dashboard value 180, controller still at stale 3
+        // given — snapshot has dashboard value 180/200, controller still at stale 3/80
         repository.replaceSnapshot(
             TelemetryCellsSnapshot(
                 schemaHash = "hash",
                 contentRevision = 2,
-                machineCalibration = com.viwa.android.domain.model.MachineCalibration(waterPumpTenths = 180),
+                machineCalibration =
+                    com.viwa.android.domain.model.MachineCalibration(
+                        waterPumpTenths = 180,
+                        sodaPumpTenths = 200,
+                    ),
             ),
         )
-        coEvery { waterCalibrationService.resolvePumpTenthsForUplink() } returns 180
-        coEvery { waterCalibrationService.readPumpTenths() } returns Result.success(3)
+        var currentModel = WaterPumpModel(3, 80)
+        coEvery { waterCalibrationService.resolvePumpModelForUplink() } answers { currentModel }
+        coEvery { waterCalibrationService.writePumpModel(any(), any()) } coAnswers {
+            currentModel = WaterPumpModel(firstArg(), secondArg())
+            Result.success(Unit)
+        }
         val calibrationPayloadSlot = slot<kotlinx.serialization.json.JsonObject>()
         coEvery {
             wsManager.sendEnvelope("machine.calibration.report", capture(calibrationPayloadSlot), any())
@@ -613,21 +622,22 @@ class TelemetryCellsSyncCoordinatorTest {
         coordinator.onWebSocketHello(defaultHello)
 
         // then
-        coVerify { waterCalibrationService.writePumpTenths(180) }
+        coVerify { waterCalibrationService.writePumpModel(180, 200) }
         assertEquals("180", calibrationPayloadSlot.captured["waterPumpTenths"]!!.jsonPrimitive.content)
+        assertEquals("200", calibrationPayloadSlot.captured["sodaPumpTenths"]!!.jsonPrimitive.content)
     }
 
     @Test
-    fun `snapshot with machineCalibration writes pump tenths to controller`() = runTest {
+    fun `snapshot with machineCalibration writes both pump tenths to controller`() = runTest {
         // given
-        coEvery { waterCalibrationService.readPumpTenths() } returns Result.success(5)
+        coEvery { waterCalibrationService.resolvePumpModelForUplink() } returns WaterPumpModel(5, 6)
         val payloadJson =
             """
             {
               "schemaHash": "hash",
               "contentRevision": 1,
               "cells": [],
-              "machineCalibration": { "waterPumpTenths": 7 }
+              "machineCalibration": { "waterPumpTenths": 7, "sodaPumpTenths": 9 }
             }
             """.trimIndent()
 
@@ -635,8 +645,9 @@ class TelemetryCellsSyncCoordinatorTest {
         coordinator.onCellsSnapshot(payloadJson)
 
         // then
-        coVerify { waterCalibrationService.writePumpTenths(7) }
+        coVerify { waterCalibrationService.writePumpModel(7, 9) }
         assertEquals(7, repository.getSnapshot()?.machineCalibration?.waterPumpTenths)
+        assertEquals(9, repository.getSnapshot()?.machineCalibration?.sodaPumpTenths)
     }
 
     @Test

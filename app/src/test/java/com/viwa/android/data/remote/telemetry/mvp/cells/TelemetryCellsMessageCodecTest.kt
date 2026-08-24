@@ -84,7 +84,7 @@ class TelemetryCellsMessageCodecTest {
                   "conversionFactor": 6.25
                 }
               ],
-              "machineCalibration": { "waterPumpTenths": 4 }
+              "machineCalibration": { "waterPumpTenths": 4, "sodaPumpTenths": 255 }
             }
             """.trimIndent()
 
@@ -113,7 +113,7 @@ class TelemetryCellsMessageCodecTest {
             ),
             snapshot.cells.single(),
         )
-        assertEquals(MachineCalibration(waterPumpTenths = 4), snapshot.machineCalibration)
+        assertEquals(MachineCalibration(waterPumpTenths = 4, sodaPumpTenths = 255), snapshot.machineCalibration)
     }
 
     @Test
@@ -206,10 +206,11 @@ class TelemetryCellsMessageCodecTest {
     }
 
     @Test
-    fun encodeMachineCalibrationReportPayload_serializesWaterPumpTenths() {
-        val payloadJson = codec.encodeMachineCalibrationReportPayload(waterPumpTenths = 5)
+    fun encodeMachineCalibrationReportPayload_serializesWaterAndSodaPumpTenths() {
+        val payloadJson = codec.encodeMachineCalibrationReportPayload(waterPumpTenths = 5, sodaPumpTenths = 255)
 
         assertTrue(payloadJson.contains("\"waterPumpTenths\":5"))
+        assertTrue(payloadJson.contains("\"sodaPumpTenths\":255"))
     }
 
     @Test

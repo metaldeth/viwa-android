@@ -18,6 +18,12 @@ data class WaterCalibrationData(
     val lastActualMl: Int? = null,
     val lastPourDurationSec: Double? = null,
     val lastPourTimestampMs: Long? = null,
+    val lastSodaTargetMl: Int? = null,
+    val lastSodaActualMl: Int? = null,
+    val lastSodaPourDurationSec: Double? = null,
+    val lastSodaPourTimestampMs: Long? = null,
     /** Last known water pump coefficient (tenths), persisted for offline fallback. */
     val waterPumpTenths: Int? = null,
+    /** Last known sparkling-water pump coefficient (tenths), 0xBB `buff_rx[3]`. */
+    val sodaPumpTenths: Int? = null,
 )

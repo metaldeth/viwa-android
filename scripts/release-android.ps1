@@ -1,6 +1,7 @@
 #Requires -Version 5.1
 param(
     [switch]$Publish,
+    [int]$RolloutPercent = 100,
     [string]$TelemetryApiUrl = $env:TELEMETRY_API_URL,
     [string]$UploadToken = $env:OTA_RELEASE_UPLOAD_TOKEN,
     [string]$Channel = 'STABLE',
@@ -161,12 +162,17 @@ $ReleaseId = $UploadJson.id
 $VersionName = $UploadJson.versionName
 $VersionCode = $UploadJson.versionCode
 
+if ($RolloutPercent -lt 0 -or $RolloutPercent -gt 100) {
+    throw "RolloutPercent must be 0..100, got $RolloutPercent"
+}
+
 if ($Publish) {
-    Write-Step "Publishing release $ReleaseId"
+    Write-Step "Publishing release $ReleaseId (rollout $RolloutPercent%)"
     $PublishUrl = "$TelemetryApiUrl/api/v1/app-releases/$ReleaseId/publish"
     # PowerShell mangles curl -d JSON quotes; write a BOM-less file instead.
     $PublishBodyFile = Join-Path $env:TEMP ("viwa-publish-" + $ReleaseId + ".json")
-    [System.IO.File]::WriteAllText($PublishBodyFile, '{"rolloutPercent":100}', [System.Text.UTF8Encoding]::new($false))
+    $PublishBody = '{"rolloutPercent":' + $RolloutPercent + '}'
+    [System.IO.File]::WriteAllText($PublishBodyFile, $PublishBody, [System.Text.UTF8Encoding]::new($false))
     $PublishJsonRaw = & curl.exe -sS -X POST $PublishUrl `
         -H "Authorization: Bearer $UploadToken" `
         -H "Content-Type: application/json" `
@@ -188,7 +194,7 @@ Write-Host "  releaseId: $ReleaseId"
 Write-Host "  versionName: $VersionName"
 Write-Host "  versionCode: $VersionCode"
 if ($Publish) {
-    Write-Host '  status: PUBLISHED (rollout 100%)'
+    Write-Host "  status: PUBLISHED (rollout $RolloutPercent%)"
 } else {
-    Write-Host '  status: DRAFT (pass -Publish to publish with rollout 100%)'
+    Write-Host '  status: DRAFT (pass -Publish to publish; -RolloutPercent 0..100)'
 }

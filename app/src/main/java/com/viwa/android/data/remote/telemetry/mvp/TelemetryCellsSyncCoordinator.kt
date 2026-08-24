@@ -293,30 +293,43 @@ constructor(
 
     private suspend fun sendMachineCalibrationReport() {
         syncControllerFromSnapshotBeforeReport()
-        val tenths = waterCalibrationService.resolvePumpTenthsForUplink()
-        val payloadJson = codec.encodeMachineCalibrationReportPayload(tenths)
+        val model = waterCalibrationService.resolvePumpModelForUplink()
+        val payloadJson =
+            codec.encodeMachineCalibrationReportPayload(
+                waterPumpTenths = model.waterTenths,
+                sodaPumpTenths = model.sodaTenths,
+            )
         sendCellsMessage(type = "machine.calibration.report", payloadJson = payloadJson)
             .onFailure { Timber.w(it, "TelemetryCellsSync: machine calibration report failed") }
             .onSuccess {
-                Timber.i("TelemetryCellsSync: machine calibration report sent waterPumpTenths=$tenths")
+                Timber.i(
+                    "TelemetryCellsSync: machine calibration report sent " +
+                        "waterPumpTenths=${model.waterTenths} sodaPumpTenths=${model.sodaTenths}",
+                )
             }
     }
 
     /** Apply snapshot calibration to controller before uplink (avoids stale controller clobbering DB). */
     private suspend fun syncControllerFromSnapshotBeforeReport() {
         val snapshot = repository.getSnapshot() ?: return
-        val remoteTenths = snapshot.machineCalibration?.waterPumpTenths ?: return
-        val clamped = remoteTenths.coerceIn(1, 255)
-        val currentTenths =
-            waterCalibrationService.readPumpTenths().getOrNull()
-                ?: waterCalibrationService.resolvePumpTenthsForUplink()
-        if (currentTenths == clamped) return
-        waterCalibrationService.writePumpTenths(clamped)
+        val remote = snapshot.machineCalibration ?: return
+        val targetWater = remote.waterPumpTenths.coerceIn(1, 255)
+        val targetSoda = remote.sodaPumpTenths.coerceIn(1, 255)
+        val current = waterCalibrationService.resolvePumpModelForUplink()
+        if (current.waterTenths == targetWater && current.sodaTenths == targetSoda) return
+        waterCalibrationService.writePumpModel(targetWater, targetSoda)
             .onFailure {
-                Timber.w(it, "TelemetryCellsSync: failed to sync controller waterPumpTenths=$clamped before report")
+                Timber.w(
+                    it,
+                    "TelemetryCellsSync: failed to sync controller pump model " +
+                        "water=$targetWater soda=$targetSoda before report",
+                )
             }
             .onSuccess {
-                Timber.i("TelemetryCellsSync: synced controller waterPumpTenths=$clamped before calibration report")
+                Timber.i(
+                    "TelemetryCellsSync: synced controller pump model " +
+                        "water=$targetWater soda=$targetSoda before calibration report",
+                )
             }
     }
 
@@ -352,22 +365,31 @@ constructor(
     }
 
     private suspend fun applyRemoteMachineCalibration(snapshot: TelemetryCellsSnapshot): TelemetryCellsSnapshot {
-        val remoteTenths = snapshot.machineCalibration?.waterPumpTenths ?: return snapshot
-        val clamped = remoteTenths.coerceIn(1, 255)
-        val currentTenths =
-            waterCalibrationService.readPumpTenths().getOrNull()
-                ?: waterCalibrationService.resolvePumpTenthsForUplink()
-        if (currentTenths == clamped) {
-            return snapshot.copy(machineCalibration = MachineCalibration(waterPumpTenths = clamped))
+        val remote = snapshot.machineCalibration ?: return snapshot
+        val targetWater = remote.waterPumpTenths.coerceIn(1, 255)
+        val targetSoda = remote.sodaPumpTenths.coerceIn(1, 255)
+        val current = waterCalibrationService.resolvePumpModelForUplink()
+        val normalized =
+            MachineCalibration(
+                waterPumpTenths = targetWater,
+                sodaPumpTenths = targetSoda,
+            )
+        if (current.waterTenths == targetWater && current.sodaTenths == targetSoda) {
+            return snapshot.copy(machineCalibration = normalized)
         }
-        waterCalibrationService.writePumpTenths(clamped)
+        waterCalibrationService.writePumpModel(targetWater, targetSoda)
             .onFailure {
-                Timber.w(it, "TelemetryCellsSync: failed to write waterPumpTenths=$clamped from snapshot")
+                Timber.w(
+                    it,
+                    "TelemetryCellsSync: failed to write pump model water=$targetWater soda=$targetSoda from snapshot",
+                )
             }
             .onSuccess {
-                Timber.i("TelemetryCellsSync: applied remote waterPumpTenths=$clamped to controller")
+                Timber.i(
+                    "TelemetryCellsSync: applied remote pump model water=$targetWater soda=$targetSoda to controller",
+                )
             }
-        return snapshot.copy(machineCalibration = MachineCalibration(waterPumpTenths = clamped))
+        return snapshot.copy(machineCalibration = normalized)
     }
 
     private suspend fun applyVolumeUpdatesToSnapshot(updates: List<CellVolumeUpdateWire>) {
