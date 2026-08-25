@@ -651,6 +651,35 @@ class TelemetryCellsSyncCoordinatorTest {
     }
 
     @Test
+    fun `local pump calibration reports controller values without snapshot overwrite`() = runTest {
+        repository.replaceSnapshot(
+            TelemetryCellsSnapshot(
+                schemaHash = "hash",
+                contentRevision = 2,
+                machineCalibration =
+                    com.viwa.android.domain.model.MachineCalibration(
+                        waterPumpTenths = 224,
+                        sodaPumpTenths = 224,
+                    ),
+            ),
+        )
+        coEvery { waterCalibrationService.resolvePumpModelForUplink() } returns WaterPumpModel(193, 213)
+        coEvery { waterCalibrationService.writePumpModel(any(), any()) } returns Result.success(Unit)
+        val payloadSlot = slot<kotlinx.serialization.json.JsonObject>()
+        coEvery {
+            wsManager.sendEnvelope("machine.calibration.report", capture(payloadSlot), any())
+        } returns Result.success("test-message-id")
+
+        coordinator.onLocalPumpCalibrationSaved(193, 213)
+
+        coVerify(exactly = 0) { waterCalibrationService.writePumpModel(any(), any()) }
+        assertEquals(193, repository.getSnapshot()?.machineCalibration?.waterPumpTenths)
+        assertEquals(213, repository.getSnapshot()?.machineCalibration?.sodaPumpTenths)
+        assertEquals("193", payloadSlot.captured["waterPumpTenths"]!!.jsonPrimitive.content)
+        assertEquals("213", payloadSlot.captured["sodaPumpTenths"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `schema ack persists server schemaHash for next reconnect`() = runTest {
         // given
         repository.replaceSnapshot(

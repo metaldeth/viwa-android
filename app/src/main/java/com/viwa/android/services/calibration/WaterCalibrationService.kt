@@ -356,7 +356,6 @@ constructor(
                 .onFailure {
                     return WaterCalibrationWriteResult.Failure("Таймаут подтверждения записи коэффициента")
                 }
-            persistPumpModel(WaterPumpModel(waterTenths = newWaterTenths, sodaTenths = newSodaTenths))
 
             val flowRate =
                 WaterCalibrationCalculations.computeFlowRateMlPerSec(
@@ -373,11 +372,15 @@ constructor(
                             flowRateMlPerSec = flowRate,
                             calibratedFlowRateMlPerSec = flowRate,
                             adaptiveFlowRateMlPerSec = flowRate,
+                            waterPumpTenths = newWaterTenths,
+                            sodaPumpTenths = newSodaTenths,
                         )
                     WaterCalibrationChannel.SODA ->
                         stored.copy(
                             lastSodaTargetMl = targetVolumeMl,
                             lastSodaActualMl = actualVolumeMl,
+                            waterPumpTenths = newWaterTenths,
+                            sodaPumpTenths = newSodaTenths,
                         )
                 }
             saveCalibration(updated)

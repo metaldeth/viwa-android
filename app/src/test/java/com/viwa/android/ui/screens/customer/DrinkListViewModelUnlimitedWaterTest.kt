@@ -345,7 +345,7 @@ class DrinkListViewModelUnlimitedWaterTest {
     }
 
     @Test
-    fun subscriptionClearedMidHold_stopsHardwareAndFinalizesOnce() = runBlocking {
+    fun subscriptionClearedMidHold_keepsPourAndSubscription() = runBlocking {
         val subscribeInfo =
             MutableStateFlow<SubscribeInformationState?>(
                 SubscribeInformationState(
@@ -408,16 +408,17 @@ class DrinkListViewModelUnlimitedWaterTest {
         flushMain()
 
         subscribeInfo.value = null
-        assertTrue(awaitCondition { !vm.state.value.isWaterPourActive })
         flushMain(24)
 
-        coVerify(exactly = 1) { holdPour.finalizeHoldPourSession() }
-        coVerify(exactly = 1) {
+        assertTrue(vm.state.value.isWaterPourActive)
+        assertEquals("client-1", vm.state.value.scannedSubscriptionClientId)
+        assertTrue(vm.state.value.isSubscriptionActive)
+        assertEquals(FlowWaterPourType.Cold, vm.state.value.flowWaterPourType)
+        assertEquals(DrinkWaterOption.COLD, vm.state.value.waterOption)
+        coVerify(exactly = 0) { holdPour.finalizeHoldPourSession() }
+        coVerify(exactly = 0) {
             gateway.sendCommand(RequestCommand.WaterPourByTouch, WaterPourByTouchPayload.stopBody)
         }
-        assertEquals(FlowWaterPourType.Filtered, vm.state.value.flowWaterPourType)
-        assertEquals(DrinkWaterOption.STANDARD, vm.state.value.waterOption)
-        assertNull(vm.state.value.scannedSubscriptionClientId)
 
         vm.waterPourPointerUp()
         flushMain(24)
@@ -425,7 +426,7 @@ class DrinkListViewModelUnlimitedWaterTest {
     }
 
     @Test
-    fun subscriptionExpiredMidHold_stopsHardwareAndFinalizesOnce() = runBlocking {
+    fun subscriptionExpiredMidHold_keepsPourAndSubscription() = runBlocking {
         val subscribeInfo =
             MutableStateFlow<SubscribeInformationState?>(
                 SubscribeInformationState(
@@ -462,11 +463,66 @@ class DrinkListViewModelUnlimitedWaterTest {
 
         subscribeInfo.value =
             subscribeInfo.value!!.copy(isActiveSubscribe = false, volumeMl = 0)
-        assertTrue(awaitCondition { vm.state.value.flowWaterPourType == FlowWaterPourType.Filtered })
         flushMain(24)
 
+        assertTrue(vm.state.value.isWaterPourActive)
+        assertEquals("client-1", vm.state.value.scannedSubscriptionClientId)
+        assertTrue(vm.state.value.isSubscriptionActive)
+        assertEquals(FlowWaterPourType.Sparkling, vm.state.value.flowWaterPourType)
+        assertEquals(DrinkWaterOption.SPARK, vm.state.value.waterOption)
+        coVerify(exactly = 0) { holdPour.finalizeHoldPourSession() }
+
+        vm.waterPourPointerUp()
+        flushMain(24)
         coVerify(exactly = 1) { holdPour.finalizeHoldPourSession() }
+    }
+
+    @Test
+    fun waterPourMaxHold_stopsPourButKeepsSubscription() = runBlocking {
+        val subscribeInfo =
+            MutableStateFlow<SubscribeInformationState?>(
+                SubscribeInformationState(
+                    isStatusRequest = true,
+                    isActiveSubscribe = true,
+                    clientId = "client-1",
+                    subscribeDateEnd = "2026-12-31T00:00:00.000Z",
+                    volumeMl = 500,
+                    maxVolumeMl = 2000,
+                ),
+            )
+        val holdPour = mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true)
+        coEvery { holdPour.finalizeHoldPourSession() } returns 42
+        val telemetry = DrinkListViewModelTestSupport.createTestTelemetry()
+        every { telemetry.connectionState } returns
+            MutableStateFlow<ConnectionState>(ConnectionState.Connected).asStateFlow()
+        every { telemetry.subscribeInfo } returns subscribeInfo.asStateFlow()
+        every { telemetry.loyaltyCardClientScans } returns
+            MutableSharedFlow<String>(extraBufferCapacity = 16).asSharedFlow()
+        every { telemetry.invalidLoyaltyCardScans } returns
+            MutableSharedFlow<Unit>(extraBufferCapacity = 16).asSharedFlow()
+        val vm = createVmWithHoldPour(telemetry, holdPour)
+        flushMain(24)
+        vm.setUiStateForUnitTests(
+            DrinkListUiState(
+                scannedSubscriptionClientId = "client-1",
+                isSubscriptionActive = true,
+                flowWaterPourType = FlowWaterPourType.Cold,
+                waterOption = DrinkWaterOption.COLD,
+            ),
+        )
+        vm.markWaterPourActiveForUnitTests(holdRequestUuid = "max-hold-req")
+        flushMain()
+
+        vm.completeWaterPourMaxHoldForUnitTests()
+        flushMain(24)
+
         assertFalse(vm.state.value.isWaterPourActive)
+        assertTrue(vm.state.value.waterPourLimitBanner)
+        assertEquals(1, vm.state.value.waterPourGestureEpoch)
+        assertEquals("client-1", vm.state.value.scannedSubscriptionClientId)
+        assertTrue(vm.state.value.isSubscriptionActive)
+        assertTrue(vm.isSubscriptionExitTimerRunningForUnitTests())
+        coVerify(exactly = 1) { holdPour.finalizeHoldPourSession() }
     }
 
     @Test

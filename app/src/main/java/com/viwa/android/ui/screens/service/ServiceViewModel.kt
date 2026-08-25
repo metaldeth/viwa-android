@@ -2628,6 +2628,7 @@ constructor(
             runCatching {
                 when (val r = waterCalibrationService.writeCoefficient(targetVolumeMl = target, actualVolumeMl = actual)) {
                     is WaterCalibrationWriteResult.Success -> {
+                        uplinkLocalPumpCalibration(r.data)
                         val rate = r.data.flowRateMlPerSec
                         val rateStr = rate?.let { "%.2f".format(it) } ?: "—"
                         _state.update {
@@ -2797,7 +2798,8 @@ constructor(
                             channel = WaterCalibrationChannel.SODA,
                         )
                 ) {
-                    is WaterCalibrationWriteResult.Success ->
+                    is WaterCalibrationWriteResult.Success -> {
+                        uplinkLocalPumpCalibration(r.data)
                         _state.update {
                             it.copy(
                                 sodaCalSaveBusy = false,
@@ -2806,6 +2808,7 @@ constructor(
                                 sodaCalBannerIsError = false,
                             )
                         }
+                    }
                     is WaterCalibrationWriteResult.Failure ->
                         _state.update {
                             it.copy(
@@ -2826,5 +2829,11 @@ constructor(
                 }
             }
         }
+    }
+
+    private suspend fun uplinkLocalPumpCalibration(data: WaterCalibrationData) {
+        val water = data.waterPumpTenths ?: return
+        val soda = data.sodaPumpTenths ?: return
+        telemetryCellsSyncCoordinator.onLocalPumpCalibrationSaved(water, soda)
     }
 }

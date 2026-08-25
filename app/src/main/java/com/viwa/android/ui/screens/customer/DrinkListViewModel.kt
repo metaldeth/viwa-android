@@ -135,6 +135,8 @@ data class DrinkListUiState(
     val isWaterPourActive: Boolean = false,
  /** Лимит 30 с удержания (. */
     val waterPourLimitBanner: Boolean = false,
+    /** Сброс Compose pointerInput после авто-стопа по лимиту 30 с (палец ещё на экране). */
+    val waterPourGestureEpoch: Int = 0,
     val waterPourError: String? = null,
  /** Тип воды для D0 при отсканированной карте (нижний ряд); без карты — не используется в команде. */
     val flowWaterPourType: FlowWaterPourType = FlowWaterPourType.Filtered,
@@ -267,9 +269,10 @@ constructor(
         }
         viewModelScope.launch {
             telemetryService.subscribeInfo.collect { info ->
+                val deferSubscriptionUpdates = isSubscriptionUpdatesDeferredForWaterPour()
                 if (info == null) {
-                    val pourSessionActive =
-                        waterPourStarted || holdPourRequestUuid != null || _state.value.isWaterPourActive
+                    if (deferSubscriptionUpdates) return@collect
+                    val pourSessionActive = isWaterPourSessionActive()
                     stopSubscriptionExitTimer()
                     _state.update { st ->
                         applyPlainWaterPreferenceIfNoDrink(
@@ -290,34 +293,66 @@ constructor(
                 }
                 val previousClientId = _state.value.scannedSubscriptionClientId
                 val subscriptionActive = info.isActiveSubscribe
-                val pourSessionActive =
-                    waterPourStarted || holdPourRequestUuid != null || _state.value.isWaterPourActive
+                val pourSessionActive = isWaterPourSessionActive()
+                val effectiveSubscriptionActive =
+                    if (deferSubscriptionUpdates && _state.value.isSubscriptionActive) {
+                        true
+                    } else {
+                        subscriptionActive
+                    }
                 val localPrefsJson = configRepository.getJson(JsonStoreKeys.LOYALTY_CLIENT_PLAIN_WATER_PREFS)
                 val preferredPourType =
                     LoyaltyPlainWaterPreference.resolvePourType(
                         clientId = info.clientId,
                         serverPlainWaterType = info.lastPlainWaterType,
                         localPrefsJson = localPrefsJson,
-                        subscriptionActive = subscriptionActive,
+                        subscriptionActive = effectiveSubscriptionActive,
                         coerceEntitlement = true,
                     )
-                _state.update {
-                    applyPlainWaterPreferenceIfNoDrink(
-                        it.copy(
-                            scannedSubscriptionClientId = info.clientId,
-                            isSubscriptionActive = subscriptionActive,
-                            subscriptionVolumeMl = info.volumeMl,
-                            subscriptionMaxVolumeMl = info.maxVolumeMl,
-                            subscriptionEndDate = info.subscribeDateEnd,
+                val sameClientDuringHold =
+                    deferSubscriptionUpdates &&
+                        !previousClientId.isNullOrBlank() &&
+                        previousClientId == info.clientId
+                _state.update { current ->
+                    val next =
+                        current.copy(
+                            scannedSubscriptionClientId =
+                                if (deferSubscriptionUpdates && !previousClientId.isNullOrBlank()) {
+                                    previousClientId
+                                } else {
+                                    info.clientId
+                                },
+                            isSubscriptionActive = effectiveSubscriptionActive,
+                            subscriptionVolumeMl =
+                                if (sameClientDuringHold || !deferSubscriptionUpdates) {
+                                    info.volumeMl
+                                } else {
+                                    current.subscriptionVolumeMl
+                                },
+                            subscriptionMaxVolumeMl =
+                                if (sameClientDuringHold || !deferSubscriptionUpdates) {
+                                    info.maxVolumeMl
+                                } else {
+                                    current.subscriptionMaxVolumeMl
+                                },
+                            subscriptionEndDate =
+                                if (sameClientDuringHold || !deferSubscriptionUpdates) {
+                                    info.subscribeDateEnd
+                                } else {
+                                    current.subscriptionEndDate
+                                },
                             invalidSubscriptionCardVisible = false,
-                        ),
-                        preferredPourType = preferredPourType,
-                    )
+                        )
+                    if (deferSubscriptionUpdates) {
+                        next
+                    } else {
+                        applyPlainWaterPreferenceIfNoDrink(next, preferredPourType = preferredPourType)
+                    }
                 }
-                if (previousClientId != info.clientId) {
+                if (!deferSubscriptionUpdates && previousClientId != info.clientId) {
                     startSubscriptionExitTimer()
                 }
-                if (!subscriptionActive) {
+                if (!deferSubscriptionUpdates && !subscriptionActive) {
                     reactToSubscriptionEntitlementLoss(pourSessionActive)
                 }
             }
@@ -614,9 +649,19 @@ constructor(
                                 WaterPourByTouchPayload.stopBody,
                             )
                         }.onFailure { Timber.w(it, "waterPour stop (max hold)") }
-                        abortActiveWaterPour(finalizeTelemetry = true, sendHardwareStop = false)
+                        abortActiveWaterPour(
+                            finalizeTelemetry = true,
+                            sendHardwareStop = false,
+                            preserveLimitBanner = true,
+                        )
                         resumeSubscriptionExitTimerAfterWaterPour()
-                        _state.update { it.copy(waterPourLimitBanner = true) }
+                        _state.update {
+                            it.copy(
+                                waterPourLimitBanner = true,
+                                waterPourGestureEpoch = it.waterPourGestureEpoch + 1,
+                            )
+                        }
+                        Timber.i("waterPour max hold: pour stopped, gesture epoch=%d", _state.value.waterPourGestureEpoch)
                         waterPourLimitHideJob?.cancel()
                         waterPourLimitHideJob =
                             viewModelScope.launch {
@@ -689,12 +734,17 @@ constructor(
             _state.value.isWaterPourActive ||
             waterPourDebounceJob?.isActive == true
 
+    /** While holding pour, ignore subscribeInfo loss/flicker so gesture and hardware stay stable. */
+    private fun isSubscriptionUpdatesDeferredForWaterPour(): Boolean =
+        subscriptionExitPausedForPour || isWaterPourSessionActive()
+
     /**
      * Stops an in-flight hold pour once. Callers that already sent hardware stop set [sendHardwareStop] false.
      */
     private suspend fun abortActiveWaterPour(
         finalizeTelemetry: Boolean,
         sendHardwareStop: Boolean = true,
+        preserveLimitBanner: Boolean = false,
     ) {
         if (!isWaterPourSessionActive() && holdPourRequestUuid == null) return
         waterPourDebounceJob?.cancel()
@@ -718,7 +768,11 @@ constructor(
             holdPourRequestUuid = null
         }
         _state.update {
-            it.copy(isWaterPourActive = false, waterPourLimitBanner = false, waterPourError = null)
+            it.copy(
+                isWaterPourActive = false,
+                waterPourLimitBanner = if (preserveLimitBanner) it.waterPourLimitBanner else false,
+                waterPourError = null,
+            )
         }
     }
 
@@ -1955,6 +2009,22 @@ constructor(
     /** Unit-test seam: simulate mid-hold subscription/card loss. */
     internal suspend fun abortActiveWaterPourForUnitTests(finalizeTelemetry: Boolean = true) {
         abortActiveWaterPour(finalizeTelemetry = finalizeTelemetry, sendHardwareStop = true)
+    }
+
+    /** Unit-test seam: same path as [WATER_POUR_MAX_MS] timeout (stop pour, keep subscription card). */
+    internal suspend fun completeWaterPourMaxHoldForUnitTests() {
+        abortActiveWaterPour(
+            finalizeTelemetry = true,
+            sendHardwareStop = false,
+            preserveLimitBanner = true,
+        )
+        resumeSubscriptionExitTimerAfterWaterPour()
+        _state.update {
+            it.copy(
+                waterPourLimitBanner = true,
+                waterPourGestureEpoch = it.waterPourGestureEpoch + 1,
+            )
+        }
     }
 
     /** Unit-test seam: mark pour active without debounce/hardware start. */

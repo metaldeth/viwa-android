@@ -29,7 +29,7 @@
 
 | Параметр | Значение |
 |----------|----------|
-| ADB serial (wifi) | **`192.168.1.107:5555`** |
+| ADB serial (wifi) | **`192.168.1.104:5555`** (был `192.168.1.107:5555`; 25.08.2026 107 не отвечал) |
 | Модель / product | `k3568_a` |
 | Package | `com.viwa.android` |
 | Launch activity | `com.viwa.android/.ui.MainActivity` |
@@ -39,9 +39,9 @@
 Установка и запуск на плате:
 
 ```bat
-adb -s 192.168.1.107:5555 wait-for-device
+adb -s 192.168.1.104:5555 wait-for-device
 gradlew.bat installDebug
-adb -s 192.168.1.107:5555 shell am start -n com.viwa.android/.ui.MainActivity
+adb -s 192.168.1.104:5555 shell am start -n com.viwa.android/.ui.MainActivity
 ```
 
 Если IP платы сменится — обновить эту таблицу после проверки `pm path com.viwa.android`.

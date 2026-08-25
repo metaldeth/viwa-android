@@ -242,6 +242,12 @@ fun DrinkListScreen(
 
     var waterPourFingerDown by remember { mutableStateOf(false) }
 
+    LaunchedEffect(state.isWaterPourActive, state.waterPourGestureEpoch) {
+        if (!state.isWaterPourActive) {
+            waterPourFingerDown = false
+        }
+    }
+
     val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
     val screenBg = MaterialTheme.colorScheme.background
  /** Как `useDeselectDrinkOnClickOutside`. */
@@ -462,7 +468,7 @@ fun DrinkListScreen(
                                 modifier =
                                     Modifier.then(
                                         if (!hasSelection) {
-                                            Modifier.pointerInput(Unit) {
+                                            Modifier.pointerInput(state.waterPourGestureEpoch) {
                                                 awaitEachGesture {
                                                     awaitFirstDown(requireUnconsumed = false)
                                                     waterPourFingerDown = true
@@ -486,10 +492,10 @@ fun DrinkListScreen(
                                     enabled = primaryEnabled,
                                     loading = state.isProcessingPay,
  // В покое анимаций нет: эффект включается только при удержании кнопки.
-                                    pulseHint = !hasSelection && (waterPourFingerDown || state.isWaterPourActive),
+                                    pulseHint = !hasSelection && state.isWaterPourActive,
                                     pulseStyle = state.primaryButtonPulseStyle,
                                     waterPourMode = !hasSelection,
-                                    pressDampen = waterPourFingerDown || state.isWaterPourActive,
+                                    pressDampen = state.isWaterPourActive,
                                     onClick = { viewModel.primaryAction(onNavigateToPreparing) },
                                     s = s,
                                 )

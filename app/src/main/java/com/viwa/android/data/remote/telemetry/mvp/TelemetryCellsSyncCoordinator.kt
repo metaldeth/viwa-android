@@ -136,7 +136,6 @@ constructor(
         // Wait for optional post-schema cells.snapshot so dashboard waterPumpTenths wins
         // before we uplink controller value (avoids overwriting offline PATCH).
         delay(POST_SCHEMA_CALIBRATION_REPORT_DELAY_MS)
-        syncControllerFromSnapshotBeforeReport()
         sendMachineCalibrationReport()
     }
 
@@ -173,6 +172,31 @@ constructor(
         val schemaHash = payload["schemaHash"]?.jsonPrimitive?.content
         if (schemaHash.isNullOrBlank()) return
         mergeRevisionFields(schemaHash = schemaHash)
+    }
+
+    /**
+     * Сервисное меню сохранило калибровку помпы: обновить локальный snapshot и сразу
+     * уйти в телеметрию. Snapshot на контроллер не накатываем — MCU уже записан.
+     */
+    suspend fun onLocalPumpCalibrationSaved(
+        waterTenths: Int,
+        sodaTenths: Int,
+    ) {
+        val water = waterTenths.coerceIn(1, 255)
+        val soda = sodaTenths.coerceIn(1, 255)
+        val current = repository.getSnapshot()
+        if (current != null) {
+            repository.replaceSnapshot(
+                current.copy(
+                    machineCalibration =
+                        MachineCalibration(
+                            waterPumpTenths = water,
+                            sodaPumpTenths = soda,
+                        ),
+                ),
+            )
+        }
+        sendMachineCalibrationReport(syncControllerFromSnapshot = false)
     }
 
     /** Локальное изменение volume → обновить snapshot → best-effort uplink (OQ-7). */
@@ -291,8 +315,10 @@ constructor(
         return sendCellsMessage(type = RECIPE_WS_TYPE_SYNC_REQUEST, payloadJson = payloadJson).map { }
     }
 
-    private suspend fun sendMachineCalibrationReport() {
-        syncControllerFromSnapshotBeforeReport()
+    private suspend fun sendMachineCalibrationReport(syncControllerFromSnapshot: Boolean = true) {
+        if (syncControllerFromSnapshot) {
+            syncControllerFromSnapshotBeforeReport()
+        }
         val model = waterCalibrationService.resolvePumpModelForUplink()
         val payloadJson =
             codec.encodeMachineCalibrationReportPayload(
