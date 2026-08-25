@@ -93,10 +93,8 @@ fun IdleVideoHost(
 
     fun dismiss() {
         dismissRequestedAt[0] = System.currentTimeMillis()
-        playerA.pause()
-        playerB.pause()
-        playerA.playWhenReady = false
-        playerB.playWhenReady = false
+        // Сначала скрываем оверлей (phase → Hidden), иначе pause TextureView
+        // показывает чёрный shutter поверх Home до unmount.
         onDismiss()
     }
 
@@ -105,8 +103,8 @@ fun IdleVideoHost(
             if (BuildConfig.DEBUG && dismissRequestedAt[0] != 0L) {
                 Timber.d("IdleMetrics dismiss_ms=${System.currentTimeMillis() - dismissRequestedAt[0]}")
             }
-            playerA.pause()
-            playerB.pause()
+            playerA.stop()
+            playerB.stop()
             playerA.release()
             playerB.release()
         }
@@ -437,6 +435,9 @@ fun IdleVideoHost(
                             player = playerA
                         }
                 },
+                onRelease = { view ->
+                    (view as PlayerView).player = null
+                },
             )
             AndroidView(
                 modifier =
@@ -453,6 +454,9 @@ fun IdleVideoHost(
                                 )
                             player = playerB
                         }
+                },
+                onRelease = { view ->
+                    (view as PlayerView).player = null
                 },
             )
             Box(
