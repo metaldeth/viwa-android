@@ -34,6 +34,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.viwa.android.BuildConfig
 import com.viwa.android.R
+import com.viwa.android.logging.ScreenStateLogger
 import com.viwa.android.ui.screens.customer.ViwaElectronAssets
 import com.viwa.android.ui.screens.customer.buildCustomerBackgroundExoPlayer
 import kotlinx.coroutines.delay
@@ -75,7 +76,10 @@ fun IdleVideoHost(
         remember(enabledVideoIds) {
             enabledVideoIds.map { id -> "$id.mp4" }.ifEmpty { emptyList() }
         }
-    if (files.isEmpty()) return
+    if (files.isEmpty()) {
+        ScreenStateLogger.black("idle.no_videos", "phase=$phase")
+        return
+    }
 
     val playerA = remember(context) { buildCustomerBackgroundExoPlayer(context, repeatMode = Player.REPEAT_MODE_OFF) }
     val playerB = remember(context) { buildCustomerBackgroundExoPlayer(context, repeatMode = Player.REPEAT_MODE_OFF) }
@@ -91,8 +95,12 @@ fun IdleVideoHost(
 
     val dismissRequestedAt = remember { longArrayOf(0L) }
 
+    fun playerSnap(player: ExoPlayer): String =
+        "state=${player.playbackState} playing=${player.isPlaying} ready=${player.playWhenReady} pos=${player.currentPosition}"
+
     fun dismiss() {
         dismissRequestedAt[0] = System.currentTimeMillis()
+        ScreenStateLogger.action("idle.dismiss overlay=${ScreenStateLogger.overlay}")
         // Сначала скрываем оверлей (phase → Hidden), иначе pause TextureView
         // показывает чёрный shutter поверх Home до unmount.
         onDismiss()
@@ -307,6 +315,11 @@ fun IdleVideoHost(
     LaunchedEffect(phase) {
         if (phase != IdlePhase.Visible) return@LaunchedEffect
         val visibleStart = System.currentTimeMillis()
+        ScreenStateLogger.overlay = "visible-black"
+        ScreenStateLogger.black(
+            "idle.visible_black_until_frame",
+            "clip=${files.firstOrNull()} ${playerSnap(playerA)}",
+        )
         containerAlpha.snapTo(0f)
         alphaA.snapTo(1f)
         alphaB.snapTo(0f)
@@ -329,10 +342,18 @@ fun IdleVideoHost(
             playerA.playbackState != Player.STATE_READY &&
             playerA.playbackState != Player.STATE_BUFFERING
         ) {
+            ScreenStateLogger.black(
+                "idle.first_frame_miss",
+                playerSnap(playerA),
+            )
             Timber.tag(TAG).w("Idle video failed to render first frame — dismiss")
             dismiss()
             return@LaunchedEffect
         }
+        ScreenStateLogger.overlay = "visible-video"
+        ScreenStateLogger.action(
+            "idle.first_frame ok=${firstFrameRendered} ${playerSnap(playerA)} waitMs=${System.currentTimeMillis() - visibleStart}",
+        )
         containerAlpha.animateTo(1f, tween(CONTAINER_FADE_MS, easing = LinearEasing))
 
         while (isActive) {
@@ -359,6 +380,7 @@ fun IdleVideoHost(
             if (next.playbackState != Player.STATE_READY) {
                 // Повторить текущий ролик безопаснее, чем кроссфейдить в неготовый
                 // плеер: иначе на экране окажется чёрный кадр.
+                ScreenStateLogger.black("idle.next_player_not_ready", "clip=${counter[0]} ${playerSnap(next)}")
                 Timber.tag(TAG).w("next idle player not ready — repeating current clip")
                 active.seekTo(0)
                 active.playWhenReady = true
@@ -406,6 +428,10 @@ fun IdleVideoHost(
             stallWatchState = result.state
             if (result.action != IdleVideoStallWatchdog.RecoveryAction.None) {
                 result.diagnostic?.let { Timber.tag(TAG).w(it) }
+                ScreenStateLogger.black(
+                    "idle.stall",
+                    "action=${result.action} ${playerSnap(active)} ${result.diagnostic.orEmpty()}",
+                )
                 recoverStalledPlayer(active, result.action, counter[0])
             }
         }

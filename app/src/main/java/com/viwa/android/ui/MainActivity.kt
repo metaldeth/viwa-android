@@ -45,6 +45,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.viwa.android.BuildConfig
+import com.viwa.android.logging.ScreenStateLogger
 import com.viwa.android.data.local.db.JsonStoreKeys
 import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.hardware.scanner.ScannerManager
@@ -281,8 +282,10 @@ class MainActivity : ComponentActivity() {
 
                         // Idle-таймер работает только на экране выбора напитков
                         LaunchedEffect(currentRoute) {
-                            val route = currentRoute
-                            idleVideoViewModel.setActive(route == Routes.Home)
+                            val route = currentRoute ?: "null"
+                            ScreenStateLogger.route = route
+                            ScreenStateLogger.action("nav.route=$route")
+                            idleVideoViewModel.setActive(currentRoute == Routes.Home)
                         }
 
                         var homeIdleBlocked by remember { mutableStateOf(false) }

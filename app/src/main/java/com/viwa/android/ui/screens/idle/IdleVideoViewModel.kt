@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.viwa.android.data.local.db.JsonStoreKeys
 import com.viwa.android.data.repository.ConfigRepository
+import com.viwa.android.logging.ScreenStateLogger
 import com.viwa.android.ui.screens.customer.IDLE_VIDEO_IDS_ALL
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,7 +49,17 @@ class IdleVideoViewModel @Inject constructor(
             scope = viewModelScope,
             isScreenActive = { isIdleAllowed() },
             enabledVideoIds = { _enabledVideoIds.value },
-            onPhaseChanged = { _phase.value = it },
+            onPhaseChanged = { next ->
+                val prev = _phase.value
+                _phase.value = next
+                ScreenStateLogger.idlePhase = next.name
+                if (next == IdlePhase.Hidden) {
+                    ScreenStateLogger.overlay = "none"
+                }
+                if (prev != next) {
+                    ScreenStateLogger.action("idle.phase $prev→$next videos=${_enabledVideoIds.value.size}")
+                }
+            },
         )
 
     init {
@@ -77,7 +88,12 @@ class IdleVideoViewModel @Inject constructor(
 
     /** Вызывается при навигации. [active] = true только для Routes.Home. */
     fun setActive(active: Boolean) {
+        val prevAllowed = isIdleAllowed()
         screenActive = active
+        ScreenStateLogger.idleAllowed = isIdleAllowed()
+        ScreenStateLogger.action(
+            "idle.setActive home=$active blocked=$customerFlowBlocked allowed=${isIdleAllowed()} (was $prevAllowed)",
+        )
         if (!isIdleAllowed()) {
             phaseScheduler.cancelAndHide()
         } else {
@@ -92,6 +108,9 @@ class IdleVideoViewModel @Inject constructor(
     fun setCustomerFlowBlocked(blocked: Boolean) {
         if (customerFlowBlocked == blocked) return
         customerFlowBlocked = blocked
+        ScreenStateLogger.homeIdleBlocked = blocked
+        ScreenStateLogger.idleAllowed = isIdleAllowed()
+        ScreenStateLogger.action("idle.flowBlocked=$blocked home=$screenActive allowed=${isIdleAllowed()}")
         if (blocked) {
             phaseScheduler.cancelAndHide()
         } else if (screenActive) {
@@ -101,6 +120,7 @@ class IdleVideoViewModel @Inject constructor(
 
     /** Любое касание экрана сбрасывает таймер и скрывает оверлей. */
     fun resetTimer() {
+        ScreenStateLogger.action("idle.resetTimer allowed=${isIdleAllowed()}")
         phaseScheduler.cancelAndHide()
         if (isIdleAllowed()) phaseScheduler.scheduleIdle()
     }

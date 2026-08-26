@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.viewModelScope
 import com.viwa.android.data.local.db.JsonStoreKeys
+import com.viwa.android.logging.ScreenStateLogger
 import com.viwa.android.data.network.NetworkTrafficEntry
 import com.viwa.android.data.network.NetworkTrafficLogger
 import com.viwa.android.data.remote.telemetry.ConnectionState
@@ -620,6 +621,7 @@ constructor(
                 if (!isActive) return@launch
                 waterPourStarted = true
                 _state.update { it.copy(isWaterPourActive = true, waterPourError = null) }
+                ScreenStateLogger.action("home.waterPour.start")
                 runCatching {
                     controllerGateway.sendCommand(
                         RequestCommand.WaterPourByTouch,
@@ -724,6 +726,7 @@ constructor(
             _state.update {
                 it.copy(isWaterPourActive = false, waterPourLimitBanner = false, waterPourError = null)
             }
+            ScreenStateLogger.action("home.waterPour.stop")
             resumeSubscriptionExitTimerAfterWaterPour()
         }
     }
@@ -1076,6 +1079,9 @@ constructor(
 
  // Остаток по карте хватает (подписка или бесплатный литр) — готовка + useSubscriptionSaleTopic.
             if (subscriptionVolumeEnough) {
+                ScreenStateLogger.action(
+                    "home.pay.subscribe drink=${container.product.name} vol=$volume remain=${s.subscriptionVolumeMl}",
+                )
                 _state.update { it.copy(isProcessingPay = true, flowBanner = null) }
                 try {
                     runChooseAndNavigate(
@@ -1109,6 +1115,7 @@ constructor(
         onNavigateToPreparing: (tasteId: Int, productName: String, estSeconds: Int, mediaKey: String?, payMethod: String, priceRub: Int) -> Unit,
     ) {
         if (combinedPaymentSettled.get()) return
+        ScreenStateLogger.action("home.pay.sheet drink=${_state.value.activeContainer?.product?.name ?: "-"}")
         _state.update {
             it.copy(
                 paymentSheetVisible = true,
@@ -1932,6 +1939,10 @@ constructor(
                         saleTotalPriceRub > 0 -> saleTotalPriceRub.toInt()
                         else -> linePriceRub
                     }
+                ScreenStateLogger.action(
+                    "home.navigate.preparing pay=$salePayMethod drink=${container.product.name} " +
+                        "media=${container.product.taste.mediaKey ?: "-"} est=${result.estSeconds}",
+                )
                 onNavigateToPreparing(
                     container.product.taste.id,
                     container.product.name,

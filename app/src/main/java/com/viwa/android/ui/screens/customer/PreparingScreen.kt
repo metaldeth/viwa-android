@@ -68,6 +68,7 @@ import com.viwa.android.services.preparing.CustomerPreparingPhase
 import com.viwa.android.ui.components.QRCodeView
 import com.viwa.android.ui.theme.MontserratFamily
 import kotlinx.coroutines.delay
+import com.viwa.android.logging.ScreenStateLogger
 import timber.log.Timber
 
 private val SuccessGreen = Color(0xFF03BC2E)
@@ -118,6 +119,14 @@ fun PreparingScreen(
     val showReady = phase is CustomerPreparingPhase.DrinkReady
     val receiptAfterReady by viewModel.receiptAfterReady.collectAsStateWithLifecycle()
 
+    LaunchedEffect(productName, mediaKey, estSeconds) {
+        ScreenStateLogger.preparing = "drink=$productName media=${mediaKey ?: "-"} est=${estSeconds}s"
+        ScreenStateLogger.action("preparing.enter drink=$productName media=${mediaKey ?: "-"}")
+        if (mediaKey.isNullOrBlank()) {
+            ScreenStateLogger.black("preparing.no_media", "drink=$productName dark ScreenBg")
+        }
+    }
+
     val progress = remember { Animatable(0f) }
     LaunchedEffect(estSeconds, showReady) {
         if (!showReady) {
@@ -130,12 +139,15 @@ fun PreparingScreen(
     }
 
     val backToDrinks: () -> Unit = {
+        ScreenStateLogger.action("preparing.backToHome drink=$productName phase=$phase ready=$showReady")
+        ScreenStateLogger.preparing = null
         viewModel.resetSession()
         onBackToMenu()
     }
     val backToDrinksLatest by rememberUpdatedState(backToDrinks)
 
     LaunchedEffect(phase) {
+        ScreenStateLogger.action("preparing.phase=$phase")
         if (phase !is CustomerPreparingPhase.AwaitingDrinkReady) return@LaunchedEffect
         val delayMs = viewModel.getPreparingAutoExitDelayMs()
         if (delayMs <= 0L) return@LaunchedEffect
@@ -586,7 +598,10 @@ private const val TAG_PREPARING_VIDEO = "PreparingVideo"
 @Composable
 private fun PreparingVideoBackground(mediaKey: String?) {
     val videoUri = remember(mediaKey) { ViwaElectronAssets.preparingVideoUri(mediaKey) }
-    if (videoUri == null) return
+    if (videoUri == null) {
+        ScreenStateLogger.black("preparing.video_uri_null", "media=$mediaKey")
+        return
+    }
 
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current

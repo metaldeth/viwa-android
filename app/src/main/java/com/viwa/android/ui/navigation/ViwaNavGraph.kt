@@ -10,6 +10,7 @@ import androidx.navigation.navArgument
 import com.viwa.android.ui.screens.customer.FreeDrinkOfferScreen
 import com.viwa.android.ui.screens.customer.PreparingScreen
 import com.viwa.android.ui.screens.home.HomeScreen
+import com.viwa.android.logging.ScreenStateLogger
 import com.viwa.android.ui.screens.service.ServiceScreen
 
 @Composable
@@ -25,6 +26,9 @@ fun ViwaNavGraph(
                 onHomeIdleBlockingChanged = onHomeIdleBlockingChanged,
                 onOpenFreeDrinkOffer = { navController.navigate(Routes.FreeDrinkOffer) },
                 onNavigateToPreparing = { tasteId, productName, estSeconds, mediaKey, payMethod, priceRub ->
+                    ScreenStateLogger.action(
+                        "nav.toPreparing pay=$payMethod drink=$productName media=${mediaKey ?: "-"}",
+                    )
                     navController.navigate(
                         "${Routes.Preparing}/$tasteId/${Uri.encode(productName)}/$estSeconds/" +
                             "${Uri.encode(mediaKey ?: "none")}/$payMethod/$priceRub",

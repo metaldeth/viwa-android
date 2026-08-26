@@ -2,6 +2,7 @@
 
 package com.viwa.android.ui.screens.customer
 
+import com.viwa.android.logging.ScreenStateLogger
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -185,6 +186,11 @@ fun DrinkListScreen(
     val blocksIdleOverlay = state.blocksIdleVideoOverlay()
     val onHomeIdleBlockingChangedState by rememberUpdatedState(onHomeIdleBlockingChanged)
     LaunchedEffect(blocksIdleOverlay) {
+        ScreenStateLogger.action(
+            "home.idleBlock=$blocksIdleOverlay paySheet=${state.paymentSheetVisible} " +
+                "processing=${state.isProcessingPay} water=${state.isWaterPourActive} " +
+                "invalidCard=${state.invalidSubscriptionCardVisible} sub=${!state.scannedSubscriptionClientId.isNullOrBlank()}",
+        )
         onHomeIdleBlockingChangedState(blocksIdleOverlay)
     }
  /** Одна бутылка = 0,5 л (500 мл). */
