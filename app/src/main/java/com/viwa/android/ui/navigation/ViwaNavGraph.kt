@@ -24,7 +24,12 @@ fun ViwaNavGraph(
             HomeScreen(
                 onOpenService = onOpenService,
                 onHomeIdleBlockingChanged = onHomeIdleBlockingChanged,
-                onOpenFreeDrinkOffer = { navController.navigate(Routes.FreeDrinkOffer) },
+                onOpenFreeDrinkOffer = {
+                    navController.navigate(Routes.FreeDrinkOffer) {
+                        launchSingleTop = true
+                        popUpTo(Routes.Home) { inclusive = false }
+                    }
+                },
                 onNavigateToPreparing = { tasteId, productName, estSeconds, mediaKey, payMethod, priceRub ->
                     ScreenStateLogger.action(
                         "nav.toPreparing pay=$payMethod drink=$productName media=${mediaKey ?: "-"}",
@@ -37,10 +42,10 @@ fun ViwaNavGraph(
             )
         }
         composable(Routes.FreeDrinkOffer) {
-            FreeDrinkOfferScreen(onClose = { navController.popBackStack() })
+            FreeDrinkOfferScreen(onClose = { navController.returnToHome("offer.close") })
         }
         composable(Routes.Service) {
-            ServiceScreen(onBack = { navController.popBackStack() })
+            ServiceScreen(onBack = { navController.returnToHome("service.back") })
         }
         composable(
             route = "${Routes.Preparing}/{tasteId}/{productName}/{estSeconds}/{mediaKey}/{payMethod}/{priceRub}",
@@ -63,7 +68,7 @@ fun ViwaNavGraph(
                 estSeconds = estSeconds,
                 mediaKey = mediaKey,
                 onBackToMenu = {
-                    navController.popBackStack(Routes.Home, inclusive = false)
+                    navController.returnToHome("preparing.back")
                 },
             )
         }

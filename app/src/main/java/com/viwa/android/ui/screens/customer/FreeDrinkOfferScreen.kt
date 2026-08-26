@@ -29,6 +29,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.viwa.android.R
+import com.viwa.android.logging.ScreenStateLogger
 import com.viwa.android.ui.components.QRCodeView
 import com.viwa.android.ui.theme.MontserratFamily
 import kotlinx.coroutines.delay
@@ -84,10 +88,18 @@ fun FreeDrinkOfferScreen(
     viewModel: FreeDrinkOfferViewModel = hiltViewModel(),
 ) {
     val qrUrl by viewModel.qrUrl.collectAsStateWithLifecycle()
+    var closed by remember { mutableStateOf(false) }
+    val closeOnce: () -> Unit = {
+        if (!closed) {
+            closed = true
+            ScreenStateLogger.action("offer.closeOnce")
+            onClose()
+        }
+    }
 
     LaunchedEffect(Unit) {
         delay(OFFER_AUTO_CLOSE_MS)
-        onClose()
+        closeOnce()
     }
 
     BoxWithConstraints(
@@ -143,7 +155,7 @@ fun FreeDrinkOfferScreen(
         )
 
         IconButton(
-            onClick = onClose,
+            onClick = closeOnce,
             modifier =
                 Modifier
                     .align(Alignment.TopEnd)

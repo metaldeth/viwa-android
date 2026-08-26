@@ -57,6 +57,7 @@ import com.viwa.android.platform.ViwaKioskSystemUi
 import com.viwa.android.platform.ViwaSystemUiPolicy
 import com.viwa.android.ui.navigation.ViwaNavGraph
 import com.viwa.android.ui.navigation.Routes
+import com.viwa.android.ui.navigation.returnToHome
 import com.viwa.android.ui.screens.service.ServiceScreenLaunch
 import com.viwa.android.ui.screens.idle.IdlePhase
 import com.viwa.android.ui.screens.idle.IdleVideoHost
@@ -285,6 +286,10 @@ class MainActivity : ComponentActivity() {
                             val route = currentRoute ?: "null"
                             ScreenStateLogger.route = route
                             ScreenStateLogger.action("nav.route=$route")
+                            if (currentRoute == null) {
+                                ScreenStateLogger.black("nav.empty_stack")
+                                navController.returnToHome("empty_stack")
+                            }
                             idleVideoViewModel.setActive(currentRoute == Routes.Home)
                         }
 
