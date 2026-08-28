@@ -165,7 +165,8 @@ CRUD: создание / редактирование / удаление. При
 ### 3.1.4 Allowlist вкусов (из wiva-android)
 
 Канон: `ViwaElectronAssets.kt` → `MEDIA_KEY_TO_PNG` / `MEDIA_KEY_TO_VIDEO`  
-(ассеты: `app/src/main/assets/viwa_electron/img/horizontalCard/*.png`).
+(ассеты: `app/src/main/assets/viwa_electron/img/horizontalCard/*.png`).  
+Правила генерации PNG карточек: [`TASTE_CARD_IMAGE_GENERATION.md`](./TASTE_CARD_IMAGE_GENERATION.md).
 
 | `tasteMediaKey` | Отображаемое имя (RU) |
 |-----------------|------------------------|

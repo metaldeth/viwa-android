@@ -17,6 +17,7 @@ object DispenseTelemetryFactory {
         concentration: DrinkConcentration,
         dosage: DrinkDosage,
         clientId: String,
+        waterOption: DrinkWaterOption = DrinkWaterOption.STANDARD,
         pouredAt: String = TelemetryIsoTimestamps.nowUtc(),
     ): PourEventSnapshot {
         val strength = concentration.toDrinkStrength()
@@ -43,6 +44,7 @@ object DispenseTelemetryFactory {
             recipeWaterMl = recipeFields.recipeWaterMl,
             recipeProductMl = recipeFields.recipeProductMl,
             conversionFactor = recipeFields.conversionFactor,
+            plainWaterType = PlainWaterType.fromDrinkWaterOption(waterOption).wireValue,
         )
     }
 

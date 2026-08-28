@@ -91,6 +91,7 @@ gradlew.bat installRelease
 - Локальные ключи (не коммитить): **`local.properties.sample`** → скопировать в `local.properties`; `telemetry.enrollmentKey` = `MACHINE_ENROLLMENT_KEY` на сервере (`viwa-telemetry/.env.example`).
 - **DEBUG test bench** (`installDebug` only): в `local.properties` задать `telemetry.debug.serial` (default `VIWA-TEST01`), `telemetry.debug.regKey=REG-...`, `telemetry.debug.autoConnect=true`. После первой успешной регистрации `machineSecret` хранится в EncryptedSharedPreferences — перезапуск и `installDebug` поверх существующей сборки переподключаются без повторного REG. Ключ `telemetry.debug.regKey` **не коммитить**.
 - Серверная документация: `c:\viwa\viwa-telemetry\AGENTS.md`, deploy: `c:\viwa\viwa-telemetry\docs\deployment\server.md`.
+- **Логи полевого автомата** (не офисная плата): SSH на telemetry-сервер, не MCP `user-device-logs` — `.cursor/rules/universal/machine-app-logs.mdc`.
 
 ## Офис / железо (этап F)
 
@@ -104,4 +105,4 @@ gradlew.bat installRelease
 
 ## Медиа экрана выбора напитка (из wiva_electron)
 
-Ролики промо и PNG горизонтальных карточек копируются из `wiva_electron/src/renderer/assets/video` и `.../assets/img/horizontalCard` в `app/src/main/assets/viwa_electron/video/` и `.../img/horizontalCard/` (те же имена файлов). Маппинг в коде: `ui/screens/customer/ViwaElectronAssets.kt`; воспроизведение: `ViwaPromoVideoCard.kt`, Coil в `ViwaDrinkCard` (`DrinkListScreen.kt`). При смене набора роликов в electron обновить список `PROMO_VIDEO_FILES` и при необходимости пересинхронизировать файлы.
+Ролики промо и PNG горизонтальных карточек копируются из `wiva_electron/src/renderer/assets/video` и `.../assets/img/horizontalCard` в `app/src/main/assets/viwa_electron/video/` и `.../img/horizontalCard/` (те же имена файлов). Маппинг в коде: `ui/screens/customer/ViwaElectronAssets.kt`; воспроизведение: `ViwaPromoVideoCard.kt`, Coil в `ViwaDrinkCard` (`DrinkListScreen.kt`). При смене набора роликов в electron обновить список `PROMO_VIDEO_FILES` и при необходимости пересинхронизировать файлы. Новые/перегенерированные PNG карточек — по правилам `docs/TASTE_CARD_IMAGE_GENERATION.md`.

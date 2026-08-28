@@ -32,8 +32,10 @@ import com.viwa.android.domain.telemetry.DispenseTelemetryFactory.newStableUuid
 import androidx.annotation.VisibleForTesting
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +44,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 @Singleton
@@ -77,10 +80,9 @@ constructor(
     val customerPhase: StateFlow<CustomerPreparingPhase> = _customerPhase.asStateFlow()
 
     fun resetSession() {
-        successWatchJob?.cancel()
-        successWatchJob = null
+        // Не отменять successWatchJob и не сбрасывать pour context:
+        // автозакрытие экрана готовности (5 с) иначе рвёт enqueue telemetry.pour.report.
         drinkPreparing.cancelMockPreparing()
-        currentPreparingContext = null
         _customerPhase.value = CustomerPreparingPhase.Idle
     }
 
@@ -302,20 +304,30 @@ constructor(
                 scope.launch {
                     try {
                         gateway.incomingResponses.first { it.response == ResponseCommand.DrinkPreparingSuccess }
-                        inventoryService.applyWriteOff(container.containerNumber, volumeMl, effectiveRatio)
-                        runCatching {
-                            waterCounter.accumulateHardwareReadingAfterSuccessfulPreparation()
-                        }.onFailure { Timber.tag(TAG).w(it, "water counter accumulate") }
-                        emit(PreparingState.Success)
-                        _customerPhase.value = CustomerPreparingPhase.DrinkReady
-                        flowStripRgbCoordinator.scheduleGreenForTenSecondsThenRestoreSaved()
-                        val pourContext = currentPreparingContext
-                        persistPreparingTimeRecord()
-                        pourContext?.let { enqueueDispenseTelemetry(it) }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Timber.tag(TAG).e(e, "await DrinkPreparingSuccess")
-                    } finally {
-                        currentPreparingContext = null
+                        return@launch
+                    }
+
+                    val pourContext = currentPreparingContext
+                    withContext(NonCancellable) {
+                        try {
+                            pourContext?.let { enqueueDispenseTelemetry(it) }
+                            inventoryService.applyWriteOff(container.containerNumber, volumeMl, effectiveRatio)
+                            runCatching {
+                                waterCounter.accumulateHardwareReadingAfterSuccessfulPreparation()
+                            }.onFailure { Timber.tag(TAG).w(it, "water counter accumulate") }
+                            emit(PreparingState.Success)
+                            _customerPhase.value = CustomerPreparingPhase.DrinkReady
+                            flowStripRgbCoordinator.scheduleGreenForTenSecondsThenRestoreSaved()
+                            persistPreparingTimeRecord()
+                        } catch (e: Exception) {
+                            Timber.tag(TAG).e(e, "post-success dispense")
+                        } finally {
+                            currentPreparingContext = null
+                        }
                     }
                 }
 
@@ -369,6 +381,7 @@ constructor(
                             concentration = context.concentration,
                             dosage = dosage,
                             clientId = sub.clientId,
+                            waterOption = context.waterOption,
                         )
                     runCatching {
                         dispenseSyncCoordinator.enqueuePourReport(pour)

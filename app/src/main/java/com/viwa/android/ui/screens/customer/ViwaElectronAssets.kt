@@ -1,5 +1,8 @@
 package com.viwa.android.ui.screens.customer
 
+import com.viwa.android.domain.catalog.TasteMediaKeyCatalog
+import kotlin.random.Random
+
 /** Видео скринсейвера с id и подписью. */
 data class IdleVideoItem(val id: String, val label: String) {
     val fileName: String get() = "$id.mp4"
@@ -47,7 +50,7 @@ object ViwaElectronAssets {
             "watermelon.mp4",
         )
 
-    /** Маппинг mediaKey вкуса → имя mp4-файла в assets. */
+    /** Маппинг mediaKey вкуса → имя mp4-файла в assets (14 ключей с dedicated video). */
     private val MEDIA_KEY_TO_VIDEO: Map<String, String> =
         mapOf(
             "cherry" to "blackCherry.mp4",
@@ -66,9 +69,27 @@ object ViwaElectronAssets {
             "watermelon" to "watermelon.mp4",
         )
 
-    /** Возвращает URI видео для экрана готовки по mediaKey вкуса. */
+    /** Shuffled once for preparing-screen fallback when mediaKey has no dedicated mp4. */
+    private val preparingVideoFallbackPool: List<String> =
+        MEDIA_KEY_TO_VIDEO.values.shuffled(Random(0x7E4A))
+
+    fun preparingVideoFileName(mediaKey: String?): String? {
+        if (mediaKey == null) return null
+        return MEDIA_KEY_TO_VIDEO[mediaKey]
+            ?: preparingVideoFallbackPool[
+                (mediaKey.hashCode() and Int.MAX_VALUE) % preparingVideoFallbackPool.size,
+            ]
+    }
+
+    /**
+     * Возвращает URI видео для экрана готовки по mediaKey вкуса.
+     *
+     * Ключи без dedicated mp4 (например peach, mint, pineapple) получают fallback из
+     * [preparingVideoFallbackPool] — стабильный выбор по hash mediaKey, не null для валидных ключей.
+     * При [mediaKey] == null возвращает null.
+     */
     fun preparingVideoUri(mediaKey: String?): android.net.Uri? {
-        val file = mediaKey?.let { MEDIA_KEY_TO_VIDEO[it] } ?: return null
+        val file = preparingVideoFileName(mediaKey) ?: return null
         return android.net.Uri.parse("$ASSET_URI_PREFIX/video/$file")
     }
 
@@ -82,8 +103,11 @@ object ViwaElectronAssets {
             "lemon" to "lemon.png",
             "lime" to "lime.png",
             "lime-mint" to "lime-mint.png",
+            "mint" to "mint.png",
             "orange" to "orange.png",
+            "peach" to "peach.png",
             "peach-mango" to "peach-mango.png",
+            "pineapple" to "pineapple.png",
             "pomegranate-blueberry" to "pomegranate-blueberry.png",
             "raspberry" to "raspberry.png",
             "strawberry-lemongrass" to "strawberry-lemongrass.png",
@@ -95,7 +119,7 @@ object ViwaElectronAssets {
         return "$ASSET_URI_PREFIX/img/horizontalCard/$file"
     }
 
-    /** Unit-test friendly: есть mp4 в assets для mediaKey (без [android.net.Uri]). */
+    /** Unit-test friendly: preparing screen can show video (dedicated or fallback). */
     fun hasPreparingVideoAsset(mediaKey: String?): Boolean =
-        mediaKey != null && MEDIA_KEY_TO_VIDEO.containsKey(mediaKey)
+        mediaKey != null && TasteMediaKeyCatalog.isValid(mediaKey)
 }

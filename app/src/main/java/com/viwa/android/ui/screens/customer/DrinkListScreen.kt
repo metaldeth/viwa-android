@@ -137,6 +137,9 @@ private val MediaKeyHexOverride: Map<String, String> =
         "lime" to "#63E515",
         "lemon" to "#D7D717",
         "peach-mango" to "#E5AE8A",
+        "peach" to "#FFB74D",
+        "mint" to "#66BB6A",
+        "pineapple" to "#FFC107",
         "coconut" to "#74543D",
     )
 

@@ -6,6 +6,8 @@ import com.viwa.android.domain.model.customer.DrinkConcentration
 
 import com.viwa.android.domain.model.customer.DrinkDosage
 
+import com.viwa.android.domain.model.customer.DrinkWaterOption
+
 import com.viwa.android.domain.telemetry.DispenseTelemetryFactory
 
 import com.viwa.android.domain.telemetry.PlainWaterType
@@ -106,10 +108,29 @@ class TelemetryPourMessageCodecTest {
 
         assertEquals(30, payload["syrupMlActual"]!!.jsonPrimitive.int)
 
+        assertEquals("FILTERED", payload["plainWaterType"]!!.jsonPrimitive.content)
+
         assertFalse(payload.containsKey("grantId"))
 
         assertFalse(payload.containsKey("transactionId"))
 
+    }
+
+    @Test
+    fun `encodePayload flavored subscription includes COLD plainWaterType`() {
+        val pour =
+            DispenseTelemetryFactory.flavoredPourEvent(
+                requestUuid = "880e8400-e29b-41d4-a716-446655440099",
+                volumeMl = 300,
+                productId = "prod-uuid",
+                productNameSnapshot = "Orange",
+                concentration = DrinkConcentration.Standard,
+                dosage = DrinkDosage(conversionFactor = 0.5, drinkVolume = 300, product = 30.0, water = 270.0),
+                clientId = "client-1",
+                waterOption = DrinkWaterOption.COLD,
+            )
+        val payload = TelemetryPourMessageCodec.encodePayload(pour)
+        assertEquals("COLD", payload["plainWaterType"]!!.jsonPrimitive.content)
     }
 
 

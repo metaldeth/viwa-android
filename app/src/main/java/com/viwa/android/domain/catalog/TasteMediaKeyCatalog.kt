@@ -2,7 +2,7 @@ package com.viwa.android.domain.catalog
 
 import com.viwa.android.ui.screens.customer.ViwaElectronAssets
 
-/** Allowlist из 14 tasteMediaKey — канон совпадает с [ViwaElectronAssets]. */
+/** Allowlist из 17 tasteMediaKey — канон совпадает с [ViwaElectronAssets]. */
 object TasteMediaKeyCatalog {
     data class TasteEntry(
         val mediaKey: String,
@@ -19,8 +19,11 @@ object TasteMediaKeyCatalog {
             "lemon",
             "lime",
             "lime-mint",
+            "mint",
             "orange",
+            "peach",
             "peach-mango",
+            "pineapple",
             "pomegranate-blueberry",
             "raspberry",
             "strawberry-lemongrass",
@@ -37,8 +40,11 @@ object TasteMediaKeyCatalog {
             TasteEntry("lemon", "Лимон"),
             TasteEntry("lime", "Лайм"),
             TasteEntry("lime-mint", "Лайм-мята"),
+            TasteEntry("mint", "Мята"),
             TasteEntry("orange", "Апельсин"),
+            TasteEntry("peach", "Персик"),
             TasteEntry("peach-mango", "Манго-персик"),
+            TasteEntry("pineapple", "Ананас"),
             TasteEntry("pomegranate-blueberry", "Гранат-черника"),
             TasteEntry("raspberry", "Малина"),
             TasteEntry("strawberry-lemongrass", "Клубника-лемонграсс"),
