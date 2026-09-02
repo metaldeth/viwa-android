@@ -22,6 +22,7 @@
 
 .PARAMETER Rollback
   Undo provisioning: delete policy_control, revoke WRITE_SECURE_SETTINGS,
+  reset GET_USAGE_STATS app-op to default (`appops set … GET_USAGE_STATS default`),
   restore Kiayo nav bar (persist.kiayo.status.naviBar=1).
 
 .PARAMETER SkipKiayo
@@ -77,11 +78,13 @@ function Show-Verification {
     $policy = (Invoke-Adb shell settings get global policy_control).Trim()
     $granted = Invoke-Adb shell dumpsys package $pkg |
         Select-String "WRITE_SECURE_SETTINGS: granted=true"
+    $usageStats = (Invoke-Adb shell appops get $pkg GET_USAGE_STATS).Trim()
 
     Write-Host ""
     Write-Host "=== Verification ==="
     Write-Host "policy_control = $policy"
     Write-Host "WRITE_SECURE_SETTINGS granted = $($null -ne $granted)"
+    Write-Host "GET_USAGE_STATS app-op = $usageStats"
 
     if ($KiayoApplied) {
         $naviBar = (Invoke-Adb shell getprop $kiayoNavBarHideProp).Trim()
@@ -92,13 +95,14 @@ function Show-Verification {
 
     $okPolicy = $policy -eq $policyValue
     $okGrant = $null -ne $granted
+    $okUsageStats = $usageStats -match "allow"
     $okKiayo = -not $KiayoApplied -or (
         ((Invoke-Adb shell getprop $kiayoNavBarHideProp).Trim() -eq $kiayoNavBarHidden) -and
         ((Invoke-Adb shell getprop $sysNavBarHideProp).Trim() -eq $sysNavBarHidden)
     )
 
     Write-Host ""
-    if ($okPolicy -and $okGrant -and $okKiayo) {
+    if ($okPolicy -and $okGrant -and $okUsageStats -and $okKiayo) {
         Write-Host "Status: OK"
     } else {
         Write-Host "Status: CHECK FAILED (see values above)"
@@ -107,6 +111,9 @@ function Show-Verification {
         }
         if (-not $okGrant) {
             Write-Host "  Expected WRITE_SECURE_SETTINGS: granted=true for $pkg"
+        }
+        if (-not $okUsageStats) {
+            Write-Host "  Expected appops GET_USAGE_STATS allow for $pkg (manifest alone is insufficient)"
         }
         if ($KiayoApplied -and -not $okKiayo) {
             Write-Host "  Expected $kiayoNavBarHideProp = $kiayoNavBarHidden and $sysNavBarHideProp = $sysNavBarHidden"
@@ -120,6 +127,7 @@ if ($Rollback) {
 
     Invoke-Adb shell settings delete global policy_control
     Invoke-Adb shell pm revoke $pkg android.permission.WRITE_SECURE_SETTINGS
+    Invoke-Adb shell appops set $pkg GET_USAGE_STATS default
 
     if (Test-KiayoBoard) {
         Invoke-Adb shell setprop $kiayoNavBarHideProp $kiayoNavBarShown
@@ -135,6 +143,7 @@ Write-Host "Provisioning Viwa kiosk UI for $pkg ..."
 if ($Serial) { Write-Host "ADB serial: $Serial" }
 
 Invoke-Adb shell pm grant $pkg android.permission.WRITE_SECURE_SETTINGS
+Invoke-Adb shell appops set $pkg GET_USAGE_STATS allow
 Invoke-Adb shell settings put global policy_control $policyValue
 Invoke-Adb shell cmd package set-home-activity $pkg/.ui.MainActivity
 

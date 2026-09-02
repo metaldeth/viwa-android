@@ -228,6 +228,7 @@ class DrinkListViewModelTask05IntegrationTest {
             controllerTraffic,
             cardPaymentOrchestrator,
             mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
+            DrinkListViewModelTestSupport.pourDiagnosticsMock(),
         )
         DrinkListViewModelTestSupport.trackViewModel(vm)
         return vm
@@ -404,6 +405,7 @@ class DrinkListViewModelTask05IntegrationTest {
             controllerTraffic,
             orch,
             mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
+            DrinkListViewModelTestSupport.pourDiagnosticsMock(),
         )
         DrinkListViewModelTestSupport.trackViewModel(vm)
         return vm

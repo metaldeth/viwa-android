@@ -3,6 +3,7 @@ package com.viwa.android.platform
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.viwa.android.logging.diagnostics.OutgoingActivityLaunchDiagnostics
 import com.viwa.android.ui.MainActivity
 import timber.log.Timber
 
@@ -18,6 +19,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 setAction(Intent.ACTION_MAIN)
                 addCategory(Intent.CATEGORY_LAUNCHER)
             }
+        OutgoingActivityLaunchDiagnostics.logBeforeLaunch("BootCompletedReceiver", launch)
         runCatching { context.startActivity(launch) }
             .onFailure { Timber.e(it, "BootCompletedReceiver: startActivity failed") }
     }

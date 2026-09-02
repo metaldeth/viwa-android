@@ -29,8 +29,9 @@ Get-Help .\provision-viwa-kiosk.ps1 -Full
 Script applies:
 
 1. `pm grant com.viwa.android android.permission.WRITE_SECURE_SETTINGS`
-2. `settings put global policy_control immersive.full=com.viwa.android` (scoped to Viwa only)
-3. On Kiayo (`com.kiayo.externservice` present):
+2. `appops set com.viwa.android GET_USAGE_STATS allow` (Usage Access for foreground destination diagnostics; **OTA cannot grant this** — re-run script on existing fleet)
+3. `settings put global policy_control immersive.full=com.viwa.android` (scoped to Viwa only)
+4. On Kiayo (`com.kiayo.externservice` present):
    - `setprop persist.kiayo.status.naviBar 0`
    - `setprop persist.sys.navibar 0` (Android nav bar; `1` leaves it visible even with immersive)
 
@@ -38,6 +39,7 @@ Manual equivalent:
 
 ```powershell
 adb shell pm grant com.viwa.android android.permission.WRITE_SECURE_SETTINGS
+adb shell appops set com.viwa.android GET_USAGE_STATS allow
 adb shell settings put global policy_control "immersive.full=com.viwa.android"
 # Только Kiayo после проверки: adb shell pm path com.kiayo.externservice
 adb shell setprop persist.kiayo.status.naviBar 0
@@ -48,13 +50,14 @@ Verify:
 
 ```powershell
 adb shell dumpsys package com.viwa.android | findstr "WRITE_SECURE_SETTINGS: granted=true"
+adb shell appops get com.viwa.android GET_USAGE_STATS
 adb shell settings get global policy_control
 adb shell getprop persist.kiayo.status.naviBar
 adb shell getprop persist.sys.navibar
 adb shell pm path com.kiayo.externservice
 ```
 
-Expected: grant true, `immersive.full=com.viwa.android`, both nav props `0` on Kiayo.
+Expected: grant true, `GET_USAGE_STATS` app-op `allow`, `immersive.full=com.viwa.android`, both nav props `0` on Kiayo.
 
 ## Future boards — firmware priv-app (recommended)
 
@@ -78,6 +81,7 @@ Factory image can also bake `persist.kiayo.status.naviBar=0` once; priv-app does
 | Mechanism | Reboot | Uninstall Viwa | OTA APK update |
 |-----------|--------|----------------|----------------|
 | `pm grant WRITE_SECURE_SETTINGS` | Yes | **Lost** | Kept if update, not uninstall |
+| `appops GET_USAGE_STATS allow` | Yes | **Lost** | **Not granted by OTA** — re-run provisioning |
 | `policy_control` global | Yes | Stays until cleared | Stays until cleared |
 | `persist.kiayo.status.naviBar` | Yes | Independent of app | Independent of app |
 | priv-app whitelist | Yes | N/A (system) | N/A |

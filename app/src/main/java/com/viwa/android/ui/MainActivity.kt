@@ -46,6 +46,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.viwa.android.BuildConfig
 import com.viwa.android.logging.ScreenStateLogger
+import com.viwa.android.logging.diagnostics.ActivityLifecycleDiagnostics
 import com.viwa.android.data.local.db.JsonStoreKeys
 import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.hardware.scanner.ScannerManager
@@ -139,6 +140,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var controllerUiModeCoordinator: ControllerUiModeCoordinator
+
+    @Inject
+    lateinit var activityLifecycleDiagnostics: ActivityLifecycleDiagnostics
 
     private val themeViewModel: ThemeViewModel by viewModels()
     private val idleVideoViewModel: IdleVideoViewModel by viewModels()
@@ -355,28 +359,38 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        activityLifecycleDiagnostics.logLifecycle(this, "onStart")
         applyKioskWindowPolicy(forceLegacyNavHide = true)
     }
 
     override fun onResume() {
         super.onResume()
+        activityLifecycleDiagnostics.logLifecycle(this, "onResume")
         applyKioskWindowPolicy(forceLegacyNavHide = true)
         startCollapseTickerIfNeeded()
     }
 
     override fun onPause() {
+        activityLifecycleDiagnostics.logLifecycle(this, "onPause")
         stopCollapseTicker()
         super.onPause()
     }
 
     override fun onStop() {
+        activityLifecycleDiagnostics.logLifecycle(this, "onStop")
         window.decorView.removeCallbacks(hideRunnable)
         releaseKiayoNavigationBar()
         super.onStop()
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        activityLifecycleDiagnostics.logUserLeaveHint(this)
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        activityLifecycleDiagnostics.logWindowFocusChanged(this, hasFocus)
         if (hasFocus) {
             applyKioskWindowPolicy(forceLegacyNavHide = true)
             requestImmediateKioskCollapse()
@@ -384,6 +398,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        activityLifecycleDiagnostics.logLifecycle(this, "onDestroy")
         releaseKiayoNavigationBar()
         scannerManager.stop()
         super.onDestroy()

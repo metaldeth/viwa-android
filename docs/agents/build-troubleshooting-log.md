@@ -10,6 +10,7 @@
 | BT-002 | medium | `TechnicianAllowlistSyncCoordinatorDisconnectTest` — `UncompletedCoroutinesError` | `open` |
 | BT-004 | high | `assembleRelease` падает до R8 — signing env / keystore не настроены | `open` |
 | BT-006 | high | Windows `mergeDebugResources` / `merged_res_blame_folder` missing JSON after interrupted builds | `open` |
+| BT-007 | medium | Windows Gradle daemon stopped externally (`stop command received`) during unit/R8 — root cause unknown | `open` |
 
 ---
 
@@ -90,3 +91,17 @@
 - **Workaround / fix:** `gradlew --stop`; kill repo-scoped Java/GradleWrapper only; `:app:clean` or delete `app\build` plus `merged_res_blame_folder`, `generated/ksp`, `kspCaches`. If still failing: `--no-daemon`, `--max-workers=1`, consider project `.gradle` cleanup or AGP bump. Tests did not execute.
 - **Статус:** `open`
 - **Связи:** BT-006; agent clean-rebuild 2026-08-10
+
+### 2026-09-02 — Gradle daemon stopped externally during unit/R8 (Windows)
+
+- **Repo:** `viwa-android` (`c:\viwa\viwa-android`)
+- **Команда:** `gradlew.bat :app:testDebugUnitTest`; `gradlew.bat :app:assembleRelease` (R8); повторные Windows Gradle-запуски в одной сессии
+- **Симптом:** повторные прогоны прерваны внешне; в логе:
+  ```
+  Gradle build daemon has been stopped: stop command received
+  ```
+  Диагностика заняла >10 минут; root cause не установлена.
+- **Причина:** не установлена (внешний `gradlew --stop` / остановка агентом / contention с другим owner — не подтверждено).
+- **Workaround / fix:** убедиться, что нет активных repo-scoped Gradle/Java процессов; `gradlew.bat --stop`; **один** retry с `--no-parallel --max-workers=1` (для R8 — `assembleRelease`). Не дублировать job параллельно. Успешный итог сессии: `:app:testDebugUnitTest` (841 tests, 0 failed/skipped), `assembleDebug`, signed `assembleRelease` — после cleanup workers не остались.
+- **Статус:** `open`
+- **Связи:** [docs/sessions/2026-09-02-field-diagnostics-logging.md](../sessions/2026-09-02-field-diagnostics-logging.md); BT-007

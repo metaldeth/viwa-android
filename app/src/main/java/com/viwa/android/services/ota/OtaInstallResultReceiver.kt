@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.os.Build
+import com.viwa.android.logging.diagnostics.DiagnosticBreadcrumbStore
+import com.viwa.android.logging.diagnostics.OutgoingActivityLaunchDiagnostics
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import timber.log.Timber
@@ -14,12 +16,20 @@ class OtaInstallResultReceiver : BroadcastReceiver() {
     @Inject
     lateinit var resultHandler: OtaInstallResultHandler
 
+    @Inject
+    lateinit var diagnosticBreadcrumbStore: DiagnosticBreadcrumbStore
+
     override fun onReceive(context: Context, intent: Intent) {
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
         val action = OtaInstallResultMapping.mapStatus(status, message, readConfirmationIntent(intent))
         action.confirmationIntent?.let { confirmIntent ->
             confirmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            OutgoingActivityLaunchDiagnostics.logBeforeLaunch(
+                caller = "OtaInstallResultReceiver.confirmation",
+                intent = confirmIntent,
+                breadcrumbStore = diagnosticBreadcrumbStore,
+            )
             context.startActivity(confirmIntent)
             Timber.tag(TAG).i("PackageInstaller awaiting user confirmation")
             return

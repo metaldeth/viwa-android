@@ -7,6 +7,8 @@ import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
 import androidx.core.content.FileProvider
+import com.viwa.android.logging.diagnostics.DiagnosticBreadcrumbStore
+import com.viwa.android.logging.diagnostics.OutgoingActivityLaunchDiagnostics
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.FileInputStream
@@ -34,6 +36,7 @@ class OtaInstallLauncher
 constructor(
     @ApplicationContext private val context: Context,
     private val platformCapability: OtaPlatformInstallCapability,
+    private val diagnosticBreadcrumbStore: DiagnosticBreadcrumbStore,
 ) {
     fun launchInstall(apkFile: File): OtaInstallLaunchResult {
         if (!apkFile.isFile) return OtaInstallLaunchResult.Failed("APK missing")
@@ -77,6 +80,14 @@ constructor(
                             PendingIntent.FLAG_UPDATE_CURRENT
                         }
                     val pendingIntent = PendingIntent.getBroadcast(context, sessionId, intent, flags)
+                    Timber.tag(DIAG_TAG).i(
+                        "ota.session.commit sessionId=%d pkg=%s",
+                        sessionId,
+                        context.packageName,
+                    )
+                    diagnosticBreadcrumbStore.recordOutgoingLaunch(
+                        "OtaInstallLauncher.session.commit|${context.packageName}|session=$sessionId",
+                    )
                     session.commit(pendingIntent.intentSender)
                 }
                 OtaInstallLaunchResult.PackageInstallerSessionStarted
@@ -112,6 +123,11 @@ constructor(
                     setDataAndType(uri, "application/vnd.android.package-archive")
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
+            OutgoingActivityLaunchDiagnostics.logBeforeLaunch(
+                caller = "OtaInstallLauncher.actionView",
+                intent = installIntent,
+                breadcrumbStore = diagnosticBreadcrumbStore,
+            )
             context.startActivity(installIntent)
             OtaInstallLaunchResult.ActionViewFallbackStarted
         }.getOrElse {
@@ -120,5 +136,6 @@ constructor(
 
     companion object {
         private const val TAG = "OtaInstallLauncher"
+        private const val DIAG_TAG = "ViwaDiag"
     }
 }

@@ -7,6 +7,9 @@ import com.viwa.android.hardware.scanner.ViwaScannerStartupInitializer
 import com.viwa.android.hardware.serial.ViwaSerialDiscovery
 import com.viwa.android.logging.AppLogFileStore
 import com.viwa.android.logging.RotatingFileTimberTree
+import com.viwa.android.logging.diagnostics.AppStartupDiagnostics
+import com.viwa.android.logging.diagnostics.DiagnosticBreadcrumbStore
+import com.viwa.android.logging.diagnostics.MainThreadWatchdog
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -35,10 +38,21 @@ class ViwaApplication : Application() {
     @Inject
     lateinit var appLogFileStore: AppLogFileStore
 
+    @Inject
+    lateinit var diagnosticBreadcrumbStore: DiagnosticBreadcrumbStore
+
+    @Inject
+    lateinit var appStartupDiagnostics: AppStartupDiagnostics
+
+    @Inject
+    lateinit var mainThreadWatchdog: MainThreadWatchdog
+
     override fun onCreate() {
         super.onCreate()
         Timber.plant(Timber.DebugTree())
         Timber.plant(RotatingFileTimberTree(appLogFileStore))
+        appStartupDiagnostics.scheduleColdStartReport()
+        mainThreadWatchdog.start(this)
         installUncaughtExceptionLogging()
         appScope.launch {
             val devices = serialDiscovery.availableDevices()
@@ -56,6 +70,12 @@ class ViwaApplication : Application() {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             Timber.e(throwable, "Uncaught exception thread=%s", thread.name)
+            runCatching {
+                diagnosticBreadcrumbStore.recordCrashAndFlushSync(
+                    errorType = throwable.javaClass.simpleName,
+                    message = throwable.message.orEmpty(),
+                )
+            }
             previous?.uncaughtException(thread, throwable)
         }
     }

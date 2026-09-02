@@ -177,6 +177,7 @@ class DrinkListViewModelMvpInventoryTest {
             controllerTraffic,
             orch,
             mockk<HoldPourTelemetryCoordinator>(relaxUnitFun = true),
+            DrinkListViewModelTestSupport.pourDiagnosticsMock(),
         )
         DrinkListViewModelTestSupport.trackViewModel(vm)
         return vm

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import androidx.test.core.app.ApplicationProvider
+import com.viwa.android.logging.diagnostics.DiagnosticBreadcrumbStore
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -30,6 +31,8 @@ class OtaPlatformInstallCapabilityTest {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30])
 class OtaInstallLauncherTest {
+    private fun breadcrumbStoreMock(): DiagnosticBreadcrumbStore = mockk(relaxed = true)
+
     @Test
     fun `prefers package installer session before action view fallback`() {
         val context: Context = ApplicationProvider.getApplicationContext()
@@ -40,7 +43,7 @@ class OtaInstallLauncherTest {
         val apkFile = File(context.filesDir, "ota-test.apk")
         apkFile.writeBytes(byteArrayOf(0x50, 0x4B, 0x03, 0x04))
 
-        val launcher = OtaInstallLauncher(context, capability)
+        val launcher = OtaInstallLauncher(context, capability, breadcrumbStoreMock())
         val result = launcher.launchInstall(apkFile)
 
         assertTrue(
@@ -58,7 +61,7 @@ class OtaInstallLauncherTest {
         val apkFile = File(context.filesDir, "ota-test-action-view.apk")
         apkFile.writeBytes(byteArrayOf(0x50, 0x4B, 0x03, 0x04))
 
-        val launcher = OtaInstallLauncher(context, capability)
+        val launcher = OtaInstallLauncher(context, capability, breadcrumbStoreMock())
         val result = launcher.launchInstall(apkFile)
 
         assertTrue(
@@ -88,7 +91,7 @@ class OtaInstallLauncherTest {
         val apkFile = File(appContext.filesDir, "ota-abandon-test.apk")
         apkFile.writeBytes(byteArrayOf(0x50, 0x4B, 0x03, 0x04))
 
-        val launcher = OtaInstallLauncher(context, capability)
+        val launcher = OtaInstallLauncher(context, capability, breadcrumbStoreMock())
         val result = launcher.launchInstall(apkFile)
 
         verify { installer.abandonSession(42) }

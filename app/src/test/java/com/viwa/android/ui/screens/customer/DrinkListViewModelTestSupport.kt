@@ -29,6 +29,7 @@ import com.viwa.android.services.preparing.CustomerPreparingPhase
 import com.viwa.android.services.preparing.PreparingManager
 import com.viwa.android.services.telemetry.ViwaTelemetryService
 import com.viwa.android.domain.telemetry.HoldPourTelemetryCoordinator
+import com.viwa.android.logging.diagnostics.PourDiagnosticsHelper
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -147,6 +148,9 @@ internal object DrinkListViewModelTestSupport {
             every { it.snapshotFlow } returns MutableStateFlow(null).asStateFlow()
         }
 
+    fun pourDiagnosticsMock(): PourDiagnosticsHelper =
+        PourDiagnosticsHelper(mockk(relaxed = true))
+
     fun createViewModel(
         getSBPLinkUseCase: GetSBPLinkUseCase = mockk(relaxed = true),
         checkSBPStatusUseCase: CheckSBPStatusUseCase = mockk(relaxed = true),
@@ -193,6 +197,7 @@ internal object DrinkListViewModelTestSupport {
                     coEvery { holdPour.beginHoldPourSession(any(), any(), any(), any(), any()) } returns "test-hold-uuid"
                     coEvery { holdPour.finalizeHoldPourSession() } returns 0
                 },
+                pourDiagnosticsMock(),
             )
         trackViewModel(vm)
         return vm

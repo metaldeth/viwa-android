@@ -73,15 +73,18 @@ AVD `viwa` (legacy `wiva`, API 25) остаётся дополнительной
 Для теста на этом эмуляторе используйте **release**, а не debug: так проверяются R8/ProGuard, Hilt и поведение, близкое к продакшену (как в `legacy Android kiosk`).
 
 1. Запустите AVD **viwa-android** (см. таблицу выше; runbook: `docs/AVD_VIWA_ANDROID.md`).
-2. Установка и запуск (Windows, SDK из `local.properties` → `sdk.dir`):
+2. Сборка release APK с локальной подписью и установка на эмулятор (Windows, SDK из `local.properties` → `sdk.dir`):
 
 ```bat
 set ANDROID_HOME=F:\AndroidSDK
-gradlew.bat installRelease
+gradlew.bat assembleRelease
+%ANDROID_HOME%\platform-tools\adb.exe -s emulator-5556 install -r app\build\outputs\apk\release\viwa-android-*-release.apk
 %ANDROID_HOME%\platform-tools\adb.exe -s emulator-5556 shell am start -n com.viwa.android/.ui.MainActivity
 ```
 
-Если уже стоит сборка с другой подписью: `adb uninstall com.viwa.android`, затем снова `installRelease`.
+Gradle **не** предоставляет задачу `installRelease`. Для smoke используйте `assembleRelease` + `adb install -r` вручную; это не upload/publish в telemetry.
+
+Если установка падает из‑за несовпадения подписи: `%ANDROID_HOME%\platform-tools\adb.exe -s emulator-5556 uninstall com.viwa.android`, затем снова `install -r` с тем же release APK.
 
 Полный OTA: `docs/OTA_UPDATE.md` (telemetry Phase 3).
 

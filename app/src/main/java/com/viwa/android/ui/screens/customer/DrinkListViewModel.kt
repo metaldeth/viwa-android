@@ -5,6 +5,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.viewModelScope
 import com.viwa.android.data.local.db.JsonStoreKeys
 import com.viwa.android.logging.ScreenStateLogger
+import com.viwa.android.logging.diagnostics.PourDiagnosticsHelper
 import com.viwa.android.data.network.NetworkTrafficEntry
 import com.viwa.android.data.network.NetworkTrafficLogger
 import com.viwa.android.data.remote.telemetry.ConnectionState
@@ -174,6 +175,7 @@ constructor(
     private val controllerTrafficLogger: ViwaControllerTrafficLogger,
     private val cardPaymentOrchestrator: CardPaymentOrchestrator,
     private val holdPourTelemetryCoordinator: HoldPourTelemetryCoordinator,
+    private val pourDiagnostics: PourDiagnosticsHelper,
 ) : ViewModel() {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -218,6 +220,7 @@ constructor(
     private var waterPourStarted: Boolean = false
     private var subscriptionExitPausedForPour: Boolean = false
     private var holdPourRequestUuid: String? = null
+    private var activePourDiagId: String? = null
     private var pendingSubscriptionPourRequestUuid: String? = null
     private val paymentClearingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -622,12 +625,16 @@ constructor(
                 waterPourStarted = true
                 _state.update { it.copy(isWaterPourActive = true, waterPourError = null) }
                 ScreenStateLogger.action("home.waterPour.start")
+                val pourId = pourDiagnostics.beginPour()
+                activePourDiagId = pourId
                 runCatching {
                     controllerGateway.sendCommand(
                         RequestCommand.WaterPourByTouch,
                         waterPourStartPayload(),
                     )
                 }.onFailure { e ->
+                    pourDiagnostics.commandFailed(pourId, e.javaClass.simpleName)
+                    finishPourDiagnostics("command_failed")
                     Timber.e(e, "waterPour start")
                     waterPourStarted = false
                     _state.update {
@@ -639,12 +646,14 @@ constructor(
                     resumeSubscriptionExitTimerAfterWaterPour()
                     return@launch
                 }
-                beginHoldPourTelemetryIfNeeded()
+                pourDiagnostics.commandDone(pourId)
+                beginHoldPourTelemetryIfNeeded(pourId)
                 waterPourMaxHoldJob?.cancel()
                 waterPourMaxHoldJob =
                     viewModelScope.launch {
                         delay(WATER_POUR_MAX_MS)
                         if (!waterPourStarted) return@launch
+                        activePourDiagId?.let { pourDiagnostics.maxHold(it) }
                         runCatching {
                             controllerGateway.sendCommand(
                                 RequestCommand.WaterPourByTouch,
@@ -655,6 +664,7 @@ constructor(
                             finalizeTelemetry = true,
                             sendHardwareStop = false,
                             preserveLimitBanner = true,
+                            pourEndReason = "max_hold",
                         )
                         resumeSubscriptionExitTimerAfterWaterPour()
                         _state.update {
@@ -695,7 +705,11 @@ constructor(
                     it.copy(waterPourError = e.message ?: "Ошибка остановки налива воды")
                 }
             }
-            abortActiveWaterPour(finalizeTelemetry = true, sendHardwareStop = false)
+            abortActiveWaterPour(
+                finalizeTelemetry = true,
+                sendHardwareStop = false,
+                pourEndReason = "pointer_up",
+            )
             resumeSubscriptionExitTimerAfterWaterPour()
         }
     }
@@ -715,7 +729,11 @@ constructor(
                         WaterPourByTouchPayload.stopBody,
                     )
                 }.onFailure { Timber.w(it, "waterPour stop (cancel selection)") }
-                abortActiveWaterPour(finalizeTelemetry = true, sendHardwareStop = false)
+                abortActiveWaterPour(
+                    finalizeTelemetry = true,
+                    sendHardwareStop = false,
+                    pourEndReason = "cancel",
+                )
                 resumeSubscriptionExitTimerAfterWaterPour()
             }
         } else {
@@ -748,6 +766,7 @@ constructor(
         finalizeTelemetry: Boolean,
         sendHardwareStop: Boolean = true,
         preserveLimitBanner: Boolean = false,
+        pourEndReason: String = "abort",
     ) {
         if (!isWaterPourSessionActive() && holdPourRequestUuid == null) return
         waterPourDebounceJob?.cancel()
@@ -777,6 +796,13 @@ constructor(
                 waterPourError = null,
             )
         }
+        finishPourDiagnostics(pourEndReason)
+    }
+
+    private fun finishPourDiagnostics(reason: String) {
+        val pourId = activePourDiagId ?: return
+        pourDiagnostics.end(pourId, reason)
+        activePourDiagId = null
     }
 
     private fun reactToSubscriptionEntitlementLoss(pourSessionActive: Boolean) {
@@ -793,7 +819,7 @@ constructor(
             subscriptionActive = _state.value.isSubscriptionActive,
         )
 
-    private suspend fun beginHoldPourTelemetryIfNeeded() {
+    private suspend fun beginHoldPourTelemetryIfNeeded(pourId: String) {
         val s = _state.value
         val machineId = telemetryService.loadMachineRegistration().machineId
         val effectiveType = PlainWaterEntitlement.effectivePourType(s.flowWaterPourType, s.isSubscriptionActive)
@@ -804,6 +830,7 @@ constructor(
                 plainWaterType = effectiveType,
                 offlineMode = !s.telemetryWsConnected,
             )
+        pourDiagnostics.telemetryBegin(pourId)
     }
 
     private suspend fun finalizeHoldPourTelemetry() {

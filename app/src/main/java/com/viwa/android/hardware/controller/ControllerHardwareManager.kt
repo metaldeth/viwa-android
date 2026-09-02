@@ -4,6 +4,7 @@ import android.content.Context
 import com.viwa.android.data.local.db.JsonStoreKeys
 import com.viwa.android.data.repository.ConfigRepository
 import com.viwa.android.di.AppIoScope
+import com.viwa.android.logging.diagnostics.ControllerCommandDiagnosticsListener
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -38,6 +39,7 @@ constructor(
     private val configRepository: ConfigRepository,
     private val trafficLogger: ViwaControllerTrafficLogger,
     private val rawLogger: ViwaControllerRawLogger,
+    private val commandDiagnostics: ControllerCommandDiagnosticsListener,
     @AppIoScope private val appScope: CoroutineScope,
 ) {
     private val managerMutex = Mutex()
@@ -156,6 +158,7 @@ constructor(
                     if (dir == "TX") rawLogger.logTx(path, bytes)
                     else rawLogger.logRx(path, bytes, note)
                 },
+                commandDiagnostics = commandDiagnostics,
             )
         activeConnection = conn
         return conn

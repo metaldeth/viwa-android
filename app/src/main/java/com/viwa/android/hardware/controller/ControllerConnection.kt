@@ -1,5 +1,8 @@
 package com.viwa.android.hardware.controller
 
+import android.os.SystemClock
+import com.viwa.android.logging.diagnostics.ControllerCommandDiagnosticsListener
+import com.viwa.android.logging.diagnostics.NoOpControllerCommandDiagnostics
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -26,6 +29,7 @@ class ControllerConnection(
     private val emitResponse: (ResponseCommand, ByteArray) -> Unit,
  /** Сырые TX/RX байты до/после протокола — для отладки без анализатора. */
     private val onRawLog: ((direction: String, bytes: ByteArray, note: String) -> Unit)? = null,
+    private val commandDiagnostics: ControllerCommandDiagnosticsListener = NoOpControllerCommandDiagnostics,
 ) {
     val isMockPort: Boolean
         get() = devicePath.startsWith(ControllerConstants.MOCK_PORT_PREFIX)
@@ -87,10 +91,15 @@ class ControllerConnection(
 
     suspend fun sendCommand(command: RequestCommand, body: ByteArray) {
         val ints = body.map { it.toInt() and 0xff }
+        val opId = commandDiagnostics.nextOpId()
+        commandDiagnostics.onOpBegin(opId, command.code)
         if (isMockPort) {
             val entry = CommandLogEntry.tx(command, body)
             onCommandLog(entry)
+            val writeStarted = SystemClock.elapsedRealtime()
             simulateMockResponse(command, ints)
+            val writeMs = SystemClock.elapsedRealtime() - writeStarted
+            commandDiagnostics.onOpWritten(opId, command.code, writeMs, mock = true)
             return
         }
         if (!transport.isOpen) {
@@ -100,18 +109,28 @@ class ControllerConnection(
                 devicePath,
             )
             onCommandLog(CommandLogEntry.tx(command, body))
+            commandDiagnostics.onOpFailed(opId, command.code, "port_not_open")
             onNotConnected()
             return
         }
         val message = protocol.formatRequest(command, body)
         Timber.tag(TAG).i(
-            "TX cmd=0x%02x body=%s frame=%s",
+            "TX cmd=0x%02x opId=%d body=%s frame=%s",
             command.code,
+            opId,
             ints.joinToString(",") { it.toString() },
             message.joinToString(" ") { "%02X".format(it) },
         )
         onRawLog?.invoke("TX", message, "cmd=${command.name}")
-        transport.write(message)
+        val writeStarted = SystemClock.elapsedRealtime()
+        try {
+            transport.write(message)
+        } catch (error: Exception) {
+            commandDiagnostics.onOpFailed(opId, command.code, error.javaClass.simpleName)
+            throw error
+        }
+        val writeMs = SystemClock.elapsedRealtime() - writeStarted
+        commandDiagnostics.onOpWritten(opId, command.code, writeMs, mock = false)
         onCommandLog(CommandLogEntry.tx(command, body))
     }
 

@@ -110,6 +110,7 @@ class DrinkListViewModelUnlimitedWaterTest {
             mockk(relaxed = true),
             mockk(relaxed = true),
             holdPour,
+            DrinkListViewModelTestSupport.pourDiagnosticsMock(),
         ).also { DrinkListViewModelTestSupport.trackViewModel(it) }
     }
 
@@ -394,6 +395,7 @@ class DrinkListViewModelUnlimitedWaterTest {
                 mockk(relaxed = true),
                 mockk(relaxed = true),
                 holdPour,
+                DrinkListViewModelTestSupport.pourDiagnosticsMock(),
             ).also { DrinkListViewModelTestSupport.trackViewModel(it) }
         flushMain(24)
         vm.setUiStateForUnitTests(
