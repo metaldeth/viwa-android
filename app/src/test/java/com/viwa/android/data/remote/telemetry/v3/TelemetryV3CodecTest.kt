@@ -53,6 +53,39 @@ class TelemetryPourMessageCodecTest {
     }
 
     @Test
+    fun `encodePayload includes waterMlActual when present`() {
+        val pour =
+            DispenseTelemetryFactory.flavoredPourEvent(
+                requestUuid = "880e8400-e29b-41d4-a716-446655440099",
+                volumeMl = 300,
+                productId = "prod-uuid",
+                productNameSnapshot = "Cola",
+                concentration = DrinkConcentration.Standard,
+                dosage = DrinkDosage(conversionFactor = 0.5, drinkVolume = 300, product = 30.0, water = 270.0),
+                clientId = "client-1",
+                waterMlActual = 265,
+            )
+        val payload = TelemetryPourMessageCodec.encodePayload(pour)
+        assertEquals(265, payload["waterMlActual"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun `encodePayload omits waterMlActual when null`() {
+        val pour =
+            DispenseTelemetryFactory.flavoredPourEvent(
+                requestUuid = "880e8400-e29b-41d4-a716-446655440099",
+                volumeMl = 300,
+                productId = "prod-uuid",
+                productNameSnapshot = "Cola",
+                concentration = DrinkConcentration.Standard,
+                dosage = DrinkDosage(conversionFactor = 0.5, drinkVolume = 300, product = 30.0, water = 270.0),
+                clientId = "client-1",
+            )
+        val payload = TelemetryPourMessageCodec.encodePayload(pour)
+        assertFalse(payload.containsKey("waterMlActual"))
+    }
+
+    @Test
     fun `encodePayload omits recipe fields for plain hold`() {
         val pour =
             DispenseTelemetryFactory.plainPourEvent(
@@ -241,6 +274,43 @@ class TelemetryPaidCompleteMessageCodecTest {
 
         assertFalse(payload.containsKey("amountRub"))
 
+    }
+
+    @Test
+    fun `encodePayload includes waterMlActual when present`() {
+        val paid =
+            DispenseTelemetryFactory.paidComplete(
+                transactionId = "tx-1",
+                requestUuid = "pour-1",
+                volumeMl = 700,
+                amountRub = 199.0,
+                payMethod = "SBP",
+                productId = "prod",
+                productNameSnapshot = "Lemon",
+                concentration = DrinkConcentration.Strong,
+                dosage = DrinkDosage(0.5, 300, 30.0, 270.0),
+                waterMlActual = 612,
+            )
+        val payload = TelemetryPaidCompleteMessageCodec.encodePayload(paid)
+        assertEquals(612, payload["waterMlActual"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun `encodePayload omits waterMlActual when null`() {
+        val paid =
+            DispenseTelemetryFactory.paidComplete(
+                transactionId = "tx-1",
+                requestUuid = "pour-1",
+                volumeMl = 700,
+                amountRub = 199.0,
+                payMethod = "SBP",
+                productId = "prod",
+                productNameSnapshot = "Lemon",
+                concentration = DrinkConcentration.Strong,
+                dosage = DrinkDosage(0.5, 300, 30.0, 270.0),
+            )
+        val payload = TelemetryPaidCompleteMessageCodec.encodePayload(paid)
+        assertFalse(payload.containsKey("waterMlActual"))
     }
 
 }

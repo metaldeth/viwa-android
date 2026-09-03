@@ -314,11 +314,16 @@ constructor(
                     val pourContext = currentPreparingContext
                     withContext(NonCancellable) {
                         try {
-                            pourContext?.let { enqueueDispenseTelemetry(it) }
+                            val waterMlActual =
+                                runCatching {
+                                    waterCounter.readAccumulateAndResetController()
+                                }
+                                    .onFailure { Timber.tag(TAG).w(it, "water counter read after pour") }
+                                    .getOrNull()
+                                    ?.takeIf { it.controllerResetSent }
+                                    ?.deltaMl
+                            pourContext?.let { enqueueDispenseTelemetry(it, waterMlActual) }
                             inventoryService.applyWriteOff(container.containerNumber, volumeMl, effectiveRatio)
-                            runCatching {
-                                waterCounter.accumulateHardwareReadingAfterSuccessfulPreparation()
-                            }.onFailure { Timber.tag(TAG).w(it, "water counter accumulate") }
                             emit(PreparingState.Success)
                             _customerPhase.value = CustomerPreparingPhase.DrinkReady
                             flowStripRgbCoordinator.scheduleGreenForTenSecondsThenRestoreSaved()
@@ -340,7 +345,10 @@ constructor(
         onStateChanged(state)
     }
 
-    private suspend fun enqueueDispenseTelemetry(context: CurrentPreparingContext) {
+    private suspend fun enqueueDispenseTelemetry(
+        context: CurrentPreparingContext,
+        waterMlActual: Int? = null,
+    ) {
         val dosage =
             com.viwa.android.domain.model.customer.DrinkDosage(
                 conversionFactor = context.recipeConversionFactor,
@@ -364,6 +372,7 @@ constructor(
                         concentration = context.concentration,
                         dosage = dosage,
                         waterOption = context.waterOption,
+                        waterMlActual = waterMlActual,
                     )
                 runCatching {
                     dispenseSyncCoordinator.enqueuePaidComplete(paid)
@@ -382,6 +391,7 @@ constructor(
                             dosage = dosage,
                             clientId = sub.clientId,
                             waterOption = context.waterOption,
+                            waterMlActual = waterMlActual,
                         )
                     runCatching {
                         dispenseSyncCoordinator.enqueuePourReport(pour)

@@ -24,6 +24,7 @@ Required: `requestUuid`, `pouredAt`, `pourKind`, `volumeMl`. `clientId` optional
 - **Must not** include `grantId` (backend rejects)
 - Subscription flavored: `productId`, `productNameSnapshot`, `strength` (`WEAK`|`STANDARD`|`STRONG`), `strengthRatio` (0.9/1.0/1.1), `syrupMlActual` (integer)
 - Optional actual recipe (from dosage sent for that pour): `recipeDrinkVolumeMl` (int), `recipeWaterMl`, `recipeProductMl`, `conversionFactor` (nullable double)
+- Optional post-pour hardware water: `waterMlActual` (int) — controller delta after successful pour; **omit** when read times out or fails (do not send `0` as a fake reading). `0` is valid only when read succeeded and delta is zero.
 - Plain hold: `plainWaterType` (`FILTERED`|`COLD`|`SPARKLING`), measured `volumeMl`, no product fields
 
 ## Paid complete (`telemetry.paid.complete`)
@@ -33,6 +34,8 @@ Flat atomic payload (no nested `pour`):
 Required: `transactionId`, `requestUuid`, `occurredAt`, `productId`, `productNameSnapshot`, `volumeMl` (300|700), `strength`, `strengthRatio`, `syrupMlActual`, `amountKopecks`, `payMethod` (`CASH`|`CARD`|`SBP`|`OTHER`).
 
 Optional actual recipe: `recipeDrinkVolumeMl`, `recipeWaterMl`, `recipeProductMl`, `conversionFactor` (nullable).
+
+Optional post-pour hardware water: `waterMlActual` (int) — same semantics as pour report; omit on read timeout/failure.
 
 Ack: `{ ok: true, transactionId, pourId }` or idempotent variant; outbox ack by `transactionId` or WS `correlationId`.
 

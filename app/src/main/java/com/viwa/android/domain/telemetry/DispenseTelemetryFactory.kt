@@ -19,6 +19,7 @@ object DispenseTelemetryFactory {
         clientId: String,
         waterOption: DrinkWaterOption = DrinkWaterOption.STANDARD,
         pouredAt: String = TelemetryIsoTimestamps.nowUtc(),
+        waterMlActual: Int? = null,
     ): PourEventSnapshot {
         val strength = concentration.toDrinkStrength()
         val ratio = concentration.toRatio()
@@ -45,6 +46,7 @@ object DispenseTelemetryFactory {
             recipeProductMl = recipeFields.recipeProductMl,
             conversionFactor = recipeFields.conversionFactor,
             plainWaterType = PlainWaterType.fromDrinkWaterOption(waterOption).wireValue,
+            waterMlActual = waterMlActual,
         )
     }
 
@@ -76,6 +78,7 @@ object DispenseTelemetryFactory {
         dosage: DrinkDosage,
         waterOption: DrinkWaterOption = DrinkWaterOption.STANDARD,
         occurredAt: String = TelemetryIsoTimestamps.nowUtc(),
+        waterMlActual: Int? = null,
     ): PaidCompleteSnapshot {
         require(volumeMl == 300 || volumeMl == 700) { "Paid volume must be 300 or 700 ml, got $volumeMl" }
         val normalizedPayMethod = payMethod.uppercase()
@@ -110,6 +113,7 @@ object DispenseTelemetryFactory {
             recipeProductMl = recipeFields.recipeProductMl,
             conversionFactor = recipeFields.conversionFactor,
             plainWaterType = PlainWaterType.fromDrinkWaterOption(waterOption).wireValue,
+            waterMlActual = waterMlActual,
         )
     }
 

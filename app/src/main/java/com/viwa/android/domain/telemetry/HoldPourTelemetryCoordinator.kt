@@ -58,6 +58,7 @@ constructor(
                 pourKind = PourKind.PLAIN_WATER.wireValue,
                 clientId = clientId,
                 plainWaterType = PlainWaterType.fromFlowWaterPourType(plainType).wireValue,
+                waterMlActual = measuredMl,
             )
         runCatching {
             dispenseSyncCoordinator.enqueuePourReport(pour)
