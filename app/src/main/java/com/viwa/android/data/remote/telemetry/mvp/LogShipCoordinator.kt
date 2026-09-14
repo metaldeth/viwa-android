@@ -38,6 +38,8 @@ constructor(
     private var backoffAttempt = 0
     @Volatile private var serverFeatureDisabled = false
     @Volatile private var persistedCapability: MvpLogShipCapabilityDto? = null
+    @Volatile private var lastSkipReason: String? = null
+    @Volatile private var lastSkipLoggedAtMs = 0L
 
     private val wsManager: MvpTelemetryWebSocketManager get() = wsManagerLazy.get()
 
@@ -117,8 +119,14 @@ constructor(
 
     suspend fun shipLogs() {
         if (!LogShipFeatureFlags.FEATURE_LOG_SHIP || serverFeatureDisabled) return
-        if (!wsManager.isNetworkValidated()) return
-        if (!isRegistered()) return
+        if (!wsManager.isNetworkValidated()) {
+            logSkip("network_not_validated")
+            return
+        }
+        if (!isRegistered()) {
+            logSkip("not_registered")
+            return
+        }
         if (!appLogFileStore.hasPendingContent()) return
 
         val backoffDelayMs =
@@ -168,6 +176,14 @@ constructor(
         }
     }
 
+    private fun logSkip(reason: String) {
+        val now = System.currentTimeMillis()
+        if (reason == lastSkipReason && now - lastSkipLoggedAtMs < SKIP_LOG_INTERVAL_MS) return
+        lastSkipReason = reason
+        lastSkipLoggedAtMs = now
+        Timber.tag(TAG).i("log ship skipped reason=%s", reason)
+    }
+
     private suspend fun resolveUploadEndpoint(): String {
         val capability = wsManager.logShipCapability() ?: persistedCapability
         val configured = capability?.uploadEndpoint?.trim().orEmpty()
@@ -208,6 +224,7 @@ constructor(
         private const val DEFAULT_INTERVAL_MS = 600_000L
         private const val BACKOFF_BASE_MS = 30_000L
         private const val BACKOFF_MAX_MS = 300_000L
+        private const val SKIP_LOG_INTERVAL_MS = 60_000L
     }
 }
 

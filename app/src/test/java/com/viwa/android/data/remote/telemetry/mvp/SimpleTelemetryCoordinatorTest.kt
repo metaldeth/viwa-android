@@ -97,6 +97,7 @@ class SimpleTelemetryCoordinatorTest {
                 technicianKeySessionCoordinator = mockk(relaxed = true),
                 logShipCoordinator = mockLogShipCoordinator(),
                 appUpdateCoordinatorProvider = mockOtaCoordinatorProvider(),
+                networkObserver = mockk(relaxed = true),
             )
         coordinatorAppScope = CoroutineScope(SupervisorJob())
         coordinator =
@@ -293,6 +294,7 @@ class SimpleTelemetryCoordinatorTest {
                 technicianKeySessionCoordinator = mockk(relaxed = true),
                 logShipCoordinator = mockLogShipCoordinator(),
                 appUpdateCoordinatorProvider = mockOtaCoordinatorProvider(),
+                networkObserver = mockk(relaxed = true),
             )
         val localCoordinator =
             SimpleTelemetryCoordinator(

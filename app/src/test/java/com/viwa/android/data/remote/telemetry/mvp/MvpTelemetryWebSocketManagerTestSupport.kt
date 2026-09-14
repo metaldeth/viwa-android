@@ -36,5 +36,6 @@ internal fun TestScope.createWsManagerForTests(
         technicianKeySessionCoordinator = mockk(relaxed = true),
         logShipCoordinator = mockLogShipCoordinator(),
         appUpdateCoordinatorProvider = otaProvider,
+        networkObserver = mockk(relaxed = true),
     )
 }

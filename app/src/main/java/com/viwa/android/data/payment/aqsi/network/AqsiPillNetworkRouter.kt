@@ -7,6 +7,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.util.Log
+import timber.log.Timber
 import java.net.InetSocketAddress
 import java.net.Socket
 
@@ -173,7 +174,7 @@ class AqsiPillNetworkRouter private constructor(
             return
         }
         if (wifi == null) {
-            Log.w(TAG, "Pill network present but Wi‑Fi missing; app traffic may be broken")
+            Timber.tag(TAG).w("Pill network present but Wi‑Fi missing; app traffic may be broken")
             return
         }
         val bound = connectivityManager.bindProcessToNetwork(wifi)

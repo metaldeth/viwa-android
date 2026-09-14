@@ -172,6 +172,7 @@ class MvpTelemetryWebSocketManagerDisconnectLifecycleTest {
                 technicianKeySessionCoordinator = technicianCoordinator,
                 logShipCoordinator = mockLogShipCoordinator(),
                 appUpdateCoordinatorProvider = mockOtaCoordinatorProvider(),
+                networkObserver = mockk(relaxed = true),
             )
 
         manager.disconnect()

@@ -71,6 +71,7 @@ constructor(
     private val technicianKeySessionCoordinator: com.viwa.android.data.remote.telemetry.mvp.offline.TechnicianKeySessionCoordinator,
     private val logShipCoordinator: LogShipCoordinator,
     private val appUpdateCoordinatorProvider: javax.inject.Provider<com.viwa.android.domain.ota.AppUpdateCoordinator>,
+    private val networkObserver: TelemetryNetworkObserver,
 ) {
     private val json =
         Json {
@@ -173,8 +174,12 @@ constructor(
                         }
 
                         val bearerToken =
-                            runCatching { tokenProvider() }.getOrElse {
-                                Timber.w(it, "MvpTelemetry WS token provider failed")
+                            runCatching { tokenProvider() }.getOrElse { error ->
+                                Timber.w(
+                                    "MvpTelemetry WS token provider failed %s %s",
+                                    compactThrowableMessage(error),
+                                    networkContext(),
+                                )
                                 null
                             }
                         if (bearerToken.isNullOrBlank()) {
@@ -230,7 +235,8 @@ constructor(
                                             logSystem(
                                                 "MVP WS: closed code=$code reason='$reason' " +
                                                     "gen=$sessionGeneration phase=${fsm.phase} " +
-                                                    "helloReceived=$helloReceived networkDegraded=${!networkValidated}",
+                                                    "helloReceived=$helloReceived networkDegraded=${!networkValidated} " +
+                                                    networkContext(),
                                             )
                                             when (code) {
                                                 AUTH_CLOSE_CODE, 1008, 1002 -> {
@@ -265,7 +271,8 @@ constructor(
                                             logSystem(
                                                 "MVP WS: socket error gen=$sessionGeneration " +
                                                     "phase=${fsm.phase} helloReceived=$helloReceived " +
-                                                    "networkDegraded=${!networkValidated}",
+                                                    "networkDegraded=${!networkValidated} " +
+                                                    networkContext(),
                                             )
                                             if (helloReceived && !authFailure) {
                                                 transitionFsm(TelemetryConnectionPhase.Backoff, "socket error")
@@ -290,7 +297,11 @@ constructor(
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
-                            Timber.e(e, "MvpTelemetry WS connect exception")
+                            Timber.w(
+                                "MvpTelemetry WS connect exception gen=$sessionGeneration %s %s",
+                                compactThrowableMessage(e),
+                                networkContext(),
+                            )
                         }
 
                         if (activeClient?.sessionGeneration == sessionGeneration) {
@@ -363,7 +374,9 @@ constructor(
     fun notifyNetworkDegraded() {
         if (!networkValidated) return
         networkValidated = false
-        logSystem("MVP WS: network degraded — awaiting watchdog (gen=${fsm.sessionGeneration})")
+        logSystem(
+            "MVP WS: network degraded — awaiting watchdog (gen=${fsm.sessionGeneration}) ${networkContext()}",
+        )
     }
 
     /** Marks validated network; side effects are debounced in [TelemetryNetworkValidatedSideEffectsCoordinator]. */
@@ -889,7 +902,7 @@ constructor(
                         logSystem(
                             "MVP WS: heartbeat ack timeout elapsedMs=$elapsed timeoutMs=$timeoutMs " +
                                 "intervalSec=$heartbeatIntervalSeconds lastHeartbeatId=$lastHeartbeatMessageId " +
-                                "gen=$sessionGeneration$degradedHint",
+                                "gen=$sessionGeneration$degradedHint ${networkContext()}",
                         )
                         transitionFsm(TelemetryConnectionPhase.Backoff, "heartbeat ack timeout")
                         forceClose(client, "heartbeat ack timeout")
@@ -916,8 +929,12 @@ constructor(
         val messageId = java.util.UUID.randomUUID().toString()
         lastHeartbeatMessageId = messageId
         sendEnvelope("heartbeat", payload, messageId)
-            .onFailure {
-                Timber.w(it, "MvpTelemetry heartbeat failed")
+            .onFailure { error ->
+                Timber.w(
+                    "MvpTelemetry heartbeat failed %s %s",
+                    compactThrowableMessage(error),
+                    networkContext(),
+                )
                 if (acceptSession(client, sessionGeneration, "heartbeatSendFailed")) {
                     forceClose(client, "heartbeat send failed")
                 }
@@ -929,7 +946,9 @@ constructor(
         reason: String,
     ) {
         if (client !== activeClient) return
-        logSystem("MVP WS: force close — $reason gen=${client.sessionGeneration}")
+        logSystem(
+            "MVP WS: force close — $reason gen=${client.sessionGeneration} ${networkContext()}",
+        )
         runCatching { client.close(1000, reason) }
             .onFailure { runCatching { client.close() } }
     }
@@ -976,6 +995,9 @@ constructor(
         if (!shouldLogTransportPing()) return
         logSystem("MVP WS transport: PONG (client → server)")
     }
+
+    private fun networkContext(): String =
+        runCatching { networkObserver.snapshotLine() }.getOrDefault("snapshot=unavailable")
 
     private fun logSystem(summary: String) {
         networkTrafficLogger.log(

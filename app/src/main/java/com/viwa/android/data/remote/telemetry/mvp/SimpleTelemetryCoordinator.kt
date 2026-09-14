@@ -629,7 +629,10 @@ constructor(
                             ),
                     )
                 }.getOrElse { error ->
-                    Timber.w(error, "SimpleTelemetry: token fetch failed")
+                    Timber.w(
+                        "SimpleTelemetry: token fetch failed %s",
+                        compactThrowableMessage(error),
+                    )
                     if (error is TokenAuthException) {
                         wsManager.reportAuthFailure("Ошибка авторизации JWT")
                     }

@@ -93,6 +93,15 @@ class LogShipCoordinatorTest {
     }
 
     @Test
+    fun `shipLogs skips upload when network is not validated`() = runTest {
+        every { wsManager.isNetworkValidated() } returns false
+
+        coordinator.shipLogs()
+
+        coVerify(exactly = 0) { apiClient.uploadMachineLogs(any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
     fun `shipLogs soft-fails on server 404`() = runTest {
         // given
         coEvery { apiClient.uploadMachineLogs(any(), any(), any(), any(), any(), any()) } returns

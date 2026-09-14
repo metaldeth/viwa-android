@@ -63,6 +63,7 @@ constructor(
         } catch (e: Exception) {
             val tookMs = System.currentTimeMillis() - startedAt
             val message = "HTTP ERROR ${req.method} ${req.url} (${tookMs}ms): ${e.message ?: e.javaClass.simpleName}"
+            Timber.w("%s", message)
             networkTrafficLogger.log(
                 channel = NetworkTrafficChannel.HTTP,
                 direction = NetworkTrafficDirection.SYSTEM,
