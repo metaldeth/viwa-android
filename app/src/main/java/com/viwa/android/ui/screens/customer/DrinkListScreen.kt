@@ -332,9 +332,9 @@ fun DrinkListScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 HeaderActionStrip(
-                    // Вода (холодная/стандарт/газ) — после выбора напитка или скана карты.
+                    // Вода (стандарт/холодная) — после выбора напитка или скана карты.
                     // Объём 300/700 — только для выбранного напитка.
-                    // Premium (холод/газ): при напитке всегда; при только карте — нужна активная подписка.
+                    // Холодная: при напитке всегда; при только карте — нужна активная подписка.
                     waterEnabled =
                         state.activeContainer != null ||
                             state.scannedSubscriptionClientId != null,
@@ -824,13 +824,13 @@ private fun HeaderActionStrip(
     onWater: (DrinkWaterOption) -> Unit,
     s: Float,
 ) {
- // Вода: одна группа (стандарт → холодная → газ); объём — отдельный кластер. Выбор взаимоисключающий.
+ // Вода: стандарт и холодная; объём — отдельный кластер. Выбор взаимоисключающий.
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy((20f * s).dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        HeaderOptionCluster(modifier = Modifier.weight(1.5f), s = s) {
+        HeaderOptionCluster(modifier = Modifier.weight(1f), s = s) {
             HeaderOptionChip(
                 modifier = Modifier.weight(1f),
                 label = "Стандартная",
@@ -848,16 +848,6 @@ private fun HeaderActionStrip(
                 enabled = waterEnabled && premiumWaterEnabled,
                 iconRes = R.drawable.ic_cold_water,
                 onClick = { onWater(DrinkWaterOption.COLD) },
-                s = s,
-            )
-            HeaderOptionVerticalDivider(s = s)
-            HeaderOptionChip(
-                modifier = Modifier.weight(1f),
-                label = "Газированная",
-                selected = waterOption == DrinkWaterOption.SPARK,
-                enabled = waterEnabled && premiumWaterEnabled,
-                iconRes = R.drawable.ic_sparkling_water,
-                onClick = { onWater(DrinkWaterOption.SPARK) },
                 s = s,
             )
         }

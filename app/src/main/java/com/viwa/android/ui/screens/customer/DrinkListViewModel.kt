@@ -554,9 +554,10 @@ constructor(
         preferredPourType: FlowWaterPourType,
     ): DrinkListUiState {
         if (state.activeContainer != null) return state
+        val pourType = preferredPourType.withoutSparkling()
         return state.copy(
-            waterOption = preferredPourType.toDrinkWaterOption(),
-            flowWaterPourType = preferredPourType,
+            waterOption = pourType.toDrinkWaterOption(),
+            flowWaterPourType = pourType,
         )
     }
 
@@ -566,13 +567,14 @@ constructor(
 
     fun setWater(option: DrinkWaterOption) {
         val s = _state.value
-        // Для выбранного напитка cold/spark — опция рецепта (toTofByte), без gate подписки.
-        // Для hold-to-pour только по карте — premium требует активную подписку.
+        val requested = option.withoutSparkling()
+        // Для выбранного напитка холодная — опция рецепта (toTofByte), без gate подписки.
+        // Для hold-to-pour только по карте — холодная требует активную подписку.
         val resolved =
             if (s.activeContainer != null) {
-                option
+                requested
             } else {
-                PlainWaterEntitlement.coerceWaterOption(option, s.isSubscriptionActive)
+                PlainWaterEntitlement.coerceWaterOption(requested, s.isSubscriptionActive)
             }
         _state.update {
             it.copy(
@@ -602,7 +604,11 @@ constructor(
     }
 
     fun setFlowWaterPourType(type: FlowWaterPourType) {
-        val coerced = PlainWaterEntitlement.effectivePourType(type, _state.value.isSubscriptionActive)
+        val coerced =
+            PlainWaterEntitlement.effectivePourType(
+                type.withoutSparkling(),
+                _state.value.isSubscriptionActive,
+            )
         _state.update {
             it.copy(
                 flowWaterPourType = coerced,
@@ -815,14 +821,18 @@ constructor(
 
     private fun waterPourStartPayload(): ByteArray =
         WaterPourByTouchPayload.startPayload(
-            flowWaterPourType = _state.value.flowWaterPourType,
+            flowWaterPourType = _state.value.flowWaterPourType.withoutSparkling(),
             subscriptionActive = _state.value.isSubscriptionActive,
         )
 
     private suspend fun beginHoldPourTelemetryIfNeeded(pourId: String) {
         val s = _state.value
         val machineId = telemetryService.loadMachineRegistration().machineId
-        val effectiveType = PlainWaterEntitlement.effectivePourType(s.flowWaterPourType, s.isSubscriptionActive)
+        val effectiveType =
+            PlainWaterEntitlement.effectivePourType(
+                s.flowWaterPourType.withoutSparkling(),
+                s.isSubscriptionActive,
+            )
         holdPourRequestUuid =
             holdPourTelemetryCoordinator.beginHoldPourSession(
                 clientId = s.scannedSubscriptionClientId,
@@ -1947,7 +1957,7 @@ constructor(
             preparingManager.prepareDrink(
                 tasteId = container.product.taste.id,
                 volumeMl = volume,
-                waterOption = s.waterOption,
+                waterOption = s.waterOption.withoutSparkling(),
                 concentrationRatio = s.concentration.toRatio(),
                 concentration = s.concentration,
                 saleTotalPriceRub = saleTotalPriceRub,
@@ -2164,3 +2174,10 @@ constructor(
         }
     }
 }
+
+/** На экране выбора напитка газировка не предлагается: SPARK сводится к стандартной воде. */
+private fun DrinkWaterOption.withoutSparkling(): DrinkWaterOption =
+    if (this == DrinkWaterOption.SPARK) DrinkWaterOption.STANDARD else this
+
+private fun FlowWaterPourType.withoutSparkling(): FlowWaterPourType =
+    if (this == FlowWaterPourType.Sparkling) FlowWaterPourType.Filtered else this

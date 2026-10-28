@@ -158,7 +158,8 @@ class DrinkListViewModelUnlimitedWaterTest {
 
         vm.setWater(DrinkWaterOption.SPARK)
         flushMain()
-        assertEquals(FlowWaterPourType.Sparkling, vm.state.value.flowWaterPourType)
+        assertEquals(FlowWaterPourType.Filtered, vm.state.value.flowWaterPourType)
+        assertEquals(DrinkWaterOption.STANDARD, vm.state.value.waterOption)
 
         subscribeInfo.value = subscribeInfo.value!!.copy(isActiveSubscribe = false)
         flushMain(24)
@@ -169,7 +170,7 @@ class DrinkListViewModelUnlimitedWaterTest {
     }
 
     @Test
-    fun setWater_withActiveDrinkAllowsSparkWithoutSubscription() = runBlocking {
+    fun setWater_withActiveDrinkMapsSparkToStandardAndKeepsCold() = runBlocking {
         val telemetry = DrinkListViewModelTestSupport.createTestTelemetry()
         val vm = DrinkListViewModelTestSupport.createViewModel(telemetryService = telemetry)
         val taste = DrinkTaste(1, "Cola", null, null)
@@ -200,8 +201,8 @@ class DrinkListViewModelUnlimitedWaterTest {
 
         vm.setWater(DrinkWaterOption.SPARK)
         flushMain()
-        assertEquals(DrinkWaterOption.SPARK, vm.state.value.waterOption)
-        assertEquals(FlowWaterPourType.Sparkling, vm.state.value.flowWaterPourType)
+        assertEquals(DrinkWaterOption.STANDARD, vm.state.value.waterOption)
+        assertEquals(FlowWaterPourType.Filtered, vm.state.value.flowWaterPourType)
 
         vm.setWater(DrinkWaterOption.COLD)
         flushMain()
@@ -557,8 +558,8 @@ class DrinkListViewModelUnlimitedWaterTest {
                 lastPlainWaterType = "SPARKLING",
             )
         flushMain(24)
-        assertEquals(DrinkWaterOption.SPARK, vm.state.value.waterOption)
-        assertEquals(FlowWaterPourType.Sparkling, vm.state.value.flowWaterPourType)
+        assertEquals(DrinkWaterOption.STANDARD, vm.state.value.waterOption)
+        assertEquals(FlowWaterPourType.Filtered, vm.state.value.flowWaterPourType)
     }
 
     @Test
@@ -577,16 +578,16 @@ class DrinkListViewModelUnlimitedWaterTest {
             DrinkListUiState(
                 activeContainer = DrinkListViewModelTestSupport.sampleContainer(),
                 selectedVolumeMl = 300,
-                waterOption = DrinkWaterOption.SPARK,
-                flowWaterPourType = FlowWaterPourType.Sparkling,
+                waterOption = DrinkWaterOption.COLD,
+                flowWaterPourType = FlowWaterPourType.Cold,
             ),
         )
         flushMain(24)
 
         cardScans.emit("client-1")
         flushMain(24)
-        assertEquals(DrinkWaterOption.SPARK, vm.state.value.waterOption)
-        assertEquals(FlowWaterPourType.Sparkling, vm.state.value.flowWaterPourType)
+        assertEquals(DrinkWaterOption.COLD, vm.state.value.waterOption)
+        assertEquals(FlowWaterPourType.Cold, vm.state.value.flowWaterPourType)
         assertEquals(2, vm.state.value.activeContainer?.containerNumber)
 
         subscribeInfo.value =
@@ -600,8 +601,8 @@ class DrinkListViewModelUnlimitedWaterTest {
                 lastPlainWaterType = "FILTERED",
             )
         flushMain(24)
-        assertEquals(DrinkWaterOption.SPARK, vm.state.value.waterOption)
-        assertEquals(FlowWaterPourType.Sparkling, vm.state.value.flowWaterPourType)
+        assertEquals(DrinkWaterOption.COLD, vm.state.value.waterOption)
+        assertEquals(FlowWaterPourType.Cold, vm.state.value.flowWaterPourType)
         assertEquals("client-1", vm.state.value.scannedSubscriptionClientId)
     }
 }
