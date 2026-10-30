@@ -15,7 +15,7 @@
 | **testCommand** | `gradlew.bat :app:testDebugUnitTest` (Windows) |
 | **mrTarget** | main |
 | **workspace** | `c:\viwa` |
-| **agentRules** | `c:\viwa\.cursor\rules\` (общие правила и скиллы — не дублировать в репозитории) |
+| **agentRules** | `c:\viwa\.agents\` (общие правила и скиллы для Cursor и Claude Code — не дублировать в репозитории) |
 
 > **Transitional note (folder cutover task-11):** на этой машине каталог может ещё называться `c:\wiva\wiva-android`. Целевые пути workspace — `c:\viwa\viwa-*`. GitHub remote после rename — `metaldeth/viwa-android`.
 
@@ -94,7 +94,7 @@ Gradle **не** предоставляет задачу `installRelease`. Для
 - Локальные ключи (не коммитить): **`local.properties.sample`** → скопировать в `local.properties`; `telemetry.enrollmentKey` = `MACHINE_ENROLLMENT_KEY` на сервере (`viwa-telemetry/.env.example`).
 - **DEBUG test bench** (`installDebug` only): в `local.properties` задать `telemetry.debug.serial` (default `VIWA-TEST01`), `telemetry.debug.regKey=REG-...`, `telemetry.debug.autoConnect=true`. После первой успешной регистрации `machineSecret` хранится в EncryptedSharedPreferences — перезапуск и `installDebug` поверх существующей сборки переподключаются без повторного REG. Ключ `telemetry.debug.regKey` **не коммитить**.
 - Серверная документация: `c:\viwa\viwa-telemetry\AGENTS.md`, deploy: `c:\viwa\viwa-telemetry\docs\deployment\server.md`.
-- **Логи полевого автомата** (не офисная плата): SSH на telemetry-сервер, не MCP `user-device-logs` — `.cursor/rules/universal/machine-app-logs.mdc`.
+- **Логи полевого автомата** (не офисная плата): SSH на telemetry-сервер, не MCP `user-device-logs` — `.agents/rules/universal/machine-app-logs.md`.
 
 ## Офис / железо (этап F)
 
