@@ -2,7 +2,7 @@
 
 **Reviewer:** code-reviewer-complex  
 **Date:** 2026-07-19  
-**Repo:** `wiva-telemetry`  
+**Repo:** `viwa-telemetry`  
 **Task:** `docs/agents/machine-cells-inventory/tasks/task-05.md`  
 **Test report:** `task-05-test-report.md`  
 **Architecture:** C-3 reconnect snapshot, C-4 Variant B (`forwardRef` + `sendToMachine`), WS uplink/downlink handlers

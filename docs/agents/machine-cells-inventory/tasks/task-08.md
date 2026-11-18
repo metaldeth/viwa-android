@@ -1,6 +1,6 @@
 # task-08 — Android domain models + JsonStore + codec
 
-**Repo:** `wiva-android`  
+**Repo:** `viwa-android`  
 **Зависимости:** — (контракт: `architecture.md`)
 
 ## Связь с этапом

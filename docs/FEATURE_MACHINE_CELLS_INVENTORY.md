@@ -1,13 +1,13 @@
 # Feature: Machine cells inventory (Wiva)
 
 > Проект фичи для ТЗ/реализации. Дата: 2026-07-19  
-> Repos: wiva-android, wiva-telemetry (api + web)
+> Repos: viwa-android, viwa-telemetry (api + web)
 
 ## 1. Цель и границы
 
 ### Цель
 
-Дать оператору на **странице автомата** (`wiva-telemetry/apps/web`) видимость остатков по продуктовым ячейкам и возможность менять **содержимое** (продукт) и **цены** (dosage1/dosage2). Автомат (`wiva-android`) синхронизирует состояние с бэкендом через **MVP WebSocket** (не Shaker Kafka/legacy topics).
+Дать оператору на **странице автомата** (`viwa-telemetry/apps/web`) видимость остатков по продуктовым ячейкам и возможность менять **содержимое** (продукт) и **цены** (dosage1/dosage2). Автомат (`viwa-android`) синхронизирует состояние с бэкендом через **MVP WebSocket** (не Shaker Kafka/legacy topics).
 
 ### In scope
 
@@ -24,7 +24,7 @@
 ### Out of scope
 
 - Стаканы, расходники, вода, mixOfTastes, categoryConfigMachine / калибровка CF (отдельная фича)
-- Shaker legacy (`telemetry-machine-control`, Kafka import topics, `wiva-client-web-app`)
+- Shaker legacy (`telemetry-machine-control`, Kafka import topics, `viwa-client-web-app`)
 - Snack / kiosk / coffee concentrate
 - Продажи, рецепты, списание при cook (интеграция позже; uplink volume report готовит почву)
 
@@ -37,7 +37,7 @@
 
 ## 2. As-is: насколько текущий код подходит
 
-### 2.1 wiva-android
+### 2.1 viwa-android
 
 **Есть (legacy merge / StoredContainerWire):**
 
@@ -64,7 +64,7 @@
 
 **Хранение:** три JsonStore-ключа (`telemetryBaseIngredients`, `telemetryCellStoreMatrix`, `telemetryMergedInventory`).
 
-### 2.2 wiva-telemetry (+ web)
+### 2.2 viwa-telemetry (+ web)
 
 **БД (Prisma):** `users`, `sessions`, `machines`, `registration_keys`, … — **нет** `products`, `machine_cells`.
 
@@ -78,7 +78,7 @@
 
 ### 2.3 Mapping target ↔ current
 
-| Target | wiva-android | wiva-telemetry |
+| Target | viwa-android | viwa-telemetry |
 |--------|--------------|----------------|
 | `uuid` | нет | нет (PK будет server-side или client-generated) |
 | `productUuid` | `ingredientId: Int` | нет Product table |
@@ -95,9 +95,9 @@
 
 | Слой | Уровень | Оценка | Комментарий |
 |------|---------|--------|-------------|
-| **wiva-telemetry backend** | Medium → Big Rock | **8–12 d** | Prisma, REST, WS handlers, dedup, push, tests |
-| **wiva-telemetry web** | Medium | **4–6 d** | Machine detail cells section, product select, PATCH |
-| **wiva-android** | **Large** | **5–8 d** (MVP path) / **25–40 файлов** (UUID-first + замена merge) | Новые MVP types + `telemetryCellsSnapshot`; legacy за `useMvpProtocol=false` |
+| **viwa-telemetry backend** | Medium → Big Rock | **8–12 d** | Prisma, REST, WS handlers, dedup, push, tests |
+| **viwa-telemetry web** | Medium | **4–6 d** | Machine detail cells section, product select, PATCH |
+| **viwa-android** | **Large** | **5–8 d** (MVP path) / **25–40 файлов** (UUID-first + замена merge) | Новые MVP types + `telemetryCellsSnapshot`; legacy за `useMvpProtocol=false` |
 | **E2E + contracts** | | **2–3 d** | register → schema → web edit → push → volume reports |
 
 **Итого stack:** ~3–4 недели одного разработчика. Backend+web без Android: ~2 недели.
@@ -162,7 +162,7 @@ interface Product {
 
 CRUD: создание / редактирование / удаление. При создании и редактировании: ввод **названия** + выбор **вкуса** из allowlist.
 
-### 3.1.4 Allowlist вкусов (из wiva-android)
+### 3.1.4 Allowlist вкусов (из viwa-android)
 
 Канон: `ViwaElectronAssets.kt` → `MEDIA_KEY_TO_PNG` / `MEDIA_KEY_TO_VIDEO`  
 (ассеты: `app/src/main/assets/viwa_electron/img/horizontalCard/*.png`).  
@@ -389,7 +389,7 @@ Offline machine: изменения persist в DB; при следующем `he
 
 ```mermaid
 sequenceDiagram
-    participant A as wiva-android
+    participant A as viwa-android
     participant API as REST API
     participant WS as WS server
     participant DB as PostgreSQL
@@ -411,7 +411,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant A as wiva-android
+    participant A as viwa-android
     participant WS as WS server
     participant DB as PostgreSQL
 
@@ -429,7 +429,7 @@ sequenceDiagram
     participant Web as apps/web
     participant API as REST API
     participant WS as WS server
-    participant A as wiva-android
+    participant A as viwa-android
 
     Web->>API: PATCH /machines/:id/cells
     API->>API: validate roles, no volume in body
@@ -471,7 +471,7 @@ sequenceDiagram
 
 ## 6. UI (web + android — кратко)
 
-### Web — отдельный раздел **«База продуктов»** (`wiva-telemetry/apps/web`)
+### Web — отдельный раздел **«База продуктов»** (`viwa-telemetry/apps/web`)
 
 - Отдельная страница/раздел навигации (не внутри machine detail).
 - Одна таблица: **название**, **вкус** (display name RU + mediaKey).
@@ -503,12 +503,12 @@ sequenceDiagram
 
 | # | Deliverable | Repo |
 |---|-------------|------|
-| M1 | Prisma migration: Product (`name`, `tasteMediaKey`), MachineCell, Machine fields, dedup | wiva-telemetry |
-| M2 | REST: products CRUD + tastes allowlist; GET/PATCH cells | wiva-telemetry |
-| M3 | WS v2 handlers: schema/volume/content report + snapshot push | wiva-telemetry |
-| M4 | Web: страница «База продуктов» (таблица + add/edit/delete) | wiva-telemetry/apps/web |
-| M5 | Web: MachineDetail «Ячейки» + product select | wiva-telemetry/apps/web |
-| M6 | Android: `telemetryCellsSnapshot`, schema report on hello, volume/content uplink, snapshot; map tasteMediaKey → assets | wiva-android |
+| M1 | Prisma migration: Product (`name`, `tasteMediaKey`), MachineCell, Machine fields, dedup | viwa-telemetry |
+| M2 | REST: products CRUD + tastes allowlist; GET/PATCH cells | viwa-telemetry |
+| M3 | WS v2 handlers: schema/volume/content report + snapshot push | viwa-telemetry |
+| M4 | Web: страница «База продуктов» (таблица + add/edit/delete) | viwa-telemetry/apps/web |
+| M5 | Web: MachineDetail «Ячейки» + product select | viwa-telemetry/apps/web |
+| M6 | Android: `telemetryCellsSnapshot`, schema report on hello, volume/content uplink, snapshot; map tasteMediaKey → assets | viwa-android |
 | M7 | Contract doc + integration test (register → schema → web patch → snapshot) | both |
 
 ### v1
@@ -560,8 +560,8 @@ sequenceDiagram
 | Документ | Назначение |
 |----------|------------|
 | [`CELL_FILLING_REQUESTS_AND_STORAGE.md`](./CELL_FILLING_REQUESTS_AND_STORAGE.md) | Legacy Shaker reference (не целевой протокол) |
-| `wiva-android/docs/SIMPLE_TELEMETRY_MVP_ANDROID.md` | MVP WS register/hello на Android |
-| `wiva-telemetry/docs/contracts/registration-machine-jwt.md` | JWT + WS envelope v1 |
-| [`wiva-telemetry/docs/contracts/machine-cells-inventory.md`](../../wiva-telemetry/docs/contracts/machine-cells-inventory.md) | WS v2 cells + REST products/cells contract (canonical) |
-| `wiva-telemetry/docs/agents/simple-telemetry-mvp/brief.md` | Scope MVP telemetry (до этой фичи) |
-| `wiva-telemetry/apps/web/src/pages/MachineDetailPage.tsx` | Точка расширения web UI |
+| `viwa-android/docs/SIMPLE_TELEMETRY_MVP_ANDROID.md` | MVP WS register/hello на Android |
+| `viwa-telemetry/docs/contracts/registration-machine-jwt.md` | JWT + WS envelope v1 |
+| [`viwa-telemetry/docs/contracts/machine-cells-inventory.md`](../../viwa-telemetry/docs/contracts/machine-cells-inventory.md) | WS v2 cells + REST products/cells contract (canonical) |
+| `viwa-telemetry/docs/agents/simple-telemetry-mvp/brief.md` | Scope MVP telemetry (до этой фичи) |
+| `viwa-telemetry/apps/web/src/pages/MachineDetailPage.tsx` | Точка расширения web UI |

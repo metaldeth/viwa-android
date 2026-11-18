@@ -1,6 +1,6 @@
 # Итог complex-сессии: wiva-aqsi-card-payment
 
-**Проект:** `wiva-android`  
+**Проект:** `viwa-android`  
 **SessionId:** `wiva-aqsi-card-payment`  
 **Статус:** реализация A1-A7 завершена, ревью-круги пройдены, сборка и тесты зелёные.
 

@@ -2,7 +2,7 @@
 
 **Reviewer:** code-reviewer-complex  
 **Date:** 2026-07-19  
-**Repo:** `wiva-telemetry`  
+**Repo:** `viwa-telemetry`  
 **Task:** `docs/agents/machine-cells-inventory/tasks/task-03.md`  
 **Test report:** `task-03-test-report.md`  
 **Architecture:** `architecture.md` § REST cells, OQ-3, OQ-8, error codes

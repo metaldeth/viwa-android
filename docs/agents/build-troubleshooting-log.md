@@ -16,7 +16,7 @@
 
 ### 2026-07-27 — full verification blocked (Gradle contention, unit tests, release signing)
 
-- **Repo:** `viwa-android` (`c:\wiva\viwa-android`)
+- **Repo:** `viwa-android` (`c:\viwa\viwa-android`)
 - **Команда:** `gradlew.bat :app:testDebugUnitTest` (full); также затронуты `assembleRelease`, параллельные Gradle-запуски / `gradlew --stop`
 - **Симптом:** Полная unit-test верификация не завершилась. Несколько одновременных владельцев Gradle (`gradlew`, daemon, агентные retry) и `gradlew --stop` создали contention за file locks. Один из прогонов до lock-конфликта показал:
   ```
@@ -31,7 +31,7 @@
 
 ### 2026-07-30 — full unit suite hangs with a single Gradle owner
 
-- **Repo:** `viwa-android` (`c:\wiva\viwa-android`)
+- **Repo:** `viwa-android` (`c:\viwa\viwa-android`)
 - **Команда:** `gradlew.bat :app:testDebugUnitTest --no-daemon`; retry: `gradlew.bat :app:testDebugUnitTest --no-daemon --max-workers=1`
 - **Симптом:** оба запуска дошли до `:app:testDebugUnitTest` и зависли без новых строк. Во втором запуске через ~11 минут CPU delta Gradle-процессов оставался `0` более 30 секунд; JUnit XML не сформирован.
 - **Причина:** не установлена. Параллельных Gradle owners не было; `--max-workers=1` hang не устранил.
@@ -41,7 +41,7 @@
 
 ### 2026-08-03 — full unit suite hang (combined drink payment verification)
 
-- **Repo:** `viwa-android` (`c:\wiva\wiva-android`)
+- **Repo:** `viwa-android` (`c:\viwa\viwa-android`)
 - **Команда:** `gradlew.bat :app:testDebugUnitTest`; первый запуск `--no-daemon`; единственный retry после остановки repo processes + `gradlew.bat --stop`: `--max-workers=1`
 - **Симптом:** полный suite дважды завис на `:app:testDebugUnitTest` после >10 минут. Gradle Test Executor: CPU delta ~0, лог без прогресса, JUnit XML не сформирован. В stdout (unrelated к hang) зафиксирован failure:
   ```
@@ -55,7 +55,7 @@
 
 ### 2026-08-05 — hang полного suite локализован до одного теста
 
-- **Repo:** `viwa-android` (`c:\wiva\wiva-android`)
+- **Repo:** `viwa-android` (`c:\viwa\viwa-android`)
 - **Команда:** `gradlew.bat :app:testDebugUnitTest`; единственный retry после остановки repo processes + `gradlew.bat --stop`: `--max-workers=1`
 - **Симптом:** оба прогона повисли в одной точке. `jstack` по `Gradle Test Executor` показал зависший тест:
   ```
@@ -70,7 +70,7 @@
 
 ### 2026-08-06 — full unit suite hang/OOM (OkHttp TaskRunner, inventory ack pipeline)
 
-- **Repo:** `viwa-android` (`c:\wiva\viwa-android`)
+- **Repo:** `viwa-android` (`c:\viwa\viwa-android`)
 - **Команда:** `gradlew.bat :app:testDebugUnitTest --console=plain` (~18.7 min, killed); cleanup: `gradlew.bat --stop` (2 daemons)
 - **Симптом:** полный suite завис; JUnit XML только у 10 классов (inventory ack pipeline + inventory domain), все с timestamp `2026-08-06 12:17:39`. Затем `OutOfMemoryError` в `okhttp3.internal.concurrent.TaskRunner`; процесс убит.
 - **Причина:** накопление ресурсов в одном test JVM при полном прогоне (~139 классов): (1) `OkHttpClient()` в telemetry/OTA тестах без shutdown (`SimpleTelemetryCoordinatorTest`, `MvpTelemetryApiClientTest`, `SimpleTelemetryCoordinatorSerialGuardTest`, `AppUpdateCoordinatorTest`); (2) `MvpTelemetryWebSocketManager` + `SimpleTelemetryCoordinator` с `SupervisorJob()` без `cancel()`/`disconnect()` в `@After`; (3) `CellsContentReportAckAwaiter` — pending ack waits не очищались при WS disconnect; (4) ack-тесты использовали `launch {}` в MockK `coEvery` для `completeAck`.
@@ -79,7 +79,7 @@
 - **Связи:** inventory ack tests (`TelemetryAckRouterTest`, `TelemetryCellsSyncCoordinatorTest`, `CellsContentReportAckSemanticsTest`); BT-003 закрыт тем же фиксом (OkHttp lifecycle + single fork)
 ### 2026-08-10 — mergeDebugResources blame folder (Windows, post-interrupt)
 
-- **Repo:** `wiva-android` (`c:\wiva\wiva-android`)
+- **Repo:** `viwa-android` (`c:\viwa\viwa-android`)
 - **Команда:** `gradlew.bat --stop`; `:app:clean --max-workers=1`; `:app:testDebugUnitTest` (ViwaWaterCounterServiceTest, TelemetryV3CodecTest) `--max-workers=1`; retry after `Remove-Item app\build -Recurse -Force`
 - **Симптом:**
   `

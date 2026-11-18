@@ -2,10 +2,10 @@
 
 **Reviewer:** code-reviewer-complex (docs)  
 **Date:** 2026-07-19  
-**Repos:** `wiva-telemetry` (canonical artifact), `wiva-android` (links)  
+**Repos:** `viwa-telemetry` (canonical artifact), `viwa-android` (links)  
 **Task:** `docs/agents/machine-cells-inventory/tasks/task-11.md`  
 **Test report:** `task-11-test-report.md`  
-**Artifact:** `wiva-telemetry/docs/contracts/machine-cells-inventory.md`  
+**Artifact:** `viwa-telemetry/docs/contracts/machine-cells-inventory.md`  
 **Cross-check:** task-02/03/05 controllers & WS, `architecture.md`, `FEATURE_MACHINE_CELLS_INVENTORY.md`, TZ #32
 
 ## Verdict
@@ -34,7 +34,7 @@
 | 14 | 14 `tasteMediaKey` | ✅ | Table L461–476 ≡ `TASTE_MEDIA_KEYS` + `TASTE_MEDIA_KEY_LABELS_RU` + Android `TasteMediaKeyCatalog` |
 | 15 | Fixtures reference | ✅ | 4 files in `apps/api/test/fixtures/cells/` |
 | 16 | Android doc links | ✅ | `SIMPLE_TELEMETRY_MVP_ANDROID.md` §Related contracts; `FEATURE_MACHINE_CELLS_INVENTORY.md` §10 |
-| 17 | Relative links valid | ✅ | `../../wiva-telemetry/docs/contracts/…` from Android docs resolves; contract → fixtures & `schema-hash.util.ts` |
+| 17 | Relative links valid | ✅ | `../../viwa-telemetry/docs/contracts/…` from Android docs resolves; contract → fixtures & `schema-hash.util.ts` |
 
 ---
 
@@ -71,7 +71,7 @@ Ack payloads: schema `{ ok, schemaHash, created, updated, deactivated }`; volume
 
 | Критерий | Статус |
 |----------|--------|
-| Contract doc published | ✅ `wiva-telemetry/docs/contracts/machine-cells-inventory.md` |
+| Contract doc published | ✅ `viwa-telemetry/docs/contracts/machine-cells-inventory.md` |
 | Согласован с brief §4 / architecture C-1…C-5 | ✅ |
 | Ссылки из Android docs | ✅ |
 | Peer review / links valid | ✅ (this review) |

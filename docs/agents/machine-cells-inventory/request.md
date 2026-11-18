@@ -8,8 +8,8 @@
 
 | Repo | Роль |
 |------|------|
-| `c:\wiva\wiva-telemetry` | БД, REST, WS MVP, web dashboard (products + machine cells) |
-| `c:\wiva\wiva-android` | Автомат: schema/volume/content uplink, snapshot, UI inventory |
+| `c:\viwa\viwa-telemetry` | БД, REST, WS MVP, web dashboard (products + machine cells) |
+| `c:\viwa\viwa-android` | Автомат: schema/volume/content uplink, snapshot, UI inventory |
 
 ## Постановка (сводка чата)
 
@@ -33,15 +33,15 @@
 
 ## Канонический brief
 
-`c:\wiva\wiva-android\docs\FEATURE_MACHINE_CELLS_INVENTORY.md`  
+`c:\viwa\viwa-android\docs\FEATURE_MACHINE_CELLS_INVENTORY.md`  
 (обновлён: §3.1.3–3.1.4 Product + tastes, REST products CRUD, UI «База продуктов», этапы M1–M7)
 
 Справочник legacy (не целевой протокол):  
-`c:\wiva\wiva-android\docs\CELL_FILLING_REQUESTS_AND_STORAGE.md`
+`c:\viwa\viwa-android\docs\CELL_FILLING_REQUESTS_AND_STORAGE.md`
 
 ## Ожидание от complex
 
 Полный пайплайн: ТЗ → архитектура → план → реализация (оба репозитория) → ревью → тесты → summary → task-completion.
 
-**Primary AGENTS для web/API:** `c:\wiva\wiva-telemetry\AGENTS.md`  
-**Android:** `c:\wiva\wiva-android\AGENTS.md` (`tdd: true`)
+**Primary AGENTS для web/API:** `c:\viwa\viwa-telemetry\AGENTS.md`  
+**Android:** `c:\viwa\viwa-android\AGENTS.md` (`tdd: true`)

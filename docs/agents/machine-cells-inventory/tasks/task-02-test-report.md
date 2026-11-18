@@ -1,6 +1,6 @@
 # task-02 — test report (Products REST CRUD + tastes)
 
-**Repo:** `wiva-telemetry`  
+**Repo:** `viwa-telemetry`  
 **Date:** 2026-07-19  
 **Scope:** ProductsModule, RejectMachineJwtGuard, integration spec `products.spec.ts`
 
@@ -61,11 +61,11 @@ When `DATABASE_URL` is configured, the suite covers task-02 acceptance cases:
 ## Commands run
 
 ```powershell
-cd c:\wiva\wiva-telemetry\apps\api
+cd c:\viwa\viwa-telemetry\apps\api
 node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand test/products.service.spec.ts test/reject-machine-jwt.guard.spec.ts test/taste-media-keys.spec.ts
 # → 3 passed, 11 tests
 
-cd c:\wiva\wiva-telemetry
+cd c:\viwa\viwa-telemetry
 npm test
 # → FAIL (cell-schema-reconcile WIP)
 

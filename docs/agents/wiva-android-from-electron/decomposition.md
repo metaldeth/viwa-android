@@ -1,20 +1,20 @@
 # Декомпозиция: viwa-android-from-electron
 
-Основана на `wiva-android/docs/TZ_WIVA_ANDROID_FROM_ELECTRON.md` §4 и §6.2. Каждый подмодуль = отдельный complex, артефакты в `docs/agents/viwa-android-from-electron/modules/{moduleId}/`.
+Основана на `viwa-android/docs/TZ_WIVA_ANDROID_FROM_ELECTRON.md` §4 и §6.2. Каждый подмодуль = отдельный complex, артефакты в `docs/agents/viwa-android-from-electron/modules/{moduleId}/`.
 
 ## Модули
 
 ### Модуль 1: `stage-a-carcass-ota`
 
 - **Описание:** Gradle-приложение (Kotlin, Compose), базовая навигация, dev-флаг мока контроллера, OTA-сервер и клиент как в legacy Android kiosk (контракт `version.json`, документация по образцу `legacy Android kiosk/docs/OTA_UPDATE.md`).
-- **Скоуп:** `wiva-android/` (новый app-модуль, `update-server/`, `docs/`).
+- **Скоуп:** `viwa-android/` (новый app-модуль, `update-server/`, `docs/`).
 - **Зависимости:** нет (первый этап).
 - **ID задач ТЗ:** A1–A4.
 
 ### Модуль 2: `stage-b-mock-first`
 
 - **Описание:** Реализация **MockController** по контракту, инъекция вместо реального транспорта; сценарий на эмуляторе (команда → ответ в логе/UI). Смысл — из `wiva_electron` моки (`MockControllerConnection.ts` и тесты).
-- **Скоуп:** слой контроллера в `wiva-android`, DI.
+- **Скоуп:** слой контроллера в `viwa-android`, DI.
 - **Зависимости:** `stage-a-carcass-ota` (каркас, флаг мока).
 - **ID задач ТЗ:** B3.
 
@@ -58,7 +58,7 @@
 
 | Волна | Модули | Комментарий |
 | ----- | ------ | ----------- |
-| 1 | `stage-a-carcass-ota` | Старт проекта; после A — желателен минимальный `wiva-android/AGENTS.md` с `buildCommand` (ТЗ §7). |
+| 1 | `stage-a-carcass-ota` | Старт проекта; после A — желателен минимальный `viwa-android/AGENTS.md` с `buildCommand` (ТЗ §7). |
 | 2 | `stage-b-mock-first` | Разблокирует UI на эмуляторе. |
 | 3 | `stage-b-real-controller` | Железо и протокол. |
 | 4 | `stage-c-integrations` | C1→сборка→C2→сборка→C3→C4 (ТЗ). |

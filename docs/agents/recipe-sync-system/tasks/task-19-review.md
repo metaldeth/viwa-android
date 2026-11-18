@@ -1,7 +1,7 @@
 # task-19-review: Android preparing/pour Phase C + service assign A4
 
 **Session:** `recipe-sync-system`  
-**Task:** [task-19.md](../../../../wiva-telemetry/docs/agents/recipe-sync-system/tasks/task-19.md) — Phase C pour from effective + telemetry snapshot + A4 assign path  
+**Task:** [task-19.md](../../../../viwa-telemetry/docs/agents/recipe-sync-system/tasks/task-19.md) — Phase C pour from effective + telemetry snapshot + A4 assign path  
 **Test report:** [task-19-test-report.md](./task-19-test-report.md)  
 **Review:** round 1 + **round 2 (final)** — 2026-08-06  
 **Scope:** task-19 touch map + R-1/R-2 polish; **no code edits in review**
@@ -32,7 +32,7 @@
 | `services/preparing/PreparingManager.kt` | `pourRecipeFallback` structured log; context fallback fields; paid continues on fallback |
 | `app/src/test/.../PreparingManagerRecipeTest.kt` | **10 tests** — exception/fallback matrix + paid policy |
 
-**Context read:** [architecture.md](../../../../wiva-telemetry/docs/agents/recipe-sync-system/architecture.md) §3.3, §8.1 steps 5–7, §11.3; round-1 review; [task-19-test-report.md](./task-19-test-report.md) round 2.
+**Context read:** [architecture.md](../../../../viwa-telemetry/docs/agents/recipe-sync-system/architecture.md) §3.3, §8.1 steps 5–7, §11.3; round-1 review; [task-19-test-report.md](./task-19-test-report.md) round 2.
 
 ---
 

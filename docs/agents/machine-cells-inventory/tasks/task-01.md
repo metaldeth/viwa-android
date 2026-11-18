@@ -1,6 +1,6 @@
 # task-01 — Prisma schema + taste allowlist
 
-**Repo:** `wiva-telemetry`  
+**Repo:** `viwa-telemetry`  
 **Зависимости:** —
 
 ## Связь с этапом
@@ -22,10 +22,10 @@ M1 — Prisma migration: Product, MachineCell, dedup, поля Machine.
 
 ## Точки изменения
 
-- `wiva-telemetry/apps/api/prisma/schema.prisma`
-- `wiva-telemetry/apps/api/prisma/migrations/` (новая migration)
-- `wiva-telemetry/apps/api/src/products/taste-media-keys.ts` (или `shared/`) — allowlist + RU labels
-- `wiva-telemetry/apps/api/src/cleanup/expired-records.cleanup.ts` — dedup TTL
+- `viwa-telemetry/apps/api/prisma/schema.prisma`
+- `viwa-telemetry/apps/api/prisma/migrations/` (новая migration)
+- `viwa-telemetry/apps/api/src/products/taste-media-keys.ts` (или `shared/`) — allowlist + RU labels
+- `viwa-telemetry/apps/api/src/cleanup/expired-records.cleanup.ts` — dedup TTL
 
 ## Тест-кейсы
 

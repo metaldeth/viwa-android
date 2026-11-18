@@ -1,7 +1,7 @@
 # Архитектура: aQsi Pill / T7100 (оплата картой, Arcus2 TCP/IP)
 
 **SessionId:** `wiva-aqsi-card-payment`  
-**Проект:** `wiva-android` (`type=android`)  
+**Проект:** `viwa-android` (`type=android`)  
 **Источники:** утверждённое `tz.md`, `request.md`, `AGENTS.md`.
 
 ## Границы и инварианты

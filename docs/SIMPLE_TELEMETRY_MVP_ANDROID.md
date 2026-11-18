@@ -322,8 +322,8 @@ Nest возвращает вложенный объект в `message`:
 
 | Document | Purpose |
 |----------|---------|
-| [`wiva-telemetry/docs/contracts/registration-machine-jwt.md`](../../wiva-telemetry/docs/contracts/registration-machine-jwt.md) | REG register, machine JWT, WS envelope v1 baseline |
-| [`wiva-telemetry/docs/contracts/machine-cells-inventory.md`](../../wiva-telemetry/docs/contracts/machine-cells-inventory.md) | WS v2 cell types, REST products/cells, snapshot, reconnect (C-1–C-5) |
+| [`viwa-telemetry/docs/contracts/registration-machine-jwt.md`](../../viwa-telemetry/docs/contracts/registration-machine-jwt.md) | REG register, machine JWT, WS envelope v1 baseline |
+| [`viwa-telemetry/docs/contracts/machine-cells-inventory.md`](../../viwa-telemetry/docs/contracts/machine-cells-inventory.md) | WS v2 cell types, REST products/cells, snapshot, reconnect (C-1–C-5) |
 
 ## Legacy
 

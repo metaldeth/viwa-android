@@ -19,7 +19,7 @@
 - Unit tests telemetry — не прогонялись полноценно из-за ENV_LOCK ранее; после успешного assemble не перезапускались
 
 ## Git facts
-- repo: `wiva-android` (`c:\wiva\wiva-android`)
+- repo: `viwa-android` (`c:\viwa\viwa-android`)
 - branch: `main` (up to date with `origin/main`)
 - commit (HEAD): `79ae0123ec3d7cbd74262cd3eab42dfd02992226` — feat: показывать REG-ключ и заполнять его из QR на вкладке телеметрии (2026-07-19 16:22:26 +0500)
 - working tree: изменения **не закоммичены** (46 tracked files + untracked MVP cells/inventory файлы)

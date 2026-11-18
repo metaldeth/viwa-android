@@ -1,6 +1,6 @@
 # task-03 — REST GET/PATCH machine cells + contentSource
 
-**Repo:** `wiva-telemetry`  
+**Repo:** `viwa-telemetry`  
 **Зависимости:** task-01, task-02
 
 ## Связь с этапом
@@ -25,8 +25,8 @@ M2 — REST cells GET/PATCH (без WS push в этом task).
 
 ## Точки изменения
 
-- `wiva-telemetry/apps/api/src/machine-cells/` (module, controller, dto, mapper)
-- `wiva-telemetry/apps/api/src/app.module.ts`
+- `viwa-telemetry/apps/api/src/machine-cells/` (module, controller, dto, mapper)
+- `viwa-telemetry/apps/api/src/app.module.ts`
 
 ## Тест-кейсы
 

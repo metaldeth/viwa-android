@@ -1,7 +1,7 @@
 # Архитектурное ревью: `wiva-aqsi-card-payment` (круг 2)
 
 **SessionId:** `wiva-aqsi-card-payment`  
-**Проект:** `wiva-android`  
+**Проект:** `viwa-android`  
 **Объект:** `architecture.md` в сопоставлении с `tz.md`, `request.md`, `AGENTS.md` и замечаниями круга 1.
 
 ---

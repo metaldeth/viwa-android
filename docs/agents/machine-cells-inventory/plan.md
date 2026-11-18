@@ -1,7 +1,7 @@
 # План выполнения: machine-cells-inventory
 
 **SessionId:** `machine-cells-inventory`  
-**Repos:** `wiva-telemetry` (API + web), `wiva-android` (`tdd: true`)  
+**Repos:** `viwa-telemetry` (API + web), `viwa-android` (`tdd: true`)  
 **Источники:** `tz.md`, `architecture.md`, `docs/FEATURE_MACHINE_CELLS_INVENTORY.md` (M1–M7)
 
 ## Запреты
@@ -15,9 +15,9 @@
 
 | После задач | Repo | Команда |
 |-------------|------|---------|
-| task-01 … task-05 | wiva-telemetry | `npm test` (минимум по затронутым модулям) |
-| task-06, task-07 | wiva-telemetry/web | `npm run lint`, `npm run build` |
-| task-08 … task-10 | wiva-android | `gradlew.bat :app:testDebugUnitTest` |
+| task-01 … task-05 | viwa-telemetry | `npm test` (минимум по затронутым модулям) |
+| task-06, task-07 | viwa-telemetry/web | `npm run lint`, `npm run build` |
+| task-08 … task-10 | viwa-android | `gradlew.bat :app:testDebugUnitTest` |
 | task-12 (финал) | both | `npm test` + E2E сценарий; Android unit tests |
 
 Web smoke (manual, из TZ §WEB-1..WEB-7): ProductsPage CRUD, VIEWER read-only, MachineDetail cells, block/sos индикаторы, цены рубли→копейки.
@@ -36,16 +36,16 @@ Web smoke (manual, из TZ §WEB-1..WEB-7): ProductsPage CRUD, VIEWER read-only,
 
 | ID | Файл | Repo | Кратко | Зависимости |
 |----|------|------|--------|-------------|
-| task-01 | `tasks/task-01.md` | wiva-telemetry | Prisma: Product, MachineCell, dedup, Machine fields, contentSource enum, taste allowlist | — |
-| task-02 | `tasks/task-02.md` | wiva-telemetry | REST products CRUD + GET `/products/tastes` | task-01 |
-| task-03 | `tasks/task-03.md` | wiva-telemetry | REST GET/PATCH cells, contentSource на PATCH, без WS push | task-01, task-02 |
-| task-04 | `tasks/task-04.md` | wiva-telemetry | Apply-сервисы: reconcile, volume, content (OQ-8), dedup, snapshot builder | task-01 |
-| task-05 | `tasks/task-05.md` | wiva-telemetry | WS v2 hello/handlers, snapshot push, reconnect, Nest forwardRef wiring | task-03, task-04 |
-| task-06 | `tasks/task-06.md` | wiva-telemetry/web | API client, money helpers, ProductsPage, nav `/products` | task-02 |
-| task-07 | `tasks/task-07.md` | wiva-telemetry/web | MachineCellsSection на MachineDetail, polling, block/sos | task-03, task-06 |
-| task-08 | `tasks/task-08.md` | wiva-android | Domain models, JsonStore, codec, TasteMediaKeyCatalog, unit tests | — (контракт из architecture) |
-| task-09 | `tasks/task-09.md` | wiva-android | TelemetryCellsSyncCoordinator, WS uplink/downlink, hello wiring | task-05, task-08 |
-| task-10 | `tasks/task-10.md` | wiva-android | Service menu tabs, customer drink adapter, useMvpProtocol gate | task-09 |
+| task-01 | `tasks/task-01.md` | viwa-telemetry | Prisma: Product, MachineCell, dedup, Machine fields, contentSource enum, taste allowlist | — |
+| task-02 | `tasks/task-02.md` | viwa-telemetry | REST products CRUD + GET `/products/tastes` | task-01 |
+| task-03 | `tasks/task-03.md` | viwa-telemetry | REST GET/PATCH cells, contentSource на PATCH, без WS push | task-01, task-02 |
+| task-04 | `tasks/task-04.md` | viwa-telemetry | Apply-сервисы: reconcile, volume, content (OQ-8), dedup, snapshot builder | task-01 |
+| task-05 | `tasks/task-05.md` | viwa-telemetry | WS v2 hello/handlers, snapshot push, reconnect, Nest forwardRef wiring | task-03, task-04 |
+| task-06 | `tasks/task-06.md` | viwa-telemetry/web | API client, money helpers, ProductsPage, nav `/products` | task-02 |
+| task-07 | `tasks/task-07.md` | viwa-telemetry/web | MachineCellsSection на MachineDetail, polling, block/sos | task-03, task-06 |
+| task-08 | `tasks/task-08.md` | viwa-android | Domain models, JsonStore, codec, TasteMediaKeyCatalog, unit tests | — (контракт из architecture) |
+| task-09 | `tasks/task-09.md` | viwa-android | TelemetryCellsSyncCoordinator, WS uplink/downlink, hello wiring | task-05, task-08 |
+| task-10 | `tasks/task-10.md` | viwa-android | Service menu tabs, customer drink adapter, useMvpProtocol gate | task-09 |
 | task-11 | `tasks/task-11.md` | both | Contract doc `machine-cells-inventory.md` + ссылка в Android docs | task-05 |
 | task-12 | `tasks/task-12.md` | both | Integration E2E: register→schema→web PATCH→snapshot→volume | task-05, task-07, task-09, task-11 |
 

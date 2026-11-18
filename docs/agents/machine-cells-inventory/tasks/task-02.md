@@ -1,6 +1,6 @@
 # task-02 — REST products CRUD + tastes allowlist
 
-**Repo:** `wiva-telemetry`  
+**Repo:** `viwa-telemetry`  
 **Зависимости:** task-01
 
 ## Связь с этапом
@@ -24,9 +24,9 @@ M2 — REST products + tastes endpoint.
 
 ## Точки изменения
 
-- `wiva-telemetry/apps/api/src/products/` (module, controller, service, dto)
-- `wiva-telemetry/apps/api/src/app.module.ts`
-- `wiva-telemetry/apps/api/src/auth/` — guards reuse (SessionAuthGuard, RolesGuard)
+- `viwa-telemetry/apps/api/src/products/` (module, controller, service, dto)
+- `viwa-telemetry/apps/api/src/app.module.ts`
+- `viwa-telemetry/apps/api/src/auth/` — guards reuse (SessionAuthGuard, RolesGuard)
 
 ## Тест-кейсы
 

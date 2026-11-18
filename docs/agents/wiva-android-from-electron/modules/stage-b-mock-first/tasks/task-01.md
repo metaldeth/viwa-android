@@ -39,19 +39,19 @@
 Значения исходящих и входящих команд брать из эталона **wiva_electron** (не выдумывать коды):
 
 - Исходящие (TX):  
-  `c:\wiva\wiva_electron\src\main\hardware\controller\commands\RequestCommands.ts`
+  `c:\viwa\wiva_electron\src\main\hardware\controller\commands\RequestCommands.ts`
 - Входящие (RX):  
-  `c:\wiva\wiva_electron\src\main\hardware\controller\commands\ResponseCommands.ts`
+  `c:\viwa\wiva_electron\src\main\hardware\controller\commands\ResponseCommands.ts`
 
 Дополнительно для поведения событий:
 
-- `c:\wiva\wiva_electron\src\main\hardware\controller\ControllerEvents.ts`
+- `c:\viwa\wiva_electron\src\main\hardware\controller\ControllerEvents.ts`
 - Эталон мока:  
-  `c:\wiva\wiva_electron\src\main\hardware\controller\__mocks__\MockControllerConnection.ts`
+  `c:\viwa\wiva_electron\src\main\hardware\controller\__mocks__\MockControllerConnection.ts`
 
 Ключ конфигурации (уже в приложении):
 
-- `c:\wiva\wiva-android\app\src\main\java\com\wiva\android\data\local\db\JsonStoreKeys.kt` — `USE_MOCK_CONTROLLER`
+- `c:\viwa\viwa-android\app\src\main\java\com\wiva\android\data\local\db\JsonStoreKeys.kt` — `USE_MOCK_CONTROLLER`
 
 ## Критерии приёмки
 

@@ -1,10 +1,10 @@
 # task-20-android-review: PreparingManager pour integration + golden parity CI
 
 **Session:** `recipe-sync-system`  
-**Task:** [task-20.md](../../../../wiva-telemetry/docs/agents/recipe-sync-system/tasks/task-20.md) — Cross-repo integration + AC-20 matrix (Android slice)  
+**Task:** [task-20.md](../../../../viwa-telemetry/docs/agents/recipe-sync-system/tasks/task-20.md) — Cross-repo integration + AC-20 matrix (Android slice)  
 **Prior review:** [task-19-review.md](./task-19-review.md) (R-3 open → task-20)  
 **Test report:** [task-20-test-report.md](./task-20-test-report.md)  
-**AC-20 matrix:** [ac-20-matrix.md](../../../../wiva-telemetry/docs/agents/recipe-sync-system/tasks/ac-20-matrix.md)  
+**AC-20 matrix:** [ac-20-matrix.md](../../../../viwa-telemetry/docs/agents/recipe-sync-system/tasks/ac-20-matrix.md)  
 **Review:** round 1 — 2026-08-06  
 **Scope:** task-20 Android touch map + `PreparingManager.pourFromEffectiveOverrideForTests`; **no code edits in review**
 
@@ -22,7 +22,7 @@
 | `domain/recipe/RecipeGoldenParityCiTest.kt` | PAR-4 byte/hash parity gate |
 | `app/src/test/resources/recipe/golden-v1.json` | Android copy of canonical fixture |
 | `app/src/test/resources/recipe/scale-v1.json` | Android copy of scale vectors |
-| `wiva-telemetry/scripts/recipe-parity.mjs` | PAR-1/PAR-2 cross-repo script (read for CI portability) |
+| `viwa-telemetry/scripts/recipe-parity.mjs` | PAR-1/PAR-2 cross-repo script (read for CI portability) |
 
 **Context read:** task-20 spec/report, task-19 review (R-3), architecture §11.3 step 7, ac-20-matrix AND-6 / AC-30 rows.
 
@@ -106,11 +106,11 @@ internal var pourFromEffectiveOverrideForTests: Boolean? = null
 
 | Item | Status |
 |------|--------|
-| **Canonical source** | `wiva-telemetry/apps/api/test/fixtures/recipe/golden-v1.json` (+ `scale-v1.json`) |
+| **Canonical source** | `viwa-telemetry/apps/api/test/fixtures/recipe/golden-v1.json` (+ `scale-v1.json`) |
 | **Android copy path** | `app/src/test/resources/recipe/{golden,scale}-v1.json` |
 | **Sync mechanism** | Manual copy + `RecipeGoldenParityCiTest` embedded SHA-256 + `npm run test:recipe-parity` |
 | **Local parity (this machine)** | ✅ Both pairs byte-identical |
-| **`recipe-parity.mjs` default Android root** | `../wiva-android` — on `viwa-android`-only checkouts set **`VIWA_ANDROID_ROOT`** (documented in script) |
+| **`recipe-parity.mjs` default Android root** | `../viwa-android` — on `viwa-android`-only checkouts set **`VIWA_ANDROID_ROOT`** (documented in script) |
 | **Android GitLab CI** | ⚠️ `.gitlab-ci.yml` runs **release Docker build only** — no `:app:testDebugUnitTest`; parity gate relies on local/telemetry CI, not Android pipeline today |
 
 ---
@@ -134,7 +134,7 @@ internal var pourFromEffectiveOverrideForTests: Boolean? = null
 |----|---------|-------|
 | **F-20-3** | `chooseDrink` mocked — no controller / `startDrinkPreparing` E2E | task-23 emulator AND-6 |
 | **F-20-4** | Android GitLab CI skips unit tests — `RecipeGoldenParityCiTest` not enforced on push | CI hardening (optional) |
-| **F-20-5** | `recipe-parity.mjs` sibling path `wiva-android` vs `viwa-android` rename | Set `VIWA_ANDROID_ROOT` in CI/docs |
+| **F-20-5** | `recipe-parity.mjs` sibling path `viwa-android` vs `viwa-android` rename | Set `VIWA_ANDROID_ROOT` in CI/docs |
 
 ### 🟢 Strengths
 

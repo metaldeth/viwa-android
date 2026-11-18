@@ -8,7 +8,7 @@
 
 ## Краткий вывод
 
-План **готов к исполнению**. Все 9 юзер-кейсов (UC-1 … UC-9) и UI-сценарии WEB-1 … WEB-7 из ТЗ покрыты задачами с прослеживаемой трассировкой. У каждой из 12 задач есть формулировка, точки изменения кода и зависимости. Android-задачи (task-08 … task-10) содержат явные TDD test-кases в соответствии с `tdd: true` в `wiva-android/AGENTS.md`. Telemetry backend-задачи (task-01 … task-05, task-12) имеют unit/integration/E2E кейсы; web-задачи (task-06, task-07) — manual smoke (допустимо: `browserTesting` не задан, `TEMP_TEST_SCENARIOS` не требуется).
+План **готов к исполнению**. Все 9 юзер-кейсов (UC-1 … UC-9) и UI-сценарии WEB-1 … WEB-7 из ТЗ покрыты задачами с прослеживаемой трассировкой. У каждой из 12 задач есть формулировка, точки изменения кода и зависимости. Android-задачи (task-08 … task-10) содержат явные TDD test-кases в соответствии с `tdd: true` в `viwa-android/AGENTS.md`. Telemetry backend-задачи (task-01 … task-05, task-12) имеют unit/integration/E2E кейсы; web-задачи (task-06, task-07) — manual smoke (допустимо: `browserTesting` не задан, `TEMP_TEST_SCENARIOS` не требуется).
 
 Волны 1–7 логичны: нет задач в ранних волнах, зависящих от поздних; параллелизация (task-02 ∥ task-04, task-03 ∥ task-08, task-05 ∥ task-06, task-07 ∥ task-09, task-10 ∥ task-11) согласована с dependency graph.
 
@@ -103,7 +103,7 @@
 | task-09 | 7 кейсов: schema/volume/content uplink, snapshot apply, reconnect fields, legacy gate, full replace during edit | ✅ Полно |
 | task-10 | 6 кейсов: adapter, thresholds, DrinkListViewModel MVP/legacy, product picker source | ✅ Полно |
 
-### wiva-telemetry (желательны unit/e2e)
+### viwa-telemetry (желательны unit/e2e)
 
 | Задача | Test coverage | Оценка |
 |--------|---------------|--------|

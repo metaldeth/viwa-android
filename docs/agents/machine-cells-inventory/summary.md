@@ -2,7 +2,7 @@
 
 **SessionId:** `machine-cells-inventory`  
 **Date:** 2026-07-19  
-**Repos:** `wiva-telemetry` (API + web), `wiva-android` (автомат)
+**Repos:** `viwa-telemetry` (API + web), `viwa-android` (автомат)
 
 ## Outcome
 
@@ -10,13 +10,13 @@
 
 - **Backend + web:** каталог продуктов (14 `tasteMediaKey`), flat-модель `machine_cells`, REST GET/PATCH ячеек на dashboard, WS v2 (schema/volume/content uplink + `cells.snapshot` downlink), reconcile схемы после register (без auto-create при register), dedup по `messageId`, push snapshot при PATCH и reconnect.
 - **Android:** domain/codec/repository для `telemetryCellsSnapshot`, `TelemetryCellsSyncCoordinator` (post-hello schema, uplink/downlink, legacy gate), service menu tabs (volumes/inventory) и customer drink list через MVP snapshot adapter при `useMvpProtocol=true`.
-- **Контракт:** канон `wiva-telemetry/docs/contracts/machine-cells-inventory.md` + ссылки из Android docs.
+- **Контракт:** канон `viwa-telemetry/docs/contracts/machine-cells-inventory.md` + ссылки из Android docs.
 
 Продуктовый сценарий «оператор задаёт продукт/цены на web → автомат получает snapshot → service menu и customer UI читают локальный snapshot» **собран в коде**; runtime E2E на PostgreSQL и emulator smoke **не подтверждены** в agent-окружении.
 
 ## Deliverables by repo
 
-### wiva-telemetry
+### viwa-telemetry
 
 - **Prisma (task-01):** `Product`, `MachineCell`, `MachineWsMessageDedup`; поля `Machine.cellSchemaHash`, `cellSchemaSyncedAt`, `cellsContentRevision`; enum `ContentSource`; migration SQL; allowlist 14 вкусов; TTL cleanup dedup 7d.
 - **REST (task-02, task-03):** `ProductsModule` CRUD + `/products/tastes`; `MachineCellsModule` GET/PATCH cells (denormalized GET, `contentSource=DASHBOARD` на PATCH, `VOLUME_READ_ONLY`, authZ session + RejectMachineJwtGuard).
@@ -26,7 +26,7 @@
 - **Contract (task-11):** `docs/contracts/machine-cells-inventory.md` — WS v2, REST, error codes, C-1…C-5, schemaHash, AuthZ, fixtures.
 - **E2E (task-12):** `machine-cells-inventory.e2e-spec.ts` — 6 сценариев (happy path TZ #31, register→0 cells, reconcile preserve, AuthZ 403, reconnect snapshot, dedup); **все SKIP** без `DATABASE_URL`.
 
-### wiva-android
+### viwa-android
 
 - **Domain/data (task-08):** `TelemetryCell`, `TelemetryProduct`, `TelemetryCellsSnapshot`, JsonStore repository, `TelemetryCellsMessageCodec`, `TasteMediaKeyCatalog` (14 keys), `CellUuidAllocator`; unit tests 7/7 + 3 PASS.
 - **Sync (task-09):** `TelemetryCellsSyncCoordinator` — post-hello schema report, volume/content uplink, snapshot full replace, reconnect fields, OQ-9 optional content, legacy gate; unit 8/8 PASS.
@@ -53,13 +53,13 @@
 
 | Область | Прогнано | SKIP / не прогнано | Причина |
 |---------|----------|-------------------|---------|
-| wiva-telemetry unit | task-01…05 apply/handler/guard specs | — | `npm test` exit 0 |
-| wiva-telemetry integration | Specs написаны (products, machine-cells, machines-ws-cells) | **SKIP** все DB-dependent кейсы | Нет `DATABASE_URL` / PostgreSQL в agent env |
-| wiva-telemetry migration | `prisma generate` PASS | **NOT RUN** apply migration | Нет `.env` / DB |
-| wiva-telemetry web | lint + build + vitest (task-06, task-07) | Manual WEB-3 polling, WEB-4 snapshot latency | Требует running stack / E2E |
-| wiva-telemetry E2E (task-12) | Jest suite собран, exit 0 | **6/6 SKIP** | `describeIfDb` — no DATABASE_URL |
-| wiva-android unit | task-08 (10), task-09 (8), task-10 (8) — all PASS | — | `gradlew :app:testDebugUnitTest` |
-| wiva-android instrumented / emulator | — | **SKIP** service menu smoke, WS on device | Не запускалось в сессии |
+| viwa-telemetry unit | task-01…05 apply/handler/guard specs | — | `npm test` exit 0 |
+| viwa-telemetry integration | Specs написаны (products, machine-cells, machines-ws-cells) | **SKIP** все DB-dependent кейсы | Нет `DATABASE_URL` / PostgreSQL в agent env |
+| viwa-telemetry migration | `prisma generate` PASS | **NOT RUN** apply migration | Нет `.env` / DB |
+| viwa-telemetry web | lint + build + vitest (task-06, task-07) | Manual WEB-3 polling, WEB-4 snapshot latency | Требует running stack / E2E |
+| viwa-telemetry E2E (task-12) | Jest suite собран, exit 0 | **6/6 SKIP** | `describeIfDb` — no DATABASE_URL |
+| viwa-android unit | task-08 (10), task-09 (8), task-10 (8) — all PASS | — | `gradlew :app:testDebugUnitTest` |
+| viwa-android instrumented / emulator | — | **SKIP** service menu smoke, WS on device | Не запускалось в сессии |
 | Contract doc (task-11) | 15-point cross-check PASS | — | Static review vs implementation |
 
 ## Residual risks / follow-ups
@@ -78,7 +78,7 @@
 
 ## Commits
 
-**not created** — complex mid/end; пользователь не просил commit/push. Изменения в рабочих деревьях `wiva-telemetry` и `wiva-android` без финального task-completion.
+**not created** — complex mid/end; пользователь не просил commit/push. Изменения в рабочих деревьях `viwa-telemetry` и `viwa-android` без финального task-completion.
 
 ## Next for human
 

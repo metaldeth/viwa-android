@@ -1,7 +1,7 @@
 # task-07 — финальное короткое ревью (после удаления порта из debug `saveConfig`)
 
 **Сессия:** `wiva-aqsi-card-payment`  
-**Проект:** `c:\wiva\wiva-android`  
+**Проект:** `c:\viwa\viwa-android`  
 **Ревьюер:** субагент `code-reviewer-complex` (**код не менялся**).
 
 ## Область проверки

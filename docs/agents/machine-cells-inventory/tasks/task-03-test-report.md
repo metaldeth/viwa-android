@@ -1,6 +1,6 @@
 # task-03 — test report
 
-**Repo:** `wiva-telemetry`  
+**Repo:** `viwa-telemetry`  
 **Date:** 2026-07-19
 
 ## REST integration tests

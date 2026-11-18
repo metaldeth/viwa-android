@@ -1,7 +1,7 @@
 # План выполнения: wiva-aqsi-card-payment
 
 **SessionId:** `wiva-aqsi-card-payment`  
-**Проект:** `wiva-android` (`tdd: true`)  
+**Проект:** `viwa-android` (`tdd: true`)  
 **Источники правды:** `tz.md`, `architecture.md`, `architecture_review.md` (не полагаться на узкий/устаревший блок `DrinkListViewModel` в `request.md`).
 
 ## Запреты (не планировать изменения)

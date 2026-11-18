@@ -1,13 +1,13 @@
 # Ревью документации: stage-f-office (F1/F2)
 
 **Область:** только документы модуля F (офис / железо).  
-**Проверено:** `wiva-android/docs/OFFICE_HARDWARE_CHECKLIST.md`, раздел «Офис / железо» в `wiva-android/AGENTS.md`, `modules/stage-f-office/summary.md`. Сверка с `TZ_WIVA_ANDROID_FROM_ELECTRON.md` §2, §3, фрагмент модуля F (§4).
+**Проверено:** `viwa-android/docs/OFFICE_HARDWARE_CHECKLIST.md`, раздел «Офис / железо» в `viwa-android/AGENTS.md`, `modules/stage-f-office/summary.md`. Сверка с `TZ_WIVA_ANDROID_FROM_ELECTRON.md` §2, §3, фрагмент модуля F (§4).
 
 ## Критерии проверки
 
 | Критерий | Результат |
 |----------|-----------|
-| Пути к монорепо | **ОК.** Таблица «Ссылки на эталоны» и `AGENTS.md` задают корень workspace `c:\wiva`; пути вида `wiva-android/...`, `viwa_electron/...` согласованы с workspace Wiva. |
+| Пути к монорепо | **ОК.** Таблица «Ссылки на эталоны» и `AGENTS.md` задают корень workspace `c:\wiva`; пути вида `viwa-android/...`, `viwa_electron/...` согласованы с workspace Wiva. |
 | PCI / PAN | **ОК.** В F2 чеклиста явный запрет PAN, CVV/CVC, дорожек, PIN; отсылка к PCI DSS и внутренним правилам; допустимые поля — только идентификаторы/время без чувствительных данных. |
 | Согласованность с ТЗ §2 | **ОК.** Источники по контроллеру (`wiva_electron` hardware/controller, `SERIAL_PORTS_IMPLEMENTATION.md`) и по терминалу (`PaymentTerminalService`, `modules/payment`) совпадают с таблицей §2. Сервисное меню — ссылка на §2 и структуру как в ТЗ. |
 | Согласованность с ТЗ §3 | **ОК.** Мок на эмуляторе vs реальная цепочка на стенде отражены; для F1 указано выключить мок контроллера при проверке железа; ориентир `MockControllerConnection.ts` как в §3. |

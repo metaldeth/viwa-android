@@ -17,7 +17,7 @@
 
 ## Сборка и тесты
 
-- Команда: `gradlew.bat assembleDebug` и `testDebugUnitTest` (из `wiva-android/AGENTS.md`) — **успешно** на момент закрытия этапа.
+- Команда: `gradlew.bat assembleDebug` и `testDebugUnitTest` (из `viwa-android/AGENTS.md`) — **успешно** на момент закрытия этапа.
 - Инструментальные тесты: `connectedDebugAndroidTest` (при наличии эмулятора/девайса).
 
 ## Источники

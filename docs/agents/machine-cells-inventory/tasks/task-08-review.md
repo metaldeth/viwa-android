@@ -2,7 +2,7 @@
 
 **Reviewer:** code-reviewer-complex  
 **Date:** 2026-07-19  
-**Repo:** `wiva-android`  
+**Repo:** `viwa-android`  
 **Task:** `docs/agents/machine-cells-inventory/tasks/task-08.md`  
 **Test report:** `task-08-test-report.md`  
 **Architecture:** §Android domain models, JsonStoreKeys, uplink/downlink codec

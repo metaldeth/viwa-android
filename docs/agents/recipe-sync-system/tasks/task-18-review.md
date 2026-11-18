@@ -1,7 +1,7 @@
 # task-18-review: Android assignment base cache + service UI edit/reset/drift
 
 **Session:** `recipe-sync-system`  
-**Task:** [task-18.md](../../../../wiva-telemetry/docs/agents/recipe-sync-system/tasks/task-18.md) — assignment base cache + service UI view/edit/reset/drift + lossless downlink  
+**Task:** [task-18.md](../../../../viwa-telemetry/docs/agents/recipe-sync-system/tasks/task-18.md) — assignment base cache + service UI view/edit/reset/drift + lossless downlink  
 **Test report:** [task-18-test-report.md](./task-18-test-report.md)  
 **Review:** round 1 + **round 2 (final)** — 2026-08-06  
 **Scope:** task-18 touch map + round-2 C-2/C-3/C-4 fixes; **no code edits in review**

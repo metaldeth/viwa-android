@@ -2,11 +2,11 @@
 
 **Reviewer:** code-reviewer-complex  
 **Date:** 2026-07-19  
-**Repo (primary):** `wiva-telemetry`  
+**Repo (primary):** `viwa-telemetry`  
 **Task:** `docs/agents/machine-cells-inventory/tasks/task-12.md`  
 **Test report:** `task-12-test-report.md`  
-**Artifact:** `wiva-telemetry/apps/api/test/machine-cells-inventory.e2e-spec.ts`  
-**Contract:** `wiva-telemetry/docs/contracts/machine-cells-inventory.md`  
+**Artifact:** `viwa-telemetry/apps/api/test/machine-cells-inventory.e2e-spec.ts`  
+**Contract:** `viwa-telemetry/docs/contracts/machine-cells-inventory.md`  
 **Cross-check:** `machines-ws-cells.spec.ts`, `machine-cells.spec.ts`, TZ #31 / M7
 
 ## Verdict

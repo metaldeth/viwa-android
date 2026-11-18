@@ -1,6 +1,6 @@
 # GitLab CI Runbook
 
-Краткая инструкция по CI/CD для `wiva-android`, повторяющая рабочую схему `legacy Android kiosk`.
+Краткая инструкция по CI/CD для `viwa-android`, повторяющая рабочую схему `legacy Android kiosk`.
 
 ## Что делает pipeline
 
@@ -16,7 +16,7 @@
 - Gradle в контейнере создавал root-owned файлы в workspace.
 - затем `git clean` и обычный `rm` падали с `Permission denied`.
 
-В `wiva-android` применена та же защита:
+В `viwa-android` применена та же защита:
 
 - сборка идёт внутри Docker image, без bind-mount исходников в Gradle;
 - перед и после job запускается `scripts/ci-runner-cleanup.sh`;
@@ -33,17 +33,17 @@
 
 ## Права на каталог OTA
 
-Если APK копируется в `/opt/wiva-android/release`, каталог нужно подготовить заранее:
+Если APK копируется в `/opt/viwa-android/release`, каталог нужно подготовить заранее:
 
 ```bash
-sudo mkdir -p /opt/wiva-android/release
-sudo chown gitlab-runner:gitlab-runner /opt/wiva-android/release
+sudo mkdir -p /opt/viwa-android/release
+sudo chown gitlab-runner:gitlab-runner /opt/viwa-android/release
 ```
 
 После этого в GitLab Variables:
 
 ```text
-WIVA_OTA_RELEASE_DIR=/opt/wiva-android/release
+WIVA_OTA_RELEASE_DIR=/opt/viwa-android/release
 ```
 
 ## Когда нужен sudo cleanup

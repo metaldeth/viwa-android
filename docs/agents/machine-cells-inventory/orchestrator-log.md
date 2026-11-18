@@ -68,7 +68,7 @@
 
 ## [development] Волна 1 — task-01
 
-- developer-complex: Prisma + taste allowlist (wiva-telemetry)
+- developer-complex: Prisma + taste allowlist (viwa-telemetry)
 - Результат: schema/migration/allowlist/cleanup; tests+build exit 0; migrate на БД не применялась (нет DATABASE_URL)
 
 ## [development] Волна 1 — code-review task-01

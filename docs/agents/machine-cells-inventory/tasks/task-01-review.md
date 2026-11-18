@@ -1,7 +1,7 @@
 # task-01 — code review
 
 **Session:** `machine-cells-inventory`  
-**Repo:** `wiva-telemetry`  
+**Repo:** `viwa-telemetry`  
 **Reviewer:** code-reviewer-complex (structured review: general, performance, docs, final)  
 **Date:** 2026-07-19
 

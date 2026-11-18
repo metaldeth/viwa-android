@@ -1,6 +1,6 @@
 # Архитектура: `stage-f-office` (модуль F — офис / железо, F1–F2)
 
-> Проект: **wiva-android** (`type=android` по `wiva-android/AGENTS.md`). Этап **не** предполагает обязательной новой реализации USB/serial-драйвера: приоритет — **документация**, **шаблон чеклиста** и **шаблон подписи/онсайт-фиксации**. Код меняется только если стенд выявляет расхождение с эталоном и это зафиксировано логами (см. основное ТЗ §4.1).
+> Проект: **viwa-android** (`type=android` по `viwa-android/AGENTS.md`). Этап **не** предполагает обязательной новой реализации USB/serial-драйвера: приоритет — **документация**, **шаблон чеклиста** и **шаблон подписи/онсайт-фиксации**. Код меняется только если стенд выявляет расхождение с эталоном и это зафиксировано логами (см. основное ТЗ §4.1).
 
 ## Компоненты и ответственность
 
@@ -13,9 +13,9 @@
 
 ### Размещение офисного чеклиста
 
-**Предпочтительно:** `wiva-android/docs/` — отдельный файл-шаблон (например `OFFICE_HARDWARE_CHECKLIST_TEMPLATE.md` или согласованное имя в рамках PR), чтобы документ жил рядом с остальной продуктовой документацией Android.
+**Предпочтительно:** `viwa-android/docs/` — отдельный файл-шаблон (например `OFFICE_HARDWARE_CHECKLIST_TEMPLATE.md` или согласованное имя в рамках PR), чтобы документ жил рядом с остальной продуктовой документацией Android.
 
-**Допустимо по ТЗ:** дублирование или единственная копия в `wiva-android/docs/agents/viwa-android-from-electron/modules/stage-f-office/`, если команда хочет держать шаблон только рядом с агентским треком. Архитектурная рекомендация — **primary в `wiva-android/docs/`**, из модуля — короткая ссылка.
+**Допустимо по ТЗ:** дублирование или единственная копия в `viwa-android/docs/agents/viwa-android-from-electron/modules/stage-f-office/`, если команда хочет держать шаблон только рядом с агентским треком. Архитектурная рекомендация — **primary в `viwa-android/docs/`**, из модуля — короткая ссылка.
 
 ## Интерфейсы и контракты
 
@@ -33,10 +33,10 @@
 
 | Артефакт | Путь в репозитории |
 |----------|-------------------|
-| Параметры порта (9600 8N1, путь по умолчанию из эталона) | `wiva-android/app/src/main/java/com/wiva/android/hardware/controller/ControllerPortSettings.kt` |
-| Текущая реализация serial-транспорта (лог TX, без входящих байт с железа) | `wiva-android/app/src/main/java/com/wiva/android/hardware/controller/LoggingStubControllerSerialTransport.kt` |
-| Контракт транспорта | `wiva-android/app/src/main/java/com/wiva/android/hardware/controller/ControllerSerialTransport.kt` |
-| Привязка транспорта в DI | `wiva-android/app/src/main/java/com/wiva/android/di/ControllerModule.kt` (`LoggingStubControllerSerialTransport` → `ControllerSerialTransport`) |
+| Параметры порта (9600 8N1, путь по умолчанию из эталона) | `viwa-android/app/src/main/java/com/wiva/android/hardware/controller/ControllerPortSettings.kt` |
+| Текущая реализация serial-транспорта (лог TX, без входящих байт с железа) | `viwa-android/app/src/main/java/com/wiva/android/hardware/controller/LoggingStubControllerSerialTransport.kt` |
+| Контракт транспорта | `viwa-android/app/src/main/java/com/wiva/android/hardware/controller/ControllerSerialTransport.kt` |
+| Привязка транспорта в DI | `viwa-android/app/src/main/java/com/wiva/android/di/ControllerModule.kt` (`LoggingStubControllerSerialTransport` → `ControllerSerialTransport`) |
 | Переключение **мок ↔ реальный шлюз** | Ключ `JsonStoreKeys.USE_MOCK_CONTROLLER` (`useMockController` в хранилище); UI и логика: `ServiceViewModel` / `ViwaServiceMenuTabContent` (сервисное меню). Делегирование: `DelegatingControllerGateway` читает флаг и направляет в `MockControllerGateway` или в ветку «реала» (`RealControllerGateway` + транспорт). |
 
 **Смысл флага:** при **включённом моке** используется мок-транспорт/шлюз; при **выключенном** — цепочка реального шлюза с `ControllerSerialTransport` (сейчас — заглушка с логированием). На стенде F1 для проверки железа мок должен быть **отключён** (как в ТЗ), с пониманием, что физический обмен байтами на Android возможен только после реальной реализации USB/serial, если заглушка ещё не заменена.
@@ -59,13 +59,13 @@
 
 ## Интеграции и потоки
 
-1. **Репозиторий (CI):** зелёная сборка `wiva-android` (`buildCommand` в `wiva-android/AGENTS.md`); наличие шаблона чеклиста и инструкции мок↔реал со ссылками на §2–§3 основного ТЗ и на документы выше.
+1. **Репозиторий (CI):** зелёная сборка `viwa-android` (`buildCommand` в `viwa-android/AGENTS.md`); наличие шаблона чеклиста и инструкции мок↔реал со ссылками на §2–§3 основного ТЗ и на документы выше.
 2. **Стенд (вне CI):** установка release/prod-like APK → выключить мок → подключить контроллер и терминал → пройти чеклист → подпись.
 3. **Сверка с эталоном:** при расхождении Android vs wiva_electron — логи/дампы, при необходимости прогон electron на том же стенде; решения не «наугад».
 
 ## Формат `summary.md`: репозиторий vs онсайт
 
-Рекомендуемая структура файла `wiva-android/docs/agents/viwa-android-from-electron/modules/stage-f-office/summary.md`:
+Рекомендуемая структура файла `viwa-android/docs/agents/viwa-android-from-electron/modules/stage-f-office/summary.md`:
 
 1. **Сделано в репозитории** — перечень закрытых строк из колонки «Репо» таблиц приёмки (F1-R1, F1-R2, F2-R1, общие пункты про шаблоны и ссылки). Отметка «готово к стенду», если онсайт ещё не выполнялся.
 2. **Подтверждено на стенде** — дата проведения, исполнитель; для каждого F1-O*, F2-O* — да/нет/не применимо; **ссылка** на заполненный подписанный чеклист (путь в репо или URI/номер документа во внешнем архиве).
@@ -75,6 +75,6 @@
 
 ## Рекомендации по параллелизации
 
-- **Ветка A (документация):** подготовка шаблона чеклиста в `wiva-android/docs/` + раздел «инструкция для стенда» (порты, мок, ссылки) — независимо от физического стенда.
+- **Ветка A (документация):** подготовка шаблона чеклиста в `viwa-android/docs/` + раздел «инструкция для стенда» (порты, мок, ссылки) — независимо от физического стенда.
 - **Ветка B (стенд):** заполнение чеклиста и подпись — выполняется инженером на железе; может идти параллельно с ревью PR по ветке A, но **закрытие F1-O/F2-O** зависит только от стенда.
 - **Код:** правки транспорта/USB — только по результатам стенда и явной необходимости; не смешивать с задачей «документ + шаблон» без блокирующего инцидента.

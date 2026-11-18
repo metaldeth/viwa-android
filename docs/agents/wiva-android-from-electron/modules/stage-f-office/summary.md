@@ -6,12 +6,12 @@
 
 | Критерий | Статус | Артефакт |
 |----------|--------|----------|
-| **F1-R1** — шаблон чеклиста офисной приёмки: контроллер, порт/скорость, ссылка на `SERIAL_PORTS_IMPLEMENTATION.md` и §2 ТЗ; регрессия vs мок (§3) | Выполнено | [`wiva-android/docs/OFFICE_HARDWARE_CHECKLIST.md`](../../../../OFFICE_HARDWARE_CHECKLIST.md) |
+| **F1-R1** — шаблон чеклиста офисной приёмки: контроллер, порт/скорость, ссылка на `SERIAL_PORTS_IMPLEMENTATION.md` и §2 ТЗ; регрессия vs мок (§3) | Выполнено | [`viwa-android/docs/OFFICE_HARDWARE_CHECKLIST.md`](../../../../OFFICE_HARDWARE_CHECKLIST.md) |
 | **F1-R2** — поля исполнитель, дата, подпись; версия APK/build; идентификатор стенда | Выполнено | тот же файл |
 | **F2-R1** — раздел «Платёжный терминал»: связь, тип терминала, ссылки на `PaymentTerminalService.ts` и `modules/payment/`; без PAN/CVV; PCI-напоминание | Выполнено | тот же файл |
 | Указатель в `AGENTS.md` | Выполнено | раздел «Офис / железо (этап F)» |
 
-Инструкция **мок ↔ реал** и ссылки на §2–§3 основного ТЗ — в чеклисте и в `wiva-android/AGENTS.md` (краткий указатель).
+Инструкция **мок ↔ реал** и ссылки на §2–§3 основного ТЗ — в чеклисте и в `viwa-android/AGENTS.md` (краткий указатель).
 
 ## Подтверждено на стенде
 
@@ -32,4 +32,4 @@
 
 ## Primary-документ
 
-Единый шаблон чеклиста (F1 + F2): **`wiva-android/docs/OFFICE_HARDWARE_CHECKLIST.md`** (от корня проекта `wiva-android`).
+Единый шаблон чеклиста (F1 + F2): **`viwa-android/docs/OFFICE_HARDWARE_CHECKLIST.md`** (от корня проекта `viwa-android`).

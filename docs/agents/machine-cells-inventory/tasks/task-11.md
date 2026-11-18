@@ -1,6 +1,6 @@
 # task-11 — Contract documentation
 
-**Repo:** `wiva-telemetry` (+ ссылка в `wiva-android`)  
+**Repo:** `viwa-telemetry` (+ ссылка в `viwa-android`)  
 **Зависимости:** task-05
 
 ## Связь с этапом
@@ -9,7 +9,7 @@ M7 (часть 1) — contract doc.
 
 ## Что сделать
 
-- Создать **`wiva-telemetry/docs/contracts/machine-cells-inventory.md`**:
+- Создать **`viwa-telemetry/docs/contracts/machine-cells-inventory.md`**:
   - WS envelope types (uplink/downlink) with JSON examples.
   - REST endpoints table + error codes (`INVALID_TASTE`, `VOLUME_READ_ONLY`, `CELL_NOT_FOUND`, `INVALID_THRESHOLDS`).
   - C-1 denormalized fields rules (REST/snapshot vs uplink content).
@@ -20,15 +20,15 @@ M7 (часть 1) — contract doc.
   - AuthZ matrix.
   - Protocol v2 hello changes vs v1 baseline (`registration-machine-jwt.md` link).
 - Добавить ссылку в:
-  - `wiva-android/docs/SIMPLE_TELEMETRY_MVP_ANDROID.md` (section «Related contracts»).
-  - `wiva-android/docs/FEATURE_MACHINE_CELLS_INVENTORY.md` §10 if missing entry.
+  - `viwa-android/docs/SIMPLE_TELEMETRY_MVP_ANDROID.md` (section «Related contracts»).
+  - `viwa-android/docs/FEATURE_MACHINE_CELLS_INVENTORY.md` §10 if missing entry.
 - Shared JSON fixtures reference: `apps/api/test/fixtures/cells/`.
 
 ## Точки изменения
 
-- `wiva-telemetry/docs/contracts/machine-cells-inventory.md` (новый)
-- `wiva-android/docs/SIMPLE_TELEMETRY_MVP_ANDROID.md` — ссылка
-- `wiva-android/docs/FEATURE_MACHINE_CELLS_INVENTORY.md` — ссылка в §10
+- `viwa-telemetry/docs/contracts/machine-cells-inventory.md` (новый)
+- `viwa-android/docs/SIMPLE_TELEMETRY_MVP_ANDROID.md` — ссылка
+- `viwa-android/docs/FEATURE_MACHINE_CELLS_INVENTORY.md` — ссылка в §10
 
 ## Тест-кейсы
 

@@ -5,7 +5,7 @@
 
 ## Соответствие экранов: electron → Android
 
-| Клиентский UI (electron) | Файлы / компоненты electron | Файлы wiva-android (Kotlin/Compose) |
+| Клиентский UI (electron) | Файлы / компоненты electron | Файлы viwa-android (Kotlin/Compose) |
 |--------------------------|----------------------------|-------------------------------------|
 | Список напитков, шапка опций, низ с primary | `DrinkListPage.tsx`, `DrinkListPageContent.tsx`, `DrinkListPage.module.scss` | `DrinkListScreen.kt`, `ViwaCustomerUiTokens.kt` |
 | Опции воды / объёма | `PurchaseMenu/HeaderAction/HeaderAction.tsx`, `HeaderAction.module.scss` | `HeaderActionStrip`, `HeaderOptionChip`, `OptionGroupRow` в `DrinkListScreen.kt` |

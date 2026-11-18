@@ -2,7 +2,7 @@
 
 **Дата:** 2026-07-19  
 **Ревьюер:** architecture-reviewer (complex, круг 2)  
-**Входы:** `architecture.md` (обновлённый), `architecture_review.md` (круг 1), `tz.md`, `AGENTS.md` (wiva-telemetry, wiva-android)
+**Входы:** `architecture.md` (обновлённый), `architecture_review.md` (круг 1), `tz.md`, `AGENTS.md` (viwa-telemetry, viwa-android)
 
 ---
 
@@ -130,7 +130,7 @@
 | UC-1…UC-9 | Покрыты UC-1…UC-8 + service tabs / adapter |
 | OQ-1…OQ-10 + C-1…C-5 | Зафиксированы в «Политики MVP» |
 | Contract freeze gate | C-1/C-2/C-3/C-5 типы перечислены в § Contract freeze point |
-| AGENTS wiva-telemetry / wiva-android | Стек и команды verification согласованы |
+| AGENTS viwa-telemetry / viwa-android | Стек и команды verification согласованы |
 | Docker | Явный запрет — OK |
 | Legacy isolation | `useMvpProtocol` / `skipLegacyTopic` — OK |
 

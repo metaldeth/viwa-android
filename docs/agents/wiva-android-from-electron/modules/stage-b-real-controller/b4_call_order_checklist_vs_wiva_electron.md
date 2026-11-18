@@ -2,7 +2,7 @@
 
 Эталонные файлы: `src/main/services/payment/PaymentTerminalService.ts`, `src/main/modules/payment/preparing/manager.ts`, `src/main/modules/payment/service.ts`, `src/main/modules/payment/manager.ts`.
 
-| Шаг | wiva_electron | wiva-android (эта реализация) |
+| Шаг | wiva_electron | viwa-android (эта реализация) |
 |-----|---------------|-------------------------------|
 | Инициализация сервиса терминала | `PaymentTerminalService.init()` → `events.on(PaymentSystemsPaxStatus, process)` | `PaymentTerminalService` init: `incomingResponses.collect` → при `0x56` вызывается `processPax` |
 | Отправка суммы на терминал | `controller.sendCommand(SendSumToPaymentTerminal, [ph,pl,prh,prl,sbp,type])` | `sendSumToTerminal` → `controller.sendCommand(SendSumToPaymentTerminal,` 6 байт с тем же порядком |

@@ -2,7 +2,7 @@
 
 **sessionId:** `machine-cells-inventory`  
 **Дата:** 2026-07-19  
-**Repos:** `wiva-telemetry` (API, WS, web dashboard), `wiva-android` (автомат)  
+**Repos:** `viwa-telemetry` (API, WS, web dashboard), `viwa-android` (автомат)  
 **Канонический brief:** `docs/FEATURE_MACHINE_CELLS_INVENTORY.md`  
 **Legacy (не целевой протокол):** `docs/CELL_FILLING_REQUESTS_AND_STORAGE.md`
 
@@ -15,8 +15,8 @@
 В стеке **Wiva** (не Shaker legacy) нужна сквозная фича **инвентаря продуктовых ячеек** автомата: оператор видит остатки и содержимое на web-дашборде, может менять продукт и цены; автомат синхронизирует состояние с бэкендом через **MVP WebSocket** (расширение протокола v2), REST — для dashboard и CRUD каталога продуктов.
 
 Сейчас:
-- в `wiva-telemetry` нет таблиц `products` / `machine_cells`, нет REST/WS для ячеек;
-- в `wiva-android` есть legacy merge-inventory (Shaker topics), при `useMvpProtocol=true` uplink **no-op**;
+- в `viwa-telemetry` нет таблиц `products` / `machine_cells`, нет REST/WS для ячеек;
+- в `viwa-android` есть legacy merge-inventory (Shaker topics), при `useMvpProtocol=true` uplink **no-op**;
 - web `MachineDetailPage` показывает телеметрию, но не инвентарь.
 
 ### Цель
@@ -41,7 +41,7 @@
 ### Вне scope (явно)
 
 - Стаканы, расходники, вода, mixOfTastes, categoryConfigMachine / калибровка CF
-- Shaker legacy: Kafka, `telemetry-machine-control`, `cellStoreImportTopic` / `cellVolumeImportTopic`, `wiva-client-web-app`
+- Shaker legacy: Kafka, `telemetry-machine-control`, `cellStoreImportTopic` / `cellVolumeImportTopic`, `viwa-client-web-app`
 - Snack / kiosk / coffee concentrate
 - Продажи, рецепты, автоматическое списание при cook (подготовка uplink volume — да; интеграция cook — v1)
 - Web PATCH `volume` и operator refill (v1)
@@ -53,8 +53,8 @@
 |-------|------|
 | **Оператор / ADMIN / MASTER** | CRUD продуктов; PATCH содержимого и цен ячеек на dashboard |
 | **VIEWER** | Только чтение продуктов и ячеек |
-| **Автомат (wiva-android)** | Источник правды для schema, volume; uplink content из service menu; приём snapshot |
-| **Backend (wiva-telemetry)** | Persist, reconcile, authZ, push WS, dedup |
+| **Автомат (viwa-android)** | Источник правды для schema, volume; uplink content из service menu; приём snapshot |
+| **Backend (viwa-telemetry)** | Persist, reconcile, authZ, push WS, dedup |
 | **Web dashboard** | UI для продуктов и ячеек |
 
 ### Модель данных (целевая)
@@ -147,12 +147,12 @@ Side-effect PATCH cells: если машина ONLINE → push `cells.snapshot`.
 
 | # | Deliverable | Repo |
 |---|-------------|------|
-| M1 | Prisma: Product, MachineCell, dedup, поля Machine | wiva-telemetry |
-| M2 | REST products + cells | wiva-telemetry |
-| M3 | WS v2 handlers + snapshot push | wiva-telemetry |
-| M4 | Web «База продуктов» | wiva-telemetry/apps/web |
-| M5 | Web секция «Ячейки» на MachineDetail | wiva-telemetry/apps/web |
-| M6 | Android snapshot, schema/volume/content uplink, snapshot apply | wiva-android |
+| M1 | Prisma: Product, MachineCell, dedup, поля Machine | viwa-telemetry |
+| M2 | REST products + cells | viwa-telemetry |
+| M3 | WS v2 handlers + snapshot push | viwa-telemetry |
+| M4 | Web «База продуктов» | viwa-telemetry/apps/web |
+| M5 | Web секция «Ячейки» на MachineDetail | viwa-telemetry/apps/web |
+| M6 | Android snapshot, schema/volume/content uplink, snapshot apply | viwa-android |
 | M7 | Contract doc + integration test E2E | both |
 
 ---
@@ -425,8 +425,8 @@ Side-effect PATCH cells: если машина ONLINE → push `cells.snapshot`.
 
 ### Тестирование
 
-- **wiva-telemetry:** unit/integration tests для REST, WS handlers, reconcile, dedup (`npm test`).
-- **wiva-android:** unit tests обязательны (`tdd: true` в AGENTS.md) для snapshot merge, message serialization, tasteMediaKey mapping.
+- **viwa-telemetry:** unit/integration tests для REST, WS handlers, reconcile, dedup (`npm test`).
+- **viwa-android:** unit tests обязательны (`tdd: true` в AGENTS.md) для snapshot merge, message serialization, tasteMediaKey mapping.
 - **E2E (M7):** register → hello → schema report → web PATCH → snapshot на клиенте; contract doc в обоих repos или shared path.
 
 ### Локализация
@@ -437,7 +437,7 @@ Side-effect PATCH cells: если машина ONLINE → push `cells.snapshot`.
 ### Версионирование и деплой
 
 - При коммитах в deployable artifacts — bump `versionName` по AGENTS.md каждого repo.
-- Prisma migration в `wiva-telemetry/apps/api`; не менять Docker без согласия.
+- Prisma migration в `viwa-telemetry/apps/api`; не менять Docker без согласия.
 
 ---
 

@@ -3,7 +3,7 @@
 **Reviewer:** code-reviewer-complex  
 **Date:** 2026-07-19  
 **Round:** 2 (re-check после developer fix + content preserve hotfix)  
-**Repo:** `wiva-telemetry`  
+**Repo:** `viwa-telemetry`  
 **Task:** `docs/agents/machine-cells-inventory/tasks/task-04.md`  
 **Previous review:** круг 1 — `CONDITIONAL APPROVE`, critical C-1 (P2002 на re-key)  
 **Test report:** `task-04-test-report.md`  

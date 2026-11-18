@@ -23,7 +23,7 @@
 
 | Документ | Путь от корня монорепо |
 |----------|-------------------------|
-| Основное ТЗ Wiva Android (§2 источники, §3 мок) | `wiva-android/docs/TZ_WIVA_ANDROID_FROM_ELECTRON.md` |
+| Основное ТЗ Wiva Android (§2 источники, §3 мок) | `viwa-android/docs/TZ_WIVA_ANDROID_FROM_ELECTRON.md` |
 | Порты serial, скорость, пути устройств (Electron) | `viwa_electron/docs/SERIAL_PORTS_IMPLEMENTATION.md` |
 | Протокол контроллера (Electron) | `viwa_electron/src/main/hardware/controller/` (`ControllerProtocol.ts` и смежное) |
 | Сервис терминала (Electron) | `viwa_electron/src/main/services/payment/PaymentTerminalService.ts` |
@@ -33,9 +33,9 @@
 
 | Артефакт | Путь |
 |----------|------|
-| Параметры порта (9600 8N1, путь по умолчанию) | `wiva-android/app/src/main/java/com/wiva/android/hardware/controller/ControllerPortSettings.kt` |
+| Параметры порта (9600 8N1, путь по умолчанию) | `viwa-android/app/src/main/java/com/wiva/android/hardware/controller/ControllerPortSettings.kt` |
 | Транспорт (сейчас — лог TX, без входящих байт с железа) | `LoggingStubControllerSerialTransport.kt`, контракт `ControllerSerialTransport.kt` |
-| DI транспорта | `wiva-android/app/src/main/java/com/wiva/android/di/ControllerModule.kt` |
+| DI транспорта | `viwa-android/app/src/main/java/com/wiva/android/di/ControllerModule.kt` |
 | Мок ↔ реал | `JsonStoreKeys.USE_MOCK_CONTROLLER` (`useMockController`); UI: `ServiceViewModel`, `ViwaServiceMenuTabContent`; шлюз: `DelegatingControllerGateway` → `MockControllerGateway` / `RealControllerGateway` |
 
 ---

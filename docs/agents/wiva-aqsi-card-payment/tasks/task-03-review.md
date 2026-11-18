@@ -4,7 +4,7 @@
 **Объект:** A3 TCP-клиент, репозиторий, парсеры, диагностика, тесты.  
 **Код не изменялся** (review-only).
 
-**Процесс:** skill `code-reviewer-complex` предполагает цепочку `reviewAgents` из `AGENTS.md` через `review-orchestrator`; в `wiva-android/AGENTS.md` списка `reviewAgents` нет — выполнено **единое техническое ревью** по ТЗ task-03, результатам тестового отчёта и явной сверке замечаний круга 2.
+**Процесс:** skill `code-reviewer-complex` предполагает цепочку `reviewAgents` из `AGENTS.md` через `review-orchestrator`; в `viwa-android/AGENTS.md` списка `reviewAgents` нет — выполнено **единое техническое ревью** по ТЗ task-03, результатам тестового отчёта и явной сверке замечаний круга 2.
 
 **Тесты:** по `task-03-test-report.md` пакет `com.viwa.android.data.payment.aqsi` и `assembleDebug` проходят.
 

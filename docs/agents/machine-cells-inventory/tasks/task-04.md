@@ -1,6 +1,6 @@
 # task-04 — Cell apply services (reconcile, volume, content, dedup, snapshot)
 
-**Repo:** `wiva-telemetry`  
+**Repo:** `viwa-telemetry`  
 **Зависимости:** task-01
 
 ## Связь с этапом
@@ -30,13 +30,13 @@ M3 (domain layer) — сервисы apply до WS wiring.
 
 ## Точки изменения
 
-- `wiva-telemetry/apps/api/src/machine-cells/cell-schema-reconcile.service.ts`
-- `wiva-telemetry/apps/api/src/machine-cells/cell-volume-apply.service.ts`
-- `wiva-telemetry/apps/api/src/machine-cells/cell-content-apply.service.ts`
-- `wiva-telemetry/apps/api/src/machine-cells/machine-ws-dedup.service.ts`
-- `wiva-telemetry/apps/api/src/machine-cells/machine-cells-snapshot.service.ts`
-- `wiva-telemetry/apps/api/src/machine-cells/machine-cells.module.ts`
-- `wiva-telemetry/apps/api/test/fixtures/cells/` — JSON fixtures для reconcile/snapshot
+- `viwa-telemetry/apps/api/src/machine-cells/cell-schema-reconcile.service.ts`
+- `viwa-telemetry/apps/api/src/machine-cells/cell-volume-apply.service.ts`
+- `viwa-telemetry/apps/api/src/machine-cells/cell-content-apply.service.ts`
+- `viwa-telemetry/apps/api/src/machine-cells/machine-ws-dedup.service.ts`
+- `viwa-telemetry/apps/api/src/machine-cells/machine-cells-snapshot.service.ts`
+- `viwa-telemetry/apps/api/src/machine-cells/machine-cells.module.ts`
+- `viwa-telemetry/apps/api/test/fixtures/cells/` — JSON fixtures для reconcile/snapshot
 
 ## Тест-кейсы
 

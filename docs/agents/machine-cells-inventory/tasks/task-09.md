@@ -1,6 +1,6 @@
 # task-09 — Android TelemetryCellsSyncCoordinator + WS integration
 
-**Repo:** `wiva-android`  
+**Repo:** `viwa-android`  
 **Зависимости:** task-05, task-08
 
 ## Связь с этапом

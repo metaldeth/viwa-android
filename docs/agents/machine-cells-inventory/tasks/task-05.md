@@ -1,6 +1,6 @@
 # task-05 — WS v2 handlers + snapshot push + Nest wiring
 
-**Repo:** `wiva-telemetry`  
+**Repo:** `viwa-telemetry`  
 **Зависимости:** task-03, task-04
 
 ## Связь с этапом
@@ -24,12 +24,12 @@ M3 — WS v2 handlers, reconcile, dedup, snapshot push, reconnect.
 
 ## Точки изменения
 
-- `wiva-telemetry/apps/api/src/machines/machines-ws.service.ts`
-- `wiva-telemetry/apps/api/src/machines/machines-ws.registry.ts`
-- `wiva-telemetry/apps/api/src/machines/machines.module.ts`
-- `wiva-telemetry/apps/api/src/machine-cells/machine-cells.module.ts`
-- `wiva-telemetry/apps/api/src/machine-cells/machine-cells.controller.ts` — snapshot side-effect
-- `wiva-telemetry/apps/api/src/crypto.util.ts` (or WS constants file)
+- `viwa-telemetry/apps/api/src/machines/machines-ws.service.ts`
+- `viwa-telemetry/apps/api/src/machines/machines-ws.registry.ts`
+- `viwa-telemetry/apps/api/src/machines/machines.module.ts`
+- `viwa-telemetry/apps/api/src/machine-cells/machine-cells.module.ts`
+- `viwa-telemetry/apps/api/src/machine-cells/machine-cells.controller.ts` — snapshot side-effect
+- `viwa-telemetry/apps/api/src/crypto.util.ts` (or WS constants file)
 
 ## Тест-кейсы
 

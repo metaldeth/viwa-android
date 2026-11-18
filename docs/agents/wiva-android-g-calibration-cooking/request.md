@@ -6,7 +6,7 @@
 
 ## Задача
 
-Реализовать полный цикл для wiva-android:
+Реализовать полный цикл для viwa-android:
 
 1. **G1 — Калибровка воды** — сервисное меню, тестовый налив, запись flowRateMlPerSec
 2. **G2 — Калибровка сиропов** — тестовый налив, пересчёт conversionFactor, телеметрия
@@ -22,6 +22,6 @@
 
 ## Контекст проекта
 
-- Проект: `c:\wiva\wiva-android`
+- Проект: `c:\viwa\viwa-android`
 - Предыдущие этапы A–F завершены (контроллер, телеметрия, оплаты, UI)
-- ТЗ: `wiva-android/docs/TZ_G_CALIBRATION_COOKING_INVENTORY.md`
+- ТЗ: `viwa-android/docs/TZ_G_CALIBRATION_COOKING_INVENTORY.md`

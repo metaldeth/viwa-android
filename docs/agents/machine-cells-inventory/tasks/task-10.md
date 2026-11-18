@@ -1,6 +1,6 @@
 # task-10 — Android service menu UI + customer drink adapter
 
-**Repo:** `wiva-android`  
+**Repo:** `viwa-android`  
 **Зависимости:** task-09
 
 ## Связь с этапом
@@ -41,4 +41,4 @@ M6 (часть 3) — UI inventory/volumes + drink list adapter.
 
 ## Verification
 
-`gradlew.bat :app:testDebugUnitTest`; smoke on emulator `wiva-android` service menu tabs (manual).
+`gradlew.bat :app:testDebugUnitTest`; smoke on emulator `viwa-android` service menu tabs (manual).

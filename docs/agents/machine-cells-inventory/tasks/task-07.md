@@ -1,6 +1,6 @@
 # task-07 — Web MachineDetail cells section
 
-**Repo:** `wiva-telemetry` (apps/web)  
+**Repo:** `viwa-telemetry` (apps/web)  
 **Зависимости:** task-03, task-06
 
 ## Связь с этапом
@@ -22,11 +22,11 @@ M5 — Web MachineDetail «Ячейки».
 
 ## Точки изменения
 
-- `wiva-telemetry/apps/web/src/components/MachineCellsSection.tsx` (новый)
-- `wiva-telemetry/apps/web/src/pages/MachineDetailPage.tsx`
-- `wiva-telemetry/apps/web/src/api/client.ts` — `machineCellsApi`
-- `wiva-telemetry/apps/web/src/utils/money.ts`
-- `wiva-telemetry/apps/web/src/auth/roles.ts`
+- `viwa-telemetry/apps/web/src/components/MachineCellsSection.tsx` (новый)
+- `viwa-telemetry/apps/web/src/pages/MachineDetailPage.tsx`
+- `viwa-telemetry/apps/web/src/api/client.ts` — `machineCellsApi`
+- `viwa-telemetry/apps/web/src/utils/money.ts`
+- `viwa-telemetry/apps/web/src/auth/roles.ts`
 
 ## Тест-кейсы
 

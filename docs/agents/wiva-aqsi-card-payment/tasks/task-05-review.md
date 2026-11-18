@@ -1,7 +1,7 @@
 # task-05 — код-ревью, круг 4 (финал автоматизируемой части)
 
 **Сессия:** `wiva-aqsi-card-payment`  
-**Корень:** `c:\wiva\wiva-android`  
+**Корень:** `c:\viwa\viwa-android`  
 **Код не менялся** — ревью после добавления §14 **Approved** и обновления `task-05-test-report.md`.
 
 > **Skill `code-reviewer-complex`:** в общем пайплайне предписан `review-orchestrator`; этот проход выполнен **по прямому поручению** (круг 4/5: Approved coverage, регрессии по автотестам).

@@ -36,7 +36,7 @@
 
 ## Git facts
 
-- repo: `c:\wiva\wiva-android`
+- repo: `c:\viwa\viwa-android`
 - branch: `main` (tracks `origin/main`)
 - commit: **pending (working tree before final commit)** (HEAD `7e68ac7` — pre-MVP baseline)
 - diff/stat: 11 files changed, 546 insertions(+), 130 deletions(-); untracked: `docs/SIMPLE_TELEMETRY_MVP_ANDROID.md`, `local.properties.sample`, `app/.../telemetry/mvp/`, unit tests, `ServiceMenuTestTags.kt`

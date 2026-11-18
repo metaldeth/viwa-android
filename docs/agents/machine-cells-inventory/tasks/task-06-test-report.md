@@ -5,7 +5,7 @@
 ## Команды
 
 ```powershell
-cd c:\wiva\wiva-telemetry\apps\web
+cd c:\viwa\viwa-telemetry\apps\web
 npm run lint
 npm run build
 npm test

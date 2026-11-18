@@ -1,6 +1,6 @@
 # Telemetry v3 — Android dispense contract
 
-Aligned with backend `wiva-telemetry/docs/contracts/telemetry-v3-ingest.md`.
+Aligned with backend `viwa-telemetry/docs/contracts/telemetry-v3-ingest.md`.
 
 ## Events
 

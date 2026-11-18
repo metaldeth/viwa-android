@@ -32,7 +32,7 @@
 - Full `:app:testDebugUnitTest` — incomplete: hang на suite + unrelated telemetry failure (см. BT-001, BT-005).
 
 ## Git facts
-- repo: `C:\wiva\wiva-android`
+- repo: `C:\viwa\viwa-android`
 - branch: `main`
 - commit: отсутствует (HEAD base `9c1cbf86168b05bd9cc95d15ce88d0423e287bf7`)
 - diff/stat: обновляется вместе с рабочим diff задачи; commit отсутствует.

@@ -1,6 +1,6 @@
 # Ревью ТЗ: wiva-aqsi-card-payment (круг 2)
 
-**Источники:** `request.md`, `tz.md`, `wiva-android/AGENTS.md`  
+**Источники:** `request.md`, `tz.md`, `viwa-android/AGENTS.md`  
 **Skill:** `tz-reviewer` (complex)  
 **Круг:** 2 из 5 (проверка устранения замечаний круга 1)
 
@@ -45,4 +45,4 @@
 | Закрытие замечаний круга 1 | Выполнено в `tz.md` |
 | Запреты controller / PAX / СБП / вкладки / `PaymentMethod` / `IntegrationsModule` / только новые ключи | Согласовано с `request.md` |
 | Скилл `tz-reviewer` (юзер-кейсы, актёры, приёмка, противоречия) | Выполнено |
-| `browserTesting` | Не требуется для `wiva-android/AGENTS.md` |
+| `browserTesting` | Не требуется для `viwa-android/AGENTS.md` |

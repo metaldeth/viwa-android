@@ -1,6 +1,6 @@
 # task-12 — Integration E2E tests
 
-**Repo:** `wiva-telemetry` (+ optional Android contract tests)  
+**Repo:** `viwa-telemetry` (+ optional Android contract tests)  
 **Зависимости:** task-05, task-07, task-09, task-11
 
 ## Связь с этапом
@@ -9,7 +9,7 @@ M7 (часть 2) — E2E integration.
 
 ## Что сделать
 
-- **`wiva-telemetry/apps/api` E2E test** (Nest testing module or supertest + mock WS client):
+- **`viwa-telemetry/apps/api` E2E test** (Nest testing module or supertest + mock WS client):
   1. Register machine → assert 0 cells in DB.
   2. WS connect → receive hello v2.
   3. Send `cells.schema.report` → cells created; ack with schemaHash.
@@ -25,9 +25,9 @@ M7 (часть 2) — E2E integration.
 
 ## Точки изменения
 
-- `wiva-telemetry/apps/api/test/e2e/machine-cells-inventory.e2e-spec.ts` (или `.spec.ts` по convention проекта)
-- `wiva-telemetry/apps/api/test/fixtures/cells/` — дополнить если нужно
-- Optional: `wiva-android/app/src/test/.../TelemetryCellsContractFixturesTest.kt`
+- `viwa-telemetry/apps/api/test/e2e/machine-cells-inventory.e2e-spec.ts` (или `.spec.ts` по convention проекта)
+- `viwa-telemetry/apps/api/test/fixtures/cells/` — дополнить если нужно
+- Optional: `viwa-android/app/src/test/.../TelemetryCellsContractFixturesTest.kt`
 
 ## Тест-кейсы (E2E — основной deliverable)
 
@@ -44,12 +44,12 @@ M7 (часть 2) — E2E integration.
 ## Verification
 
 ```powershell
-cd c:\wiva\wiva-telemetry
+cd c:\viwa\viwa-telemetry
 npm test
 ```
 
 ```powershell
-cd c:\wiva\wiva-android
+cd c:\viwa\viwa-android
 gradlew.bat :app:testDebugUnitTest
 ```
 

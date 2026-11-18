@@ -1,6 +1,6 @@
 # Инвентаризация обменов телеметрии (D2)
 
-Источник семантики: **wiva_electron** `src/main/modules/telemetry/`. Транспорт: **legacy Android kiosk** `data/remote/telemetry/*` (адаптировано в `wiva-android` под `com.viwa.android`).
+Источник семантики: **wiva_electron** `src/main/modules/telemetry/`. Транспорт: **legacy Android kiosk** `data/remote/telemetry/*` (адаптировано в `viwa-android` под `com.viwa.android`).
 
 | Топик / `type` | Направление | Файл эталона (TS) | Планируемый / фактический Kotlin |
 | --- | --- | --- | --- |

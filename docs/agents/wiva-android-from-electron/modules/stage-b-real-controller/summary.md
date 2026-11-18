@@ -26,7 +26,7 @@
 
 ## Сборка
 
-- Команда из `wiva-android/AGENTS.md`: `gradlew.bat assembleDebug` (+ `testDebugUnitTest`) — успешно.
+- Команда из `viwa-android/AGENTS.md`: `gradlew.bat assembleDebug` (+ `testDebugUnitTest`) — успешно.
 
 ## Версия приложения
 

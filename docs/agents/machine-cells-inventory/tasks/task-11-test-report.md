@@ -1,7 +1,7 @@
 # task-11 — Contract documentation review
 
 **Date:** 2026-07-19  
-**Artifact:** `wiva-telemetry/docs/contracts/machine-cells-inventory.md`
+**Artifact:** `viwa-telemetry/docs/contracts/machine-cells-inventory.md`
 
 ## Doc review checklist
 
@@ -68,5 +68,5 @@ Ordered keys verified equal: `cherry`, `blackberry-lime`, `coconut`, `cucumber`,
 ## Verification
 
 - Peer review: this report (review-ready).
-- Links: relative paths from Android docs → `wiva-telemetry/docs/contracts/`.
+- Links: relative paths from Android docs → `viwa-telemetry/docs/contracts/`.
 - Code changes: none (docs only).

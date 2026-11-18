@@ -1,6 +1,6 @@
 # Архитектура: `stage-b-mock-first` (B3 — MockController / шлюз)
 
-**Проект:** `wiva-android`, пакет `com.viwa.android` (Android, Kotlin, Compose, Hilt).  
+**Проект:** `viwa-android`, пакет `com.viwa.android` (Android, Kotlin, Compose, Hilt).  
 **ТЗ:** `docs/agents/viwa-android-from-electron/modules/stage-b-mock-first/tz.md`.
 
 ---

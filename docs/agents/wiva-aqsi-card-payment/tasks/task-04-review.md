@@ -1,7 +1,7 @@
 # task-04 — code review, круг 2/5 (DI: AqsiModule, после исправлений и Gradle cleanup)
 
 **sessionId:** `wiva-aqsi-card-payment`  
-**project:** `c:\wiva\wiva-android`  
+**project:** `c:\viwa\viwa-android`  
 **Дата:** 2026-05-12  
 **Входные данные:** `task-04.md`, `task-04-test-report.md`, круг 1 — `task-04-review.md` (2026-05-12). Код не изменялся ревьюером.
 

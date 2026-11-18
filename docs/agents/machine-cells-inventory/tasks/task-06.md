@@ -1,6 +1,6 @@
 # task-06 — Web ProductsPage + API client
 
-**Repo:** `wiva-telemetry` (apps/web)  
+**Repo:** `viwa-telemetry` (apps/web)  
 **Зависимости:** task-02
 
 ## Связь с этапом
@@ -19,11 +19,11 @@ M4 — Web «База продуктов» CRUD.
 
 ## Точки изменения
 
-- `wiva-telemetry/apps/web/src/api/client.ts` (+ types)
-- `wiva-telemetry/apps/web/src/pages/ProductsPage.tsx` (новый)
-- `wiva-telemetry/apps/web/src/App.tsx`
-- `wiva-telemetry/apps/web/src/auth/roles.ts`
-- `wiva-telemetry/apps/web/src/components/` — AppShell nav if separate
+- `viwa-telemetry/apps/web/src/api/client.ts` (+ types)
+- `viwa-telemetry/apps/web/src/pages/ProductsPage.tsx` (новый)
+- `viwa-telemetry/apps/web/src/App.tsx`
+- `viwa-telemetry/apps/web/src/auth/roles.ts`
+- `viwa-telemetry/apps/web/src/components/` — AppShell nav if separate
 
 ## Тест-кейсы
 

@@ -1,7 +1,7 @@
 # task-10 — test report
 
 **Session:** `machine-cells-inventory`  
-**Repo:** `wiva-android`  
+**Repo:** `viwa-android`  
 **Date:** 2026-07-19
 
 ## Scope delivered
@@ -29,7 +29,7 @@
 ## Verification commands
 
 ```bat
-cd c:\wiva\wiva-android
+cd c:\viwa\viwa-android
 gradlew.bat :app:testDebugUnitTest --tests "com.viwa.android.domain.customer.TelemetryCellsSnapshotAdapterTest" --tests "com.viwa.android.domain.model.CellVolumeStatusTest" --tests "com.viwa.android.domain.model.MvpInventorySnapshotMapperTest" --tests "com.viwa.android.ui.screens.customer.DrinkListViewModelMvpInventoryTest"
 ```
 

@@ -2,7 +2,7 @@
 
 ## [explore] Субагенты (complex)
 
-- Исследование `wiva-android`: контроллер — мок B3, заглушка реала, без протокола/serial; B4 не было.
+- Исследование `viwa-android`: контроллер — мок B3, заглушка реала, без протокола/serial; B4 не было.
 - Исследование `wiva_electron`: `ControllerProtocol.ts`, команды, `PaymentTerminalService.ts`, цепочки payment.
 
 ## [implementation] Разработка без полного двойного круга ТЗ/архитектуры/плана

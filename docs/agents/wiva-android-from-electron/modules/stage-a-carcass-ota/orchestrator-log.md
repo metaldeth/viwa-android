@@ -3,7 +3,7 @@
 ## Параметры запуска
 
 - Этап: **1** | **moduleId:** `stage-a-carcass-ota` | **ID:** A1–A4 (восстановлено по чеклисту — в запросе был только сегмент «1»).
-- ТЗ: `wiva-android/docs/TZ_WIVA_ANDROID_FROM_ELECTRON.md` (§2–§4.1).
+- ТЗ: `viwa-android/docs/TZ_WIVA_ANDROID_FROM_ELECTRON.md` (§2–§4.1).
 
 ## Ход работы
 

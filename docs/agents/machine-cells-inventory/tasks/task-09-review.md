@@ -2,7 +2,7 @@
 
 **Reviewer:** code-reviewer-complex  
 **Date:** 2026-07-19  
-**Repo:** `wiva-android`  
+**Repo:** `viwa-android`  
 **Task:** `docs/agents/machine-cells-inventory/tasks/task-09.md`  
 **Test report:** `task-09-test-report.md`  
 **Architecture:** C-3 reconnect handshake, OQ-7 volume best-effort, OQ-9 optional post-schema content, legacy `skipLegacyTopic`

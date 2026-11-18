@@ -2,9 +2,9 @@
 
 ## [init] Старт мета-сессии
 
-- Запрос: `/Meta-complex` + `wiva-android/docs/TZ_WIVA_ANDROID_FROM_ELECTRON.md`.
+- Запрос: `/Meta-complex` + `viwa-android/docs/TZ_WIVA_ANDROID_FROM_ELECTRON.md`.
 - Созданы: `request.md`, `decomposition.md`, `decomposition_review.md`.
-- Проверка: `wiva-android/AGENTS.md` — **отсутствует**; complex для волны 1 должен учесть создание минимального `AGENTS.md` с `buildCommand` по итогам модуля A (ТЗ §7).
+- Проверка: `viwa-android/AGENTS.md` — **отсутствует**; complex для волны 1 должен учесть создание минимального `AGENTS.md` с `buildCommand` по итогам модуля A (ТЗ §7).
 
 ## [decomposition] Декомпозиция на модули
 
@@ -26,7 +26,7 @@
 
 ## [wave-3] Модуль `stage-b-real-controller`
 
-- **Статус:** этап закрыт (2026-04-01): B1/B2/B4, `summary.md`, чеклист этапа 3 обновлён; сборка и lint по `wiva-android/AGENTS.md`.
+- **Статус:** этап закрыт (2026-04-01): B1/B2/B4, `summary.md`, чеклист этапа 3 обновлён; сборка и lint по `viwa-android/AGENTS.md`.
 
 ## [integration] Проверка совместимости
 

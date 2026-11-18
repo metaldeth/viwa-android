@@ -11,20 +11,20 @@
 
 ## Сборка
 
-- Команда из `wiva-android/AGENTS.md`: **`gradlew.bat assembleDebug`** (Linux/macOS: `./gradlew assembleDebug`).
+- Команда из `viwa-android/AGENTS.md`: **`gradlew.bat assembleDebug`** (Linux/macOS: `./gradlew assembleDebug`).
 
 ## OTA — быстрая проверка
 
-1. Собрать release APK и положить в **`wiva-android/release/`** с именем `viwa-android-{versionName}-release.apk`.
-2. `docker compose up -d update-server` из корня `wiva-android`.
+1. Собрать release APK и положить в **`viwa-android/release/`** с именем `viwa-android-{versionName}-release.apk`.
+2. `docker compose up -d update-server` из корня `viwa-android`.
 3. `curl http://localhost:9082/version.json` — ожидается JSON или 404, если нет подходящего APK.
 
 ## Артефакты кода (ключевые пути)
 
-- Приложение: `wiva-android/app/src/main/java/com/wiva/android/`
-- Сервер обновлений: `wiva-android/update-server/server.js`
-- Документация OTA: `wiva-android/docs/OTA_UPDATE.md`
-- Конфиг AI: `wiva-android/AGENTS.md`
+- Приложение: `viwa-android/app/src/main/java/com/wiva/android/`
+- Сервер обновлений: `viwa-android/update-server/server.js`
+- Документация OTA: `viwa-android/docs/OTA_UPDATE.md`
+- Конфиг AI: `viwa-android/AGENTS.md`
 
 ## Риски / follow-up
 

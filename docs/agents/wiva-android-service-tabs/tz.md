@@ -1,6 +1,6 @@
 # ТЗ: сервисные вкладки «Обслуживание» + полный экран готовки (session `viwa-android-service-tabs`)
 
-> **Область:** `wiva-android`. **Поведение:** `wiva_electron`. **Оболочка сервисного меню и паттерны полей:** `legacy Android kiosk` (см. основное ТЗ §2). **Родительский документ:** `docs/TZ_WIVA_ANDROID_FROM_ELECTRON.md`. **Конфигурация сборки/тестов:** `AGENTS.md` в корне `wiva-android`.
+> **Область:** `viwa-android`. **Поведение:** `wiva_electron`. **Оболочка сервисного меню и паттерны полей:** `legacy Android kiosk` (см. основное ТЗ §2). **Родительский документ:** `docs/TZ_WIVA_ANDROID_FROM_ELECTRON.md`. **Конфигурация сборки/тестов:** `AGENTS.md` в корне `viwa-android`.
 
 ---
 

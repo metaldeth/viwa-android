@@ -5,7 +5,7 @@
 ## Команды
 
 ```bat
-cd c:\wiva\wiva-android
+cd c:\viwa\viwa-android
 gradlew.bat :app:assembleDebug :app:testDebugUnitTest --tests "com.viwa.android.ui.screens.service.tabs.*"
 ```
 

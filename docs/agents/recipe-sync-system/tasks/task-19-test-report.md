@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-06 (round 2: R-1/R-2 polish)  
 **Repo:** `viwa-android`  
-**Task:** [task-19.md](../../../../wiva-telemetry/docs/agents/recipe-sync-system/tasks/task-19.md)  
+**Task:** [task-19.md](../../../../viwa-telemetry/docs/agents/recipe-sync-system/tasks/task-19.md)  
 **Review:** [task-19-review.md](./task-19-review.md)
 
 ## Delivered (round 1 + round 2)

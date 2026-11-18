@@ -1,16 +1,16 @@
 # task-12 — Integration E2E tests — test report
 
 **Date:** 2026-07-19  
-**Repo (primary):** `wiva-telemetry`  
+**Repo (primary):** `viwa-telemetry`  
 **Optional Android:** not implemented (non-blocker)
 
 ## Deliverables
 
 | File | Action |
 |------|--------|
-| `wiva-telemetry/apps/api/test/machine-cells-inventory.e2e-spec.ts` | **created** — 6 integration E2E cases |
-| `wiva-telemetry/apps/api/jest.config.js` | **updated** — `testRegex` includes `.e2e-spec.ts` |
-| `wiva-android/.../TelemetryCellsContractFixturesTest.kt` | **skipped** — cross-repo fixture path awkward; codec parity covered by existing `TelemetryCellsMessageCodecTest` |
+| `viwa-telemetry/apps/api/test/machine-cells-inventory.e2e-spec.ts` | **created** — 6 integration E2E cases |
+| `viwa-telemetry/apps/api/jest.config.js` | **updated** — `testRegex` includes `.e2e-spec.ts` |
+| `viwa-android/.../TelemetryCellsContractFixturesTest.kt` | **skipped** — cross-repo fixture path awkward; codec parity covered by existing `TelemetryCellsMessageCodecTest` |
 
 ## E2E test cases
 
@@ -30,7 +30,7 @@ Pattern matches existing integration specs (`machines-ws-cells.spec.ts`, `machin
 ## Verification commands
 
 ```powershell
-cd c:\wiva\wiva-telemetry
+cd c:\viwa\viwa-telemetry
 npm run test -w @wiva/api -- machine-cells-inventory.e2e-spec.ts
 # Result: 6 skipped (no DATABASE_URL)
 

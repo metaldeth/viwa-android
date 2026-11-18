@@ -1,6 +1,6 @@
 # task-09 — test report
 
-**Repo:** `wiva-android`  
+**Repo:** `viwa-android`  
 **Date:** 2026-07-19
 
 ## Scope

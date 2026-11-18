@@ -1,8 +1,8 @@
-# Задача: интеграция aQsi Pill / T7100 в wiva-android (оплата картой)
+# Задача: интеграция aQsi Pill / T7100 в viwa-android (оплата картой)
 
 > **Уровень:** Complex  
 > **SessionId:** `wiva-aqsi-card-payment`  
-> **Целевой проект:** `c:\wiva\wiva-android`
+> **Целевой проект:** `c:\viwa\viwa-android`
 
 ---
 
@@ -11,15 +11,15 @@
 | Тип | Путь / URL |
 |-----|-----------|
 | База знаний aQsi (сайт) | https://knowledge-base.aqsi.ru/pages/viewpage.action?pageId=54558724 |
-| PDF-даташит Pill | `c:\wiva\docs\payment-aqsi-pill-t7100\исходники\pill.pdf` |
-| Полный контент KB в MD | `c:\wiva\docs\payment-aqsi-pill-t7100\knowledge-base-aqsi-t7100-full.md` |
-| Извлечённые PDF-протоколы | `c:\wiva\docs\payment-aqsi-pill-t7100\knowledge-base-aqsi-t7100-pdf-extracts.md` |
-| Инвентарь KB (файлы) | `c:\wiva\docs\payment-aqsi-pill-t7100\knowledge-base-aqsi-t7100-inventory.md` |
-| Исходники KB (raw) | `c:\wiva\docs\payment-aqsi-pill-t7100\исходники\knowledge-base-t7100\` |
+| PDF-даташит Pill | `c:\viwa\docs\payment-aqsi-pill-t7100\исходники\pill.pdf` |
+| Полный контент KB в MD | `c:\viwa\docs\payment-aqsi-pill-t7100\knowledge-base-aqsi-t7100-full.md` |
+| Извлечённые PDF-протоколы | `c:\viwa\docs\payment-aqsi-pill-t7100\knowledge-base-aqsi-t7100-pdf-extracts.md` |
+| Инвентарь KB (файлы) | `c:\viwa\docs\payment-aqsi-pill-t7100\knowledge-base-aqsi-t7100-inventory.md` |
+| Исходники KB (raw) | `c:\viwa\docs\payment-aqsi-pill-t7100\исходники\knowledge-base-t7100\` |
 
 ---
 
-## Контекст: текущий механизм оплаты картой в wiva-android
+## Контекст: текущий механизм оплаты картой в viwa-android
 
 Сейчас оплата картой работает через цепочку:
 

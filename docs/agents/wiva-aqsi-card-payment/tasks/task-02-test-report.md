@@ -1,7 +1,7 @@
 # Отчёт по тестам — task-02 (домен aQsi)
 
 **Дата:** 2026-05-12  
-**Проект:** `wiva-android`  
+**Проект:** `viwa-android`  
 **Этап ТЗ:** A2  
 **Примечание:** повторный прогон после ревью — `AqsiConfig.timeoutMs` приведён к `Long`, `AQSI_DEFAULT_TIMEOUT_MS = 15000L` (как в `request.md` / `architecture.md`).
 

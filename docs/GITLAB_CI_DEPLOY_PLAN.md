@@ -1,4 +1,4 @@
-# План GitLab CI/CD для wiva-android
+# План GitLab CI/CD для viwa-android
 
 ## Цель
 
@@ -20,14 +20,14 @@
 
 ## Общая модель деплоя
 
-Для `wiva-android` подходит та же модель, что и для `legacy Android kiosk`:
+Для `viwa-android` подходит та же модель, что и для `legacy Android kiosk`:
 
 1. GitLab runner собирает подписанный `release` APK.
 2. APK сохраняется как artifact pipeline.
 3. На deploy-стадии APK копируется на OTA-сервер в каталог, который читает `update-server`.
 4. Проверяется, что `version.json` отдаёт новую версию.
 
-Важно: систему деплоя можно сделать общей с `legacy Android kiosk`, но каталог релизов и URL для `wiva-android` должны быть отдельными.
+Важно: систему деплоя можно сделать общей с `legacy Android kiosk`, но каталог релизов и URL для `viwa-android` должны быть отдельными.
 
 ## Шаг 1. Подготовить runner
 
@@ -95,7 +95,7 @@ sudo systemctl status gitlab-runner
 
 Рекомендуемый вариант:
 
-- отдельный каталог для `wiva-android`, например `/opt/wiva-android/release`
+- отдельный каталог для `viwa-android`, например `/opt/viwa-android/release`
 
 Почему это важно:
 
@@ -121,7 +121,7 @@ sudo systemctl status gitlab-runner
 
 - `RELEASE_JKS_BASE64`
 
-`DEPLOY_PATH` должен указывать на каталог release для `wiva-android`.
+`DEPLOY_PATH` должен указывать на каталог release для `viwa-android`.
 
 ## Шаг 6. Создать `.gitlab-ci.yml`
 

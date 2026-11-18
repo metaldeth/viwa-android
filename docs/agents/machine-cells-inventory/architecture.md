@@ -1,7 +1,7 @@
 # Архитектура: инвентарь ячеек автомата (machine-cells-inventory)
 
 **SessionId:** `machine-cells-inventory`  
-**Repos:** `wiva-telemetry` (API, WS, web dashboard), `wiva-android` (автомат)  
+**Repos:** `viwa-telemetry` (API, WS, web dashboard), `viwa-android` (автомат)  
 **Источники:** утверждённое `tz.md`, `docs/FEATURE_MACHINE_CELLS_INVENTORY.md`, `AGENTS.md` обоих проектов.
 
 ## Границы и инварианты
@@ -26,7 +26,7 @@
 
 ## Компоненты и ответственность
 
-### wiva-telemetry — Backend (NestJS, `apps/api`)
+### viwa-telemetry — Backend (NestJS, `apps/api`)
 
 | Комponent | Расположение (новое/расширение) | Ответственность |
 |-----------|----------------------------------|-----------------|
@@ -46,7 +46,7 @@
 
 **Разделение REST vs WS:** products/cells REST — session cookie + `SessionAuthGuard` + `RolesGuard`. Machine JWT — только WS uplink; PATCH products/cells REST → 403.
 
-### wiva-telemetry — Web (`apps/web`)
+### viwa-telemetry — Web (`apps/web`)
 
 | Комponent | Расположение | Ответственность |
 |-----------|--------------|-----------------|
@@ -57,7 +57,7 @@
 | **Price helpers** | `src/utils/money.ts` (новый) | `kopecksToRublesDisplay`, `rublesInputToKopecks` — единая конвертация для UI. |
 | **Role helpers** | `src/auth/roles.ts` | `canMutateProducts`, `canMutateCells` (OPERATOR, ADMIN, MASTER). |
 
-### wiva-android — Domain / Data
+### viwa-android — Domain / Data
 
 | Комponent | Расположение | Ответственность |
 |-----------|--------------|-----------------|
@@ -75,7 +75,7 @@
 | **TelemetryCellsSnapshotAdapter** | `domain/customer/` или `ui/screens/customer/` | Map snapshot → `DrinkContainer` для customer UI **без** legacy merge path. |
 | **ViwaElectronAssets** | существующий | `horizontalCardImageUri(tasteMediaKey)`, `preparingVideoUri` — резолв PNG/video по ключу продукта. |
 
-### wiva-android — UI (service menu + customer)
+### viwa-android — UI (service menu + customer)
 
 | Комponent | Расположение | Ответственность |
 |-----------|--------------|-----------------|
@@ -89,8 +89,8 @@
 
 | Комponent | Ответственность |
 |-----------|-----------------|
-| **Contract doc (M7)** | `wiva-telemetry/docs/contracts/machine-cells-inventory.md` (+ ссылка из Android docs) — envelope types, REST, error codes, revision rules. |
-| **Integration test (M7)** | `wiva-telemetry/apps/api` e2e: register → WS hello → schema → REST PATCH → snapshot received (mock WS client). |
+| **Contract doc (M7)** | `viwa-telemetry/docs/contracts/machine-cells-inventory.md` (+ ссылка из Android docs) — envelope types, REST, error codes, revision rules. |
+| **Integration test (M7)** | `viwa-telemetry/apps/api` e2e: register → WS hello → schema → REST PATCH → snapshot received (mock WS client). |
 
 ---
 
@@ -468,12 +468,12 @@ flowchart LR
 
 | Волна | Repo | Deliverable | Зависит от | Параллельно с |
 |-------|------|-------------|------------|---------------|
-| **M1** | wiva-telemetry | Prisma migration + models + dedup table + Machine fields | — | — (старт) |
-| **M2** | wiva-telemetry | REST products + cells (без WS push) | M1 | M4 (mock API / MSW) |
-| **M3** | wiva-telemetry | WS v2 handlers, reconcile, dedup, snapshot push, reconnect | M1, M2 (PATCH для push trigger) | M6 (контракт types frozen после draft contract) |
-| **M4** | wiva-telemetry/web | ProductsPage + nav + API client | M2 (или mock) | M2 backend, M5 |
-| **M5** | wiva-telemetry/web | MachineDetail «Ячейки» section | M2, желательно M3 для E2E smoke | M4, M6 |
-| **M6** | wiva-android | snapshot store, schema/volume/content uplink, snapshot apply, UI tabs, drink adapter | Contract draft из M2/M3 (types stable) | M3 после freeze envelope |
+| **M1** | viwa-telemetry | Prisma migration + models + dedup table + Machine fields | — | — (старт) |
+| **M2** | viwa-telemetry | REST products + cells (без WS push) | M1 | M4 (mock API / MSW) |
+| **M3** | viwa-telemetry | WS v2 handlers, reconcile, dedup, snapshot push, reconnect | M1, M2 (PATCH для push trigger) | M6 (контракт types frozen после draft contract) |
+| **M4** | viwa-telemetry/web | ProductsPage + nav + API client | M2 (или mock) | M2 backend, M5 |
+| **M5** | viwa-telemetry/web | MachineDetail «Ячейки» section | M2, желательно M3 для E2E smoke | M4, M6 |
+| **M6** | viwa-android | snapshot store, schema/volume/content uplink, snapshot apply, UI tabs, drink adapter | Contract draft из M2/M3 (types stable) | M3 после freeze envelope |
 | **M7** | both | Contract doc + integration/E2E test | M3, M5, M6 | — (финал) |
 
 ### Рекомендуемое разбиение команд
@@ -538,9 +538,9 @@ flowchart LR
 
 | Область | Минимум |
 |---------|---------|
-| wiva-telemetry | `npm test` — reconcile, dedup, REST authZ, WS handlers; unit: snapshot denormalization join, `shouldPushSnapshotAfterSchemaReport`, OQ-8 per-cell apply, Nest `forwardRef` bootstrap; integration e2e M7 |
-| wiva-telemetry web | `npm run lint`, `npm run build`; smoke WEB-1..WEB-7 из TZ |
-| wiva-android | Unit: snapshot replace incl. `products[]`, codec uplink vs downlink, `contentSource` conflict mocks, reconnect handshake fields; `gradlew.bat :app:testDebugUnitTest` |
+| viwa-telemetry | `npm test` — reconcile, dedup, REST authZ, WS handlers; unit: snapshot denormalization join, `shouldPushSnapshotAfterSchemaReport`, OQ-8 per-cell apply, Nest `forwardRef` bootstrap; integration e2e M7 |
+| viwa-telemetry web | `npm run lint`, `npm run build`; smoke WEB-1..WEB-7 из TZ |
+| viwa-android | Unit: snapshot replace incl. `products[]`, codec uplink vs downlink, `contentSource` conflict mocks, reconnect handshake fields; `gradlew.bat :app:testDebugUnitTest` |
 | Manual | ONLINE PATCH → snapshot ≤5s; reconnect snapshot; VIEWER read-only; inventory picker from local `products[]` |
 
 ---
@@ -551,6 +551,6 @@ flowchart LR
 |----------|------------|
 | `tz.md` | Утверждённое ТЗ |
 | `docs/FEATURE_MACHINE_CELLS_INVENTORY.md` | Brief + reconcile algorithm |
-| `wiva-telemetry/docs/contracts/registration-machine-jwt.md` | JWT + WS v1 baseline |
-| `wiva-android/docs/SIMPLE_TELEMETRY_MVP_ANDROID.md` | Android MVP telemetry |
-| `wiva-android/.../ViwaElectronAssets.kt` | tasteMediaKey → assets |
+| `viwa-telemetry/docs/contracts/registration-machine-jwt.md` | JWT + WS v1 baseline |
+| `viwa-android/docs/SIMPLE_TELEMETRY_MVP_ANDROID.md` | Android MVP telemetry |
+| `viwa-android/.../ViwaElectronAssets.kt` | tasteMediaKey → assets |

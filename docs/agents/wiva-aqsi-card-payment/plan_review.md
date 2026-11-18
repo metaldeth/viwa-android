@@ -1,7 +1,7 @@
 # Ревью плана: wiva-aqsi-card-payment (круг 2 из 5)
 
 **SessionId:** `wiva-aqsi-card-payment`  
-**Проект:** `wiva-android`  
+**Проект:** `viwa-android`  
 **Источники:** `plan.md`, `tasks/task-01.md` … `task-07.md`, `tz.md`, `architecture.md`, `AGENTS.md`  
 **Режим:** содержательные замечания; мелкая стилистика не разбирается
 
@@ -41,7 +41,7 @@
 
 ## Замечания по тест-сценариям (браузер)
 
-**Не применимо:** в `wiva-android/AGENTS.md` не задано `browserTesting: true`.
+**Не применимо:** в `viwa-android/AGENTS.md` не задано `browserTesting: true`.
 
 ---
 

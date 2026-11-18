@@ -2,7 +2,7 @@
 
 **Reviewer:** code-reviewer-complex  
 **Date:** 2026-07-19  
-**Repo:** `wiva-telemetry`  
+**Repo:** `viwa-telemetry`  
 **Task:** `docs/agents/machine-cells-inventory/tasks/task-02.md`  
 **Test report:** `task-02-test-report.md`
 

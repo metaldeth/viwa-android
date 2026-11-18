@@ -2,7 +2,7 @@
 
 **Reviewer:** code-reviewer-complex  
 **Date:** 2026-07-19  
-**Repo:** `wiva-android`  
+**Repo:** `viwa-android`  
 **Task:** `docs/agents/machine-cells-inventory/tasks/task-10.md`  
 **Test report:** `task-10-test-report.md`  
 **Carry-over:** task-09 M-2 (uplink callers via ServiceViewModel)

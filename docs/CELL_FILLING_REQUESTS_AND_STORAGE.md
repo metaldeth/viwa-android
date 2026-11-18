@@ -1,6 +1,6 @@
 # Наполнение ячеек: запросы, автомат, БД бэкенда
 
-> Источник правды для ТЗ wiva-android. Сводка из shaker (backend + android) / evoq_android / wiva-android.
+> Источник правды для ТЗ viwa-android. Сводка из shaker (backend + android) / evoq_android / viwa-android.
 > Дата: 2026-07-19
 
 ## 1. Контекст и границы
@@ -10,18 +10,18 @@
 - **Drink-автоматы** (Evoq / Wiva): продуктовые ячейки 1…6, вода, стаканы, расходники, цены, калибровка (dosage), остатки (`volume`).
 - **Каналы:** REST оператора (`shaker_front` → `telemetry-machine-control`), WebSocket автомата (`telemetry-machine-ws`), Kafka import/export.
 - **Локальное хранение на Android:** JsonStore в Room (`json_data`), merge base + matrix → `telemetryMergedInventory`.
-- **Эталоны:** `c:\shaker\telemetry-machine-control`, `c:\shaker\telemetry-machine-ws`, `c:\shaker\evoq_android`, `c:\shaker\shaker-android\feature\telemetry-evoq`, `c:\wiva\wiva-android`.
+- **Эталоны:** `c:\shaker\telemetry-machine-control`, `c:\shaker\telemetry-machine-ws`, `c:\shaker\evoq_android`, `c:\shaker\shaker-android\feature\telemetry-evoq`, `c:\viwa\viwa-android`.
 
 ### Что вне scope (упоминается кратко)
 
 | Контур | Где живёт | Примечание |
 |--------|-----------|------------|
 | **Snack** | `machine_snack_cell_new`, топики `*Snack`, Room в shaker-android | Отдельная матрица, не merge drink |
-| **Kiosk** | `/kiosk/*`, `getKioskCellsTopic` | Не в evoq/wiva-android |
+| **Kiosk** | `/kiosk/*`, `getKioskCellsTopic` | Не в evoq/viwa-android |
 | **Coffee drinks / concentrate** | `CoffeeDrinkController`, `EditCoffeeConcentrateDto` | COFFEE-модели, directSale |
 | **refillFactImportTopic** | MoySklad / service maintenance | Факт пополнения, не обычный volume sync |
-| **wiva-telemetry MVP** | `wiva-android` SimpleTelemetry | Регистрация/online без cell filling |
-| **wiva-client-web-app** | i18n machineControl | UI наполнения в `shaker_front`, не в Wiva web |
+| **viwa-telemetry MVP** | `viwa-android` SimpleTelemetry | Регистрация/online без cell filling |
+| **viwa-client-web-app** | i18n machineControl | UI наполнения в `shaker_front`, не в Wiva web |
 
 ### Базовые префиксы
 
@@ -219,7 +219,7 @@ Payload шаблона/снапшота содержит JSON `cellStore` (+ sna
 
 **`SnackCellVolumeDto`:** `{ cellNumber, volume }`
 
-#### Kiosk (вне wiva-android)
+#### Kiosk (вне viwa-android)
 
 | Метод | Путь |
 |-------|------|
@@ -285,14 +285,14 @@ Payload шаблона/снапшота содержит JSON `cellStore` (+ sna
 
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `groupModel` | `String` | `MachineModelGroupEnum.name()` (напр. COFFEE) — **есть в backend, нет в wiva-android wire** |
+| `groupModel` | `String` | `MachineModelGroupEnum.name()` (напр. COFFEE) — **есть в backend, нет в viwa-android wire** |
 | `products` | `Set<ProductExchangeResult>` | см. ниже |
 | `cells` | `Set<CellImport>` | см. ниже |
 | `cellCups` | `Set<CellCupImport>` | |
 | `cellWaters` | `Set<CellWaterImport>` | |
 | `cellDisposables` | `Set<CellDisposableImport>` | |
 | `mixOfTastes` | `{ isActive, dosages[{ price, volume }] }` | |
-| `drinkingWater` | `{ isActive, price, volume }` | из `machines.*` — **нет в wiva-android wire** |
+| `drinkingWater` | `{ isActive, price, volume }` | из `machines.*` — **нет в viwa-android wire** |
 
 **`ProductExchangeResult`:**
 
@@ -336,7 +336,7 @@ Payload шаблона/снапшота содержит JSON `cellStore` (+ sna
 | `cellWaters` | `Set<MachineCellKafka>` | `{ number, volume }` |
 | `cellDisposables` | `Set<MachineCellKafka>` | `{ number, volume }` |
 
-**wiva-android uplink:** только `cells` 1…6; `cellCups`/`cellWaters`/`cellDisposables` — **всегда `[]`**.
+**viwa-android uplink:** только `cells` 1…6; `cellCups`/`cellWaters`/`cellDisposables` — **всегда `[]`**.
 
 #### 2.2.3 `refillFactImportTopic` (не путать с volume refill)
 
@@ -543,7 +543,7 @@ Parity keys в `shaker-android/feature/telemetry-evoq`: `EvoqInventoryPersistenc
 
 ```mermaid
 sequenceDiagram
-    participant M as wiva-android
+    participant M as viwa-android
     participant WS as telemetry-machine-ws
     participant MC as telemetry-machine-control
     participant PB as telemetry-product-base
@@ -570,7 +570,7 @@ sequenceDiagram
     participant Admin as shaker_front
     participant MC as telemetry-machine-control
     participant WS as telemetry-machine-ws
-    participant M as wiva-android
+    participant M as viwa-android
 
     Admin->>MC: POST /machine-cell/edit/{machineId} (MachineFillingDto)
     MC->>MC: UPDATE cells, prices, calibrations
@@ -593,7 +593,7 @@ sequenceDiagram
     participant Admin as shaker_front
     participant MC as telemetry-machine-control
     participant WS as telemetry-machine-ws
-    participant M as wiva-android
+    participant M as viwa-android
 
     Admin->>MC: POST /volume/edit/{machineId} [VolumeDto]
     MC->>MC: UPDATE volume in DB (all groups)
@@ -628,7 +628,7 @@ sequenceDiagram
 
 ---
 
-## 5. Состояние в wiva-android сейчас
+## 5. Состояние в viwa-android сейчас
 
 | Компонент | Статус vs evoq/shaker | Примечание |
 |-----------|----------------------|------------|
@@ -651,7 +651,7 @@ sequenceDiagram
 | `TELEMETRY_EXCHANGES_INVENTORY.md` | **Устарел** | помечает merge как «этап E / Log» — уже реализовано |
 | shaker-android hybrid drink inbound | **Не wired** | uplink only; snack wired в Room |
 
-**Parity evoq_android ↔ wiva-android:** контракт наполнения практически идентичен (`com.viwa.android` vs `com.shaker.evoq`); отличия — оплата, брендинг, MVP telemetry flag.
+**Parity evoq_android ↔ viwa-android:** контракт наполнения практически идентичен (`com.viwa.android` vs `com.shaker.evoq`); отличия — оплата, брендинг, MVP telemetry flag.
 
 ---
 
@@ -707,11 +707,11 @@ sequenceDiagram
 | Json keys | `...\data\local\db\JsonStoreKeys.kt` |
 | Docs | `c:\shaker\evoq_android\docs\TELEMETRY_EXCHANGES_INVENTORY.md`, `TZ_G_CALIBRATION_COOKING_INVENTORY.md` |
 
-### wiva-android (целевой проект)
+### viwa-android (целевой проект)
 
 | Область | Путь |
 |---------|------|
-| WS service | `c:\wiva\wiva-android\app\src\main\java\com\wiva\android\services\telemetry\ViwaTelemetryService.kt` |
+| WS service | `c:\viwa\viwa-android\app\src\main\java\com\wiva\android\services\telemetry\ViwaTelemetryService.kt` |
 | Import builder | `...\services\telemetry\CellStoreImportBodyBuilder.kt` |
 | Inventory repo | `...\data\repository\MachineInventoryRepositoryImpl.kt` |
 | Wire models | `...\data\telemetry\inventory\MachineInventoryModels.kt` |
@@ -720,7 +720,7 @@ sequenceDiagram
 | Json keys | `...\data\local\db\JsonStoreKeys.kt` |
 | Write-off | `...\services\inventory\InventoryService.kt`, `InventoryWriteOffMath.kt` |
 | UI | `...\ui\screens\service\tabs\ViwaTelemetryInventoryTab.kt`, `ViwaInventoryVolumesTab.kt` |
-| Docs (смежные) | `c:\wiva\wiva-android\docs\TELEMETRY_EXCHANGES_INVENTORY.md`, `TZ_G_CALIBRATION_COOKING_INVENTORY.md` |
+| Docs (смежные) | `c:\viwa\viwa-android\docs\TELEMETRY_EXCHANGES_INVENTORY.md`, `TZ_G_CALIBRATION_COOKING_INVENTORY.md` |
 
 ### shaker-android (hybrid / snack reference)
 
@@ -735,7 +735,7 @@ sequenceDiagram
 
 | Client | POST path | Body |
 |--------|-----------|------|
-| wiva-android | `/api/telemetry-machine-control/machine/registration/{regKey}` | `{ modelName: "WIVA", machineName: "WIVA", serialNumber }` → `{ secretKey, type }` |
+| viwa-android | `/api/telemetry-machine-control/machine/registration/{regKey}` | `{ modelName: "WIVA", machineName: "WIVA", serialNumber }` → `{ secretKey, type }` |
 | evoq_android | то же | `{ modelName: "EVOQ", ... }` |
 
 Без WS auth (Keycloak client_credentials) синхронизация наполнения невозможна.

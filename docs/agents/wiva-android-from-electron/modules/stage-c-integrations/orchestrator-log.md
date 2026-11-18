@@ -15,7 +15,7 @@
 
 ## [development] Разработка
 
-- Реализация C1–C4 в кодовой базе `wiva-android` (порт с `legacy Android kiosk`), `ServiceScreen` / `ServiceViewModel`, `IntegrationsModule`, тесты парсера, androidTest Hilt.
+- Реализация C1–C4 в кодовой базе `viwa-android` (порт с `legacy Android kiosk`), `ServiceScreen` / `ServiceViewModel`, `IntegrationsModule`, тесты парсера, androidTest Hilt.
 
 ## [finalize]
 
