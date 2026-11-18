@@ -17,7 +17,7 @@ import org.junit.Test
 class RecipeCanonicalTest {
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** SHA-256 of `wiva-telemetry/apps/api/test/fixtures/recipe/golden-v1.json` (byte-identical copy). */
+    /** SHA-256 of `viwa-telemetry/apps/api/test/fixtures/recipe/golden-v1.json` (byte-identical copy). */
     private companion object {
         const val TELEMETRY_GOLDEN_FILE_SHA256 =
             "a04f5e7a4010cb3d618cd167adfd82341c9c1d14b6a962fb54708f74380ef76c"
@@ -47,7 +47,7 @@ class RecipeCanonicalTest {
             MessageDigest.getInstance("SHA-256")
                 .digest(rawBytes)
                 .joinToString("") { byte -> "%02x".format(byte) }
-        // Must match SHA-256 of wiva-telemetry/apps/api/test/fixtures/recipe/golden-v1.json
+        // Must match SHA-256 of viwa-telemetry/apps/api/test/fixtures/recipe/golden-v1.json
         assertEquals(TELEMETRY_GOLDEN_FILE_SHA256, digest)
     }
 

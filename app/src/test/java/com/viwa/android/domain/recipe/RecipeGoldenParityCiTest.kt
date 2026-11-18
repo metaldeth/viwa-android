@@ -10,7 +10,7 @@ import org.junit.Test
 
 /**
  * CI gate: cross-repo golden fixture parity (task-20 / architecture §15.1).
- * Canonical source: `wiva-telemetry/apps/api/test/fixtures/recipe/golden-v1.json`.
+ * Canonical source: `viwa-telemetry/apps/api/test/fixtures/recipe/golden-v1.json`.
  */
 class RecipeGoldenParityCiTest {
     private val json = Json { ignoreUnknownKeys = true }
@@ -62,11 +62,11 @@ class RecipeGoldenParityCiTest {
     )
 
     private companion object {
-        /** SHA-256 of wiva-telemetry/apps/api/test/fixtures/recipe/golden-v1.json */
+        /** SHA-256 of viwa-telemetry/apps/api/test/fixtures/recipe/golden-v1.json */
         const val TELEMETRY_GOLDEN_FILE_SHA256 =
             "a04f5e7a4010cb3d618cd167adfd82341c9c1d14b6a962fb54708f74380ef76c"
 
-        /** SHA-256 of wiva-telemetry/apps/api/test/fixtures/recipe/scale-v1.json */
+        /** SHA-256 of viwa-telemetry/apps/api/test/fixtures/recipe/scale-v1.json */
         const val TELEMETRY_SCALE_FILE_SHA256 =
             "2fa3ece8afb91d9e0a173b6acc76bdb409bd0b169f11c8a9bf33c1dd2367b878"
     }

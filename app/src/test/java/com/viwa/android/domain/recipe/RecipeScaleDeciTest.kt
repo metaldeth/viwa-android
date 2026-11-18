@@ -14,12 +14,12 @@ import org.junit.Test
 
 /**
  * Cross-repo scale vectors — must match
- * `wiva-telemetry/apps/api/test/fixtures/recipe/scale-v1.json` (byte-identical).
+ * `viwa-telemetry/apps/api/test/fixtures/recipe/scale-v1.json` (byte-identical).
  */
 class RecipeScaleDeciTest {
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** SHA-256 of `wiva-telemetry/apps/api/test/fixtures/recipe/scale-v1.json` (byte-identical copy). */
+    /** SHA-256 of `viwa-telemetry/apps/api/test/fixtures/recipe/scale-v1.json` (byte-identical copy). */
     private companion object {
         const val TELEMETRY_SCALE_FILE_SHA256 =
             "2fa3ece8afb91d9e0a173b6acc76bdb409bd0b169f11c8a9bf33c1dd2367b878"

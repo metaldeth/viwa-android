@@ -1,4 +1,4 @@
-# Android SDK + Gradle для сборки wiva-android APK.
+# Android SDK + Gradle для сборки viwa-android APK.
 # Без BuildKit-only директив: на раннере должен работать обычный docker build (buildx не обязателен).
 #
 # GitLab CI: docker build --target ci-build — сборка внутри образа, app/build не попадает в workspace раннера.

@@ -35,4 +35,4 @@
 
 ## Ручная проверка на AVD (владелец)
 
-По `wiva-android/AGENTS.md`: AVD **`wiva`**, API 25, `installRelease`, сценарий список → (при выключенном free mode) модалка → оплата → готовка → назад.
+По `viwa-android/AGENTS.md`: AVD **`wiva`**, API 25, `installRelease`, сценарий список → (при выключенном free mode) модалка → оплата → готовка → назад.
