@@ -3,7 +3,7 @@
 **Status:** IN PROGRESS (runner background)  
 **Deadline:** 2026-07-28 10:00 +05:00  
 **Device:** emulator-5554, machine VIWA-000001, package com.viwa.android  
-**Server:** wiva-server / https://tl.asnefedov.ru (194.67.74.147)  
+**Server:** viwa-server / https://tl.asnefedov.ru (194.67.74.147)  
 **Tag for cleanup:** SOAK-20260727  
 
 ## Safety acknowledgements

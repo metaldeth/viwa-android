@@ -4,7 +4,7 @@
 - Device: **emulator-5554**, package `com.viwa.android`, serial **VIWA-000001**
 - WS URL: `wss://tl.asnefedov.ru/api/v1/machines/ws`
 - ADB: `F:\AndroidSDK\platform-tools\adb.exe`
-- Server: `wiva-server`, API `viwa-telemetry-api` (verified **active** at end)
+- Server: `viwa-server`, API `viwa-telemetry-api` (verified **active** at end)
 - Emulator date at prep: Mon Jul 27 2026 (GMT)
 - **Note:** Two soak script instances overlapped (~16:54–17:23 local), interleaving phases in `TEMP_ws_soak_logcat.txt`. Results below merge both runs; final JSON reflects the second run only.
 
